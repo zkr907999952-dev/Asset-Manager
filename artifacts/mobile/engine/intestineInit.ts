@@ -8,7 +8,7 @@ function makeNode(x: number, y: number, pinned = false): PhysicsNode {
 }
 
 function makeSeg(): SegmentProps {
-  return { health: 100, sensitivity: 0, pain: 0, pressure: 0, ruptured: false, broken: false };
+  return { health: 100, sensitivity: 0, pain: 0, pressure: 0, ruptured: false, broken: false, perforated: false };
 }
 
 // Small intestine: organic curved coils filling the center of the cavity,
@@ -99,13 +99,17 @@ export function createInitialPhysicsState(): PhysicsState {
     largeSegs: Array.from({ length: N_LARGE - 1 }, makeSeg),
     time: 0,
     peristalsisSpeed: 1.0,
+    peristalsisBase: 1.0,
     toolPos: null,
     toolType: null,
     toolActive: false,
     toolParam1: 50,
     toolParam2: 50,
-    anchorPos: null,
+    toolAnchor: null,
+    toolInserted: false,
+    navelPierced: false,
     grabbedNode: null,
     electrodes: [],
+    enemaHeadIdx: Math.floor(N_LARGE / 2),
   };
 }

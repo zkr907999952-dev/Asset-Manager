@@ -64,7 +64,7 @@ export function SimulationScreen({ onMenuPress }: Props) {
   useEffect(() => {
     intervalRef.current = setInterval(() => {
       const p = physicsRef.current;
-      p.peristalsisSpeed = state.peristalsisSpeed;
+      p.peristalsisBase = state.peristalsisSpeed;
       stepPhysics(p);
       frameCount.current++;
       if (frameCount.current % 2 === 0) {
