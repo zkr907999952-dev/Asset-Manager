@@ -1,0 +1,47 @@
+export const CANVAS_W = 340;
+export const CANVAS_H = 460;
+export const CAVITY_CX = 170;
+export const CAVITY_CY = 240;
+export const CAVITY_RX = 118;
+export const CAVITY_RY = 148;
+
+export const N_SMALL = 25;
+export const N_LARGE = 20;
+export const SMALL_SEG_LENGTH = 34;
+export const LARGE_SEG_LENGTH = 32;
+export const SMALL_RADIUS = 8;
+export const LARGE_RADIUS = 11;
+
+export const PHYSICS_FPS = 30;
+export const PHYSICS_ITERATIONS = 6;
+export const DAMPING = 0.97;
+export const MESENTERY_STIFFNESS = 0.025;
+export const SEGMENT_STIFFNESS = 0.85;
+
+export const PERISTALSIS_BASE_SPEED = 0.4;
+export const PERISTALSIS_AMPLITUDE = 1.8;
+
+export const PRESSURE_DIFFUSION_RATE = 0.008;
+export const PRESSURE_DECAY_RATE = 0.002;
+
+export const TOOLS = {
+  METAL_ROD: '金属棒',
+  GRAB: '抓握',
+  VIBRATOR: '振动器',
+  NEEDLE: '长柄针',
+  ELECTRIC: '电击器',
+  SYRINGE: '注射器',
+  ENEMA: '灌肠器',
+} as const;
+
+export type ToolType = typeof TOOLS[keyof typeof TOOLS];
+
+export const TOOL_LIST: { id: ToolType; icon: string; desc: string }[] = [
+  { id: TOOLS.METAL_ROD, icon: 'minus', desc: '搅动肠道' },
+  { id: TOOLS.GRAB, icon: 'hand-rock-o', desc: '抓握肠段' },
+  { id: TOOLS.VIBRATOR, icon: 'bolt', desc: '范围振动' },
+  { id: TOOLS.NEEDLE, icon: 'edit', desc: '穿刺刺入' },
+  { id: TOOLS.ELECTRIC, icon: 'flash', desc: '电击刺激' },
+  { id: TOOLS.SYRINGE, icon: 'tint', desc: '药剂注射' },
+  { id: TOOLS.ENEMA, icon: 'tachometer', desc: '灌肠注液' },
+];
