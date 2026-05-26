@@ -208,6 +208,73 @@ export function stepPhysics(state: PhysicsState) {
       }
     }
 
+    if (state.toolType === '长柄针' && state.toolActive) {
+      // Needle: pierce closest segment, deal pain + create rupture risk
+      let closest = -1, closestDist = 999, closestType: 'small' | 'large' = 'small';
+      const tryNodes = (nodes: PhysicsNode[], type: 'small' | 'large') => {
+        nodes.forEach((n, i) => {
+          const d = dist(n.x, n.y, tp.x, tp.y);
+          if (d < closestDist) { closestDist = d; closest = i; closestType = type; }
+        });
+      };
+      tryNodes(state.smallNodes, 'small');
+      tryNodes(state.largeNodes, 'large');
+      // Needle range scales with param1 (针长)
+      const range = 12 + state.toolParam1 * 0.18;
+      if (closest >= 0 && closestDist < range) {
+        const segs = closestType === 'small' ? state.smallSegs : state.largeSegs;
+        const idx = Math.min(closest, segs.length - 1);
+        const seg = segs[idx];
+        if (seg && !seg.broken) {
+          // 穿刺强度 (param2) controls damage rate
+          const strength = 0.04 + state.toolParam2 * 0.0035;
+          seg.pain = clamp(seg.pain + strength * 12, 0, 100);
+          seg.sensitivity = clamp(seg.sensitivity + strength * 4, 0, 100);
+          seg.health = clamp(seg.health - strength * 2.5, 0, 100);
+          // High strength can rupture
+          if (state.toolParam2 > 60 && Math.random() < 0.02) {
+            seg.pressure = clamp(seg.pressure + 8, 0, 100);
+          }
+          // Small jitter on the pierced node
+          const nodes = closestType === 'small' ? state.smallNodes : state.largeNodes;
+          nodes[closest].x += (Math.random() - 0.5) * 0.6;
+          nodes[closest].y += (Math.random() - 0.5) * 0.6;
+        }
+      }
+    }
+
+    if (state.toolType === '灌肠器' && state.toolActive) {
+      // Enema: pumps fluid from rectum (last large node) up through the chain,
+      // raising pressure progressively. Flow rate = param1 (灌肠流量),
+      // stimulation = param2 (刺激程度) drives sensitivity gain.
+      const flow = state.toolParam1 * 0.004;
+      const stim = state.toolParam2 * 0.0025;
+      // Inject pressure starting from the sigmoid/rectum end (last segment)
+      // and propagate forward (backwards through the array).
+      const largeSegs = state.largeSegs;
+      const N = largeSegs.length;
+      for (let i = N - 1; i >= 0; i--) {
+        const seg = largeSegs[i];
+        if (seg.broken) continue;
+        // Closer to rectum (end) = stronger fill
+        const distFactor = 0.4 + (i / N) * 0.6;
+        seg.pressure = clamp(seg.pressure + flow * distFactor, 0, 100);
+        seg.sensitivity = clamp(seg.sensitivity + stim * distFactor, 0, 100);
+        if (seg.pressure > 70) {
+          seg.pain = clamp(seg.pain + stim * 0.5, 0, 100);
+        }
+      }
+      // Some overflow into small intestine (ileocecal valve)
+      const smallSegs = state.smallSegs;
+      for (let i = 0; i < smallSegs.length; i++) {
+        const seg = smallSegs[i];
+        if (seg.broken) continue;
+        const distFactor = Math.max(0, 1 - i / smallSegs.length) * 0.4;
+        seg.pressure = clamp(seg.pressure + flow * distFactor * 0.5, 0, 100);
+        seg.sensitivity = clamp(seg.sensitivity + stim * distFactor * 0.5, 0, 100);
+      }
+    }
+
     if (state.toolType === '电击器' && state.toolActive) {
       const voltage = state.toolParam1 * 0.01;
       for (const el of state.electrodes) {

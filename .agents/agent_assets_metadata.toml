@@ -24,3 +24,9 @@ id = "btG_vHj5RLjKF0VZea_6X"
 uri = "file://artifacts/mobile/assets/images/cavity_bg.png"
 type = "image"
 title = "generated_image"
+
+[[generated]]
+id = "NujjVOGzJlouQZXj_nCnE"
+uri = "file://artifacts/mobile/assets/images/belly_external.png"
+type = "image"
+title = "demon character belly external"

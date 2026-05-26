@@ -7,6 +7,7 @@ import Svg, {
 
 const CAVITY_BG = require('@/assets/images/cavity_bg.png');
 const INTESTINES_REF = require('@/assets/images/intestines.png');
+const BELLY_EXTERNAL_IMG = require('@/assets/images/belly_external.png');
 import {
   CANVAS_W, CANVAS_H, CAVITY_CX, CAVITY_CY, CAVITY_RX, CAVITY_RY,
   SMALL_RADIUS, LARGE_RADIUS,
@@ -39,13 +40,20 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
   const lastDialogueTime = useRef(0);
   const isDragging = useRef(false);
 
-  const toPhysicsCoords = useCallback((screenX: number, screenY: number) => {
-    if (!canvasLayout) return { x: screenX, y: screenY };
-    const scaleX = CANVAS_W / canvasLayout.width;
-    const scaleY = CANVAS_H / canvasLayout.height;
+  const toPhysicsCoords = useCallback((localX: number, localY: number) => {
+    if (!canvasLayout) return { x: localX, y: localY };
+    // SVG uses preserveAspectRatio="xMidYMid meet" — the rendered viewBox is fit
+    // inside the View, centered. Compute the actual rendered rect.
+    const viewW = canvasLayout.width;
+    const viewH = canvasLayout.height;
+    const scale = Math.min(viewW / CANVAS_W, viewH / CANVAS_H);
+    const renderedW = CANVAS_W * scale;
+    const renderedH = CANVAS_H * scale;
+    const offsetX = (viewW - renderedW) / 2;
+    const offsetY = (viewH - renderedH) / 2;
     return {
-      x: (screenX - canvasLayout.x) * scaleX,
-      y: (screenY - canvasLayout.y) * scaleY,
+      x: (localX - offsetX) / scale,
+      y: (localY - offsetY) / scale,
     };
   }, [canvasLayout]);
 
@@ -54,8 +62,8 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
     onMoveShouldSetPanResponder: () => true,
     onPanResponderGrant: (evt) => {
       isDragging.current = true;
-      const { pageX, pageY } = evt.nativeEvent;
-      const pos = toPhysicsCoords(pageX, pageY);
+      const { locationX, locationY } = evt.nativeEvent;
+      const pos = toPhysicsCoords(locationX, locationY);
       physicsRef.current.toolPos = pos;
 
       if (state.activeTool === TOOLS.ELECTRIC) {
@@ -79,8 +87,8 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
       }
     },
     onPanResponderMove: (evt) => {
-      const { pageX, pageY } = evt.nativeEvent;
-      const pos = toPhysicsCoords(pageX, pageY);
+      const { locationX, locationY } = evt.nativeEvent;
+      const pos = toPhysicsCoords(locationX, locationY);
       physicsRef.current.toolPos = pos;
 
       const now = Date.now();
@@ -102,6 +110,10 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
 
   const isInternal = state.viewMode === 'internal';
 
+  // Compute average pain across small segments
+  const avgPain = renderSmallSegs.length > 0
+    ? renderSmallSegs.reduce((a, s) => a + s.pain, 0) / renderSmallSegs.length
+    : 0;
   // Compute average pressure for belly bulge
   const avgPressure = renderSmallSegs.length > 0
     ? renderSmallSegs.reduce((a, s) => a + s.pressure, 0) / renderSmallSegs.length : 0;
@@ -304,6 +316,23 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
                   stroke="#aaaaaa" strokeWidth={2} />
               </G>
             )}
+            {state.toolPos && state.activeTool === TOOLS.ENEMA && (
+              <G>
+                {/* Tube + nozzle entering from rectum side */}
+                <Line x1={state.toolPos.x} y1={state.toolPos.y - 80}
+                  x2={state.toolPos.x} y2={state.toolPos.y + 10}
+                  stroke="#88aabb" strokeWidth={4} strokeLinecap="round" />
+                <Circle cx={state.toolPos.x} cy={state.toolPos.y + 12} r={5} fill="#aabbcc" />
+                {state.toolActive && (
+                  <>
+                    <Circle cx={state.toolPos.x} cy={state.toolPos.y + 12} r={14}
+                      fill="none" stroke="rgba(150,200,255,0.5)" strokeWidth={1.5} />
+                    <Circle cx={state.toolPos.x} cy={state.toolPos.y + 12} r={9}
+                      fill="rgba(150,200,255,0.25)" />
+                  </>
+                )}
+              </G>
+            )}
 
             {/* Electrodes */}
             {state.electrodes.map((el, i) => (
@@ -318,36 +347,68 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
           </G>
         ) : (
           /* ===== EXTERNAL VIEW ===== */
-          <>
-            {/* Belly layers */}
-            <Ellipse cx={CAVITY_CX} cy={CAVITY_CY} rx={CAVITY_RX * bulge + 10} ry={CAVITY_RY + 6}
-              fill="#c87850" fillOpacity={0.6} />
-            {/* Subtle intestine glow through skin */}
-            {avgPressure > 20 && (
-              <Ellipse cx={CAVITY_CX} cy={CAVITY_CY + 10}
-                rx={70 * (1 + avgPressure * 0.002)} ry={60 * (1 + avgPressure * 0.002)}
-                fill="rgba(220,80,80,0.12)" />
+          <G>
+            {/* Painted character belly artwork (anime style, matches CharacterView) */}
+            <SvgImage
+              href={BELLY_EXTERNAL_IMG}
+              x={0} y={0}
+              width={CANVAS_W} height={CANVAS_H}
+              preserveAspectRatio="xMidYMid slice"
+            />
+            {/* Dynamic bulge — subtle pink glow on bandages when pressure builds */}
+            {avgPressure > 15 && (
+              <Ellipse
+                cx={CANVAS_W / 2}
+                cy={CANVAS_H * 0.48}
+                rx={CANVAS_W * 0.30 * (1 + avgPressure * 0.003) * bulge}
+                ry={CANVAS_H * 0.13 * (1 + avgPressure * 0.003) * bulge}
+                fill={`rgba(220,70,90,${Math.min(0.32, avgPressure * 0.003)})`}
+              />
             )}
-            {/* Navel */}
-            <Ellipse cx={CAVITY_CX} cy={CAVITY_CY - 10}
-              rx={state.navelPierced ? 5 : 4} ry={state.navelPierced ? 9 : 8}
-              fill="#7a4828" stroke="#5a3018" strokeWidth={1} />
-            <Ellipse cx={CAVITY_CX} cy={CAVITY_CY - 12}
-              rx={2} ry={4}
-              fill="#8a5030" />
+            {/* Pain flush — red blush on abdomen */}
+            {avgPain > 20 && (
+              <Ellipse
+                cx={CANVAS_W / 2}
+                cy={CANVAS_H * 0.50}
+                rx={CANVAS_W * 0.28}
+                ry={CANVAS_H * 0.10}
+                fill={`rgba(255,80,80,${Math.min(0.28, avgPain * 0.003)})`}
+              />
+            )}
+            {/* Navel piercing overlay (anchored to image's navel position) */}
             {state.navelPierced && (
-              <Line x1={CAVITY_CX} y1={CAVITY_CY - 19}
-                x2={CAVITY_CX} y2={CAVITY_CY - 1}
-                stroke="#cccccc" strokeWidth={2.5} strokeLinecap="round" />
+              <G>
+                <Line
+                  x1={CANVAS_W / 2} y1={CANVAS_H * 0.555}
+                  x2={CANVAS_W / 2} y2={CANVAS_H * 0.595}
+                  stroke="#dcdcdc" strokeWidth={2.5} strokeLinecap="round"
+                />
+                <Circle cx={CANVAS_W / 2} cy={CANVAS_H * 0.555} r={3} fill="#f0f0f0" />
+                <Circle cx={CANVAS_W / 2} cy={CANVAS_H * 0.595} r={3} fill="#f0f0f0" />
+              </G>
             )}
-            {/* Skin texture highlights */}
-            <Ellipse cx={CAVITY_CX - 20} cy={CAVITY_CY - 40} rx={30} ry={20}
-              fill="rgba(255,200,160,0.08)" />
-            {/* Waist shadow */}
-            <Ellipse cx={CAVITY_CX} cy={CAVITY_CY}
-              rx={CAVITY_RX * bulge + 14} ry={CAVITY_RY + 10}
-              fill="none" stroke="rgba(0,0,0,0.3)" strokeWidth={8} />
-          </>
+            {/* Rupture indicators — bloodstains on bandages */}
+            {state.renderSmallSegs.filter(s => s.ruptured).slice(0, 3).map((_, i) => (
+              <Ellipse key={`rup-${i}`}
+                cx={CANVAS_W * (0.35 + i * 0.15)}
+                cy={CANVAS_H * (0.42 + i * 0.03)}
+                rx={14 + i * 3} ry={8 + i * 2}
+                fill="rgba(140,20,20,0.55)"
+              />
+            ))}
+            {/* Heavy bulge deformation when very high pressure */}
+            {avgPressure > 60 && (
+              <Ellipse
+                cx={CANVAS_W / 2}
+                cy={CANVAS_H * 0.51}
+                rx={CANVAS_W * 0.32 * bulge}
+                ry={CANVAS_H * 0.14 * bulge}
+                fill="none"
+                stroke="rgba(255,150,150,0.4)"
+                strokeWidth={3}
+              />
+            )}
+          </G>
         )}
       </Svg>
     </View>
