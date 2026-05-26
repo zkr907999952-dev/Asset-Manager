@@ -2,7 +2,11 @@ import React, { useRef, useCallback } from 'react';
 import { View, PanResponder, StyleSheet } from 'react-native';
 import Svg, {
   Ellipse, Circle, Line, Path, Rect, Defs, RadialGradient, LinearGradient, Stop, G,
+  Image as SvgImage, ClipPath,
 } from 'react-native-svg';
+
+const CAVITY_BG = require('@/assets/images/cavity_bg.png');
+const INTESTINES_REF = require('@/assets/images/intestines.png');
 import {
   CANVAS_W, CANVAS_H, CAVITY_CX, CAVITY_CY, CAVITY_RX, CAVITY_RY,
   SMALL_RADIUS, LARGE_RADIUS,
@@ -128,14 +132,7 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
         {/* Always-dark canvas background — prevents gradient leaks */}
         <Rect x={0} y={0} width={CANVAS_W} height={CANVAS_H} fill="#0a0202" />
 
-        {isInternal ? (
-          <Defs>
-            <RadialGradient id="cavityGrad" cx="50%" cy="50%" rx="50%" ry="50%">
-              <Stop offset="0%" stopColor="#1e0808" stopOpacity="1" />
-              <Stop offset="100%" stopColor="#0a0202" stopOpacity="1" />
-            </RadialGradient>
-          </Defs>
-        ) : (
+        {!isInternal && (
           <Defs>
             <LinearGradient id="skinGrad" x1="0" y1="0" x2="0" y2="1">
               <Stop offset="0%" stopColor="#c07850" stopOpacity="1" />
@@ -144,14 +141,32 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
           </Defs>
         )}
 
+        <Defs>
+          <ClipPath id="cavityClip">
+            <Ellipse cx={CAVITY_CX} cy={CAVITY_CY} rx={CAVITY_RX * bulge} ry={CAVITY_RY} />
+          </ClipPath>
+        </Defs>
+
         {/* Cavity / body background */}
         {isInternal ? (
-          <Ellipse
-            cx={CAVITY_CX} cy={CAVITY_CY}
-            rx={CAVITY_RX * bulge} ry={CAVITY_RY}
-            fill="url(#cavityGrad)"
-            stroke="#6a2020" strokeWidth={2}
-          />
+          <>
+            {/* Cavity image background (clipped to ellipse) */}
+            <SvgImage
+              href={CAVITY_BG}
+              x={CAVITY_CX - CAVITY_RX * bulge - 8}
+              y={CAVITY_CY - CAVITY_RY - 8}
+              width={(CAVITY_RX * bulge + 8) * 2}
+              height={(CAVITY_RY + 8) * 2}
+              preserveAspectRatio="xMidYMid slice"
+              clipPath="url(#cavityClip)"
+            />
+            {/* Cavity rim */}
+            <Ellipse
+              cx={CAVITY_CX} cy={CAVITY_CY}
+              rx={CAVITY_RX * bulge} ry={CAVITY_RY}
+              fill="none" stroke="#6a2020" strokeWidth={2}
+            />
+          </>
         ) : (
           <Ellipse
             cx={CAVITY_CX} cy={CAVITY_CY}
@@ -163,7 +178,17 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
 
         {isInternal ? (
           /* ===== INTERNAL VIEW ===== */
-          <>
+          <G clipPath="url(#cavityClip)">
+            {/* Faint anatomical intestine reference (clipped, low opacity, behind physics layer) */}
+            <SvgImage
+              href={INTESTINES_REF}
+              x={CAVITY_CX - CAVITY_RX * 0.92}
+              y={CAVITY_CY - CAVITY_RY * 0.92}
+              width={CAVITY_RX * 0.92 * 2}
+              height={CAVITY_RY * 0.92 * 2}
+              preserveAspectRatio="xMidYMid meet"
+              opacity={0.42}
+            />
             {/* Peritoneum lining */}
             <Ellipse cx={CAVITY_CX} cy={CAVITY_CY} rx={CAVITY_RX - 2} ry={CAVITY_RY - 2}
               fill="none" stroke="#3a1010" strokeWidth={4} />
@@ -290,7 +315,7 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
                 )}
               </G>
             ))}
-          </>
+          </G>
         ) : (
           /* ===== EXTERNAL VIEW ===== */
           <>

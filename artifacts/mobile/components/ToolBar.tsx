@@ -6,6 +6,7 @@ import { useGame } from '@/contexts/GameContext';
 import { TOOL_LIST, type ToolType } from '../constants/gameConfig';
 
 const TOOLBAR_WIDTH = 180;
+const TAB_WIDTH = 28;
 
 const TOOL_ICONS: Record<string, string> = {
   '金属棒': 'minus',
@@ -21,11 +22,11 @@ export function ToolBar() {
   const colors = useColors();
   const { state, setActiveTool } = useGame();
   const [expanded, setExpanded] = React.useState(false);
-  const translateX = useRef(new Animated.Value(TOOLBAR_WIDTH)).current;
+  const translateX = useRef(new Animated.Value(TOOLBAR_WIDTH + TAB_WIDTH)).current;
 
   useEffect(() => {
     Animated.spring(translateX, {
-      toValue: expanded ? 0 : TOOLBAR_WIDTH,
+      toValue: expanded ? 0 : TOOLBAR_WIDTH + TAB_WIDTH,
       useNativeDriver: true,
       tension: 90, friction: 16,
     }).start();
@@ -42,19 +43,7 @@ export function ToolBar() {
 
   return (
     <View style={styles.wrapper} pointerEvents="box-none">
-      {/* Tab trigger */}
-      <TouchableOpacity
-        style={[styles.tab, { backgroundColor: colors.card, borderColor: colors.border }]}
-        onPress={() => setExpanded(v => !v)}
-        activeOpacity={0.7}
-      >
-        <Feather name={expanded ? 'chevron-right' : 'tool'} size={16} color={colors.primary} />
-        {state.activeTool && (
-          <View style={[styles.tabDot, { backgroundColor: colors.primary }]} />
-        )}
-      </TouchableOpacity>
-
-      {/* Expanded tool list */}
+      {/* Expanded tool list (slides in from right edge, sitting LEFT of tab) */}
       <Animated.View
         style={[
           styles.panel,
@@ -96,6 +85,18 @@ export function ToolBar() {
           );
         })}
       </Animated.View>
+
+      {/* Tab trigger — always flush against the right screen edge */}
+      <TouchableOpacity
+        style={[styles.tab, { backgroundColor: colors.card, borderColor: colors.border }]}
+        onPress={() => setExpanded(v => !v)}
+        activeOpacity={0.7}
+      >
+        <Feather name={expanded ? 'chevron-right' : 'tool'} size={16} color={colors.primary} />
+        {state.activeTool && (
+          <View style={[styles.tabDot, { backgroundColor: colors.primary }]} />
+        )}
+      </TouchableOpacity>
     </View>
   );
 }
@@ -105,19 +106,20 @@ const styles = StyleSheet.create({
     position: 'absolute',
     right: 0,
     top: 80,
-    flexDirection: 'row',
-    alignItems: 'flex-start',
     zIndex: 5,
   },
   tab: {
-    width: 28,
+    position: 'absolute',
+    right: 0,
+    top: 10,
+    width: TAB_WIDTH,
     paddingVertical: 14,
     alignItems: 'center',
     borderTopLeftRadius: 8,
     borderBottomLeftRadius: 8,
     borderWidth: 1,
     borderRightWidth: 0,
-    marginTop: 10,
+    zIndex: 2,
   },
   tabDot: {
     width: 5, height: 5,
@@ -125,6 +127,9 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   panel: {
+    position: 'absolute',
+    right: TAB_WIDTH,
+    top: 0,
     width: TOOLBAR_WIDTH,
     borderTopLeftRadius: 10,
     borderBottomLeftRadius: 10,
@@ -132,6 +137,7 @@ const styles = StyleSheet.create({
     borderRightWidth: 0,
     paddingVertical: 10,
     paddingHorizontal: 8,
+    zIndex: 1,
     elevation: 8,
     shadowColor: '#000',
     shadowOpacity: 0.4,
