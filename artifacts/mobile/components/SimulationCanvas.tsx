@@ -16,13 +16,10 @@ import { buildSmoothPath } from '../engine/physics';
 import { useGame } from '../contexts/GameContext';
 import { TOOLS } from '../constants/gameConfig';
 
-// Navel position in canvas coords — matches the navel of the painted belly image
-// (image height ratio: 0.575 → CANVAS_H * 0.575 ≈ 264). For internal view we use
-// the cavity-relative navel (top of cavity).
-const NAVEL_X = CANVAS_W / 2;            // 170
-const NAVEL_Y_EXTERNAL = CANVAS_H * 0.575; // 264.5
-const NAVEL_Y_INTERNAL = CAVITY_CY - 20;  // 220 — top of cavity
-const NAVEL_RADIUS = 28;                 // tap region
+const NAVEL_X = CANVAS_W / 2;
+const NAVEL_Y_EXTERNAL = CANVAS_H * 0.575;
+const NAVEL_Y_INTERNAL = CAVITY_CY - 20;
+const NAVEL_RADIUS = 28;
 
 function segmentColor(health: number, pain: number, _pressure: number, ruptured: boolean, broken: boolean, perforated: boolean, isLarge: boolean): string {
   if (broken) return '#cc1010';
@@ -39,7 +36,6 @@ function segmentColor(health: number, pain: number, _pressure: number, ruptured:
   return `rgb(${r},${g},${b})`;
 }
 
-// Mirror physics rod geometry for rendering (lever / free)
 function computeRodGeoFor(
   inserted: boolean,
   anchor: { x: number; y: number } | null,
@@ -68,7 +64,6 @@ function computeRodGeoFor(
       dx, dy,
     };
   }
-  // Free mode: vertical rod with head = toolPos
   return {
     headX: handle.x,
     headY: handle.y,
@@ -77,6 +72,26 @@ function computeRodGeoFor(
     insideLen: rodLen * 0.5,
     dx: 0, dy: -1,
   };
+}
+
+// Compute sample points along the collision-active part of a rod for debug visualization
+function computeRodCollisionSamples(
+  g: { headX: number; headY: number; tailX: number; tailY: number },
+  inserted: boolean,
+  anchor: { x: number; y: number } | null,
+  steps = 7,
+): { x: number; y: number }[] {
+  const pts: { x: number; y: number }[] = [];
+  const startX = inserted && anchor ? anchor.x : g.tailX;
+  const startY = inserted && anchor ? anchor.y : g.tailY;
+  for (let i = 0; i <= steps; i++) {
+    const t = i / steps;
+    pts.push({
+      x: startX + (g.headX - startX) * t,
+      y: startY + (g.headY - startY) * t,
+    });
+  }
+  return pts;
 }
 
 interface CanvasProps {
@@ -107,6 +122,24 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
     };
   }, [canvasLayout]);
 
+  // Ref bundle so panResponder always sees latest values (avoids stale closure)
+  const hrRef = useRef({
+    state,
+    toPhysicsCoords,
+    addElectrode,
+    setEnemaHeadIdx,
+    insertViaNavel,
+    setNavelPierced,
+    triggerDialogue,
+  });
+  hrRef.current.state = state;
+  hrRef.current.toPhysicsCoords = toPhysicsCoords;
+  hrRef.current.addElectrode = addElectrode;
+  hrRef.current.setEnemaHeadIdx = setEnemaHeadIdx;
+  hrRef.current.insertViaNavel = insertViaNavel;
+  hrRef.current.setNavelPierced = setNavelPierced;
+  hrRef.current.triggerDialogue = triggerDialogue;
+
   const findNearestLargeNodeIdx = (pos: { x: number; y: number }) => {
     let best = -1, bestD = 9999;
     physicsRef.current.largeNodes.forEach((n, i) => {
@@ -120,29 +153,28 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
     onStartShouldSetPanResponder: () => true,
     onMoveShouldSetPanResponder: () => true,
     onPanResponderGrant: (evt) => {
+      const { state: s, toPhysicsCoords: tpc, addElectrode: ae, setEnemaHeadIdx: sehi,
+              insertViaNavel: ivn, setNavelPierced: snp, triggerDialogue: td } = hrRef.current;
       isDragging.current = true;
       const { locationX, locationY } = evt.nativeEvent;
-      const pos = toPhysicsCoords(locationX, locationY);
-      const isInternal = state.viewMode === 'internal';
+      const pos = tpc(locationX, locationY);
+      const isInternal = s.viewMode === 'internal';
       const navelY = isInternal ? NAVEL_Y_INTERNAL : NAVEL_Y_EXTERNAL;
       const distToNavel = Math.hypot(pos.x - NAVEL_X, pos.y - navelY);
 
-      // === External view navel interactions ===
       if (!isInternal && distToNavel < NAVEL_RADIUS) {
-        // Needle, navel not yet pierced: first tap only pierces. User must tap again to insert.
-        if (state.activeTool === TOOLS.NEEDLE && !state.navelPierced) {
-          setNavelPierced(true);
-          triggerDialogue('pain_high');
+        if (s.activeTool === TOOLS.NEEDLE && !s.navelPierced) {
+          snp(true);
+          td('pain_high');
           return;
         }
-        // Subsequent tap with rod/vib/needle on pierced navel: insert via navel.
         if (
-          state.navelPierced &&
-          (state.activeTool === TOOLS.METAL_ROD ||
-            state.activeTool === TOOLS.VIBRATOR ||
-            state.activeTool === TOOLS.NEEDLE)
+          s.navelPierced &&
+          (s.activeTool === TOOLS.METAL_ROD ||
+            s.activeTool === TOOLS.VIBRATOR ||
+            s.activeTool === TOOLS.NEEDLE)
         ) {
-          insertViaNavel();
+          ivn();
           physicsRef.current.toolPos = { x: NAVEL_X, y: NAVEL_Y_INTERNAL - 40 };
           return;
         }
@@ -150,11 +182,11 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
 
       physicsRef.current.toolPos = pos;
 
-      if (state.activeTool === TOOLS.ELECTRIC) {
-        addElectrode(pos.x, pos.y);
+      if (s.activeTool === TOOLS.ELECTRIC) {
+        ae(pos.x, pos.y);
         return;
       }
-      if (state.activeTool === TOOLS.GRAB) {
+      if (s.activeTool === TOOLS.GRAB) {
         let closest = -1, closestDist = 999, closestType: 'small' | 'large' = 'small';
         const tryNodes = (nodes: { x: number; y: number }[], type: 'small' | 'large') => {
           nodes.forEach((n, i) => {
@@ -164,35 +196,47 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
         };
         tryNodes(physicsRef.current.smallNodes, 'small');
         tryNodes(physicsRef.current.largeNodes, 'large');
-        const grabRange = 20 + state.toolParam1 * 0.25;
+        const grabRange = 20 + s.toolParam1 * 0.25;
         if (closestDist < grabRange) {
           physicsRef.current.grabbedNode = { type: closestType, idx: closest };
-          triggerDialogue('grab');
+          td('grab');
         }
         return;
       }
-      if (state.activeTool === TOOLS.ENEMA) {
-        // Set head to nearest large node (constrained to ±3 from current for chain travel)
+      if (s.activeTool === TOOLS.ENEMA) {
         const { idx, dist } = findNearestLargeNodeIdx(pos);
-        if (idx >= 0 && dist < 50) {
-          const cur = physicsRef.current.enemaHeadIdx;
-          const delta = Math.max(-3, Math.min(3, idx - cur));
-          setEnemaHeadIdx(cur + delta);
+        if (idx >= 0 && dist < 60) {
+          sehi(idx);
         }
         return;
       }
     },
     onPanResponderMove: (evt) => {
+      const { state: s, toPhysicsCoords: tpc, setEnemaHeadIdx: sehi, triggerDialogue: td } = hrRef.current;
       const { locationX, locationY } = evt.nativeEvent;
-      const pos = toPhysicsCoords(locationX, locationY);
+      const pos = tpc(locationX, locationY);
 
-      // Enema: drag head along large intestine chain
-      if (state.activeTool === TOOLS.ENEMA) {
+      if (s.activeTool === TOOLS.ENEMA) {
+        const prevPos = physicsRef.current.toolPos;
+        // Pull nearby large intestine nodes along with the tube drag
+        if (prevPos) {
+          const dragDx = pos.x - prevPos.x;
+          const dragDy = pos.y - prevPos.y;
+          const pullRadius = 45;
+          physicsRef.current.largeNodes.forEach(n => {
+            if (n.pinned) return;
+            const d = Math.hypot(n.x - pos.x, n.y - pos.y);
+            if (d < pullRadius && d > 0.1) {
+              const f = (1 - d / pullRadius) * 0.35;
+              n.x += dragDx * f;
+              n.y += dragDy * f;
+            }
+          });
+        }
+        // Move head freely to nearest large node — no delta constraint
         const { idx, dist } = findNearestLargeNodeIdx(pos);
-        if (idx >= 0 && dist < 50) {
-          const cur = physicsRef.current.enemaHeadIdx;
-          const delta = Math.max(-2, Math.min(2, idx - cur));
-          setEnemaHeadIdx(cur + delta);
+        if (idx >= 0 && dist < 60) {
+          sehi(idx);
         }
         physicsRef.current.toolPos = pos;
         return;
@@ -201,17 +245,15 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
       physicsRef.current.toolPos = pos;
 
       const now = Date.now();
-      if (now - lastDialogueTime.current > 4000 && state.activeTool) {
+      if (now - lastDialogueTime.current > 4000 && s.activeTool) {
         lastDialogueTime.current = now;
-        if (state.activeTool === TOOLS.METAL_ROD || state.activeTool === TOOLS.VIBRATOR) {
-          triggerDialogue('stirring');
+        if (s.activeTool === TOOLS.METAL_ROD || s.activeTool === TOOLS.VIBRATOR) {
+          td('stirring');
         }
       }
     },
     onPanResponderRelease: () => {
       isDragging.current = false;
-      // Keep toolPos for lever tools so they stay rendered after release;
-      // for free tools, clear it.
       if (!physicsRef.current.toolInserted) {
         physicsRef.current.toolPos = null;
       }
@@ -230,24 +272,39 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
 
   const smallPath = buildSmoothPath(renderSmallNodes);
 
-  // For rendering rod/vibrator/needle geometry
   const handlePos = state.toolPos;
-  const renderTime = Date.now() / 33; // approximate physics time for visual sync
+  const renderTime = Date.now() / 33;
 
-  // Compute enema tube path (from anus = last large node, back to headIdx)
   const enemaPath = (() => {
     if (state.activeTool !== TOOLS.ENEMA || renderLargeNodes.length === 0) return '';
     const headIdx = Math.max(0, Math.min(renderLargeNodes.length - 1, state.enemaHeadIdx));
-    const slice = renderLargeNodes.slice(headIdx).reverse(); // head → anus
+    const slice = renderLargeNodes.slice(headIdx).reverse();
     return buildSmoothPath(slice);
   })();
   const enemaHead = state.activeTool === TOOLS.ENEMA
     ? renderLargeNodes[Math.max(0, Math.min(renderLargeNodes.length - 1, state.enemaHeadIdx))]
     : null;
 
-  // Electric controller position (bottom-left of canvas)
   const ELEC_CTRL_X = 36;
   const ELEC_CTRL_Y = CANVAS_H - 38;
+
+  // Compute rod geometry for current tool (used for rendering + collision box debug)
+  const rodGeo = (() => {
+    if (!handlePos) return null;
+    const tool = state.activeTool;
+    if (tool === TOOLS.METAL_ROD || tool === TOOLS.VIBRATOR) {
+      const isVib = tool === TOOLS.VIBRATOR;
+      const rodLen = 80 + state.toolParam1 * (isVib ? 1.2 : 1.0);
+      const stirAmp = state.toolActive ? (isVib ? 4 : 2 + state.toolParam2 * 0.04) : 0;
+      return { g: computeRodGeoFor(state.toolInserted, state.toolAnchor, handlePos, rodLen, stirAmp, renderTime), radius: 9 };
+    }
+    if (tool === TOOLS.NEEDLE) {
+      const rodLen = 90 + state.toolParam1 * 1.0;
+      const stirAmp = state.toolActive ? 1.5 + state.toolParam2 * 0.04 : 0;
+      return { g: computeRodGeoFor(state.toolInserted, state.toolAnchor, handlePos, rodLen, stirAmp, renderTime), radius: 5 };
+    }
+    return null;
+  })();
 
   return (
     <View
@@ -308,13 +365,11 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
                 rx={CANVAS_W * 0.28} ry={CANVAS_H * 0.10}
                 fill={`rgba(255,80,80,${Math.min(0.28, avgPain * 0.003)})`} />
             )}
-            {/* Navel hint (tap target) */}
             {(state.activeTool === TOOLS.NEEDLE ||
               ((state.activeTool === TOOLS.METAL_ROD || state.activeTool === TOOLS.VIBRATOR) && state.navelPierced)) && (
               <Circle cx={NAVEL_X} cy={NAVEL_Y_EXTERNAL} r={NAVEL_RADIUS}
                 fill="none" stroke="rgba(255,180,80,0.5)" strokeWidth={1.5} strokeDasharray="3 3" />
             )}
-            {/* Navel piercing overlay */}
             {state.navelPierced && (
               <G>
                 <Line x1={NAVEL_X} y1={NAVEL_Y_EXTERNAL - 14}
@@ -398,10 +453,51 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
                 </G>
               );
             })}
+
+            {/* Collision box debug — intestine nodes */}
             {state.showCollisionBoxes && renderSmallNodes.map((n, i) => (
-              <Circle key={`cb-${i}`} cx={n.x} cy={n.y} r={SMALL_RADIUS}
+              <Circle key={`cb-sm-${i}`} cx={n.x} cy={n.y} r={SMALL_RADIUS}
                 fill="none" stroke="rgba(0,255,255,0.4)" strokeWidth={0.8} />
             ))}
+            {state.showCollisionBoxes && renderLargeNodes.map((n, i) => (
+              <Circle key={`cb-lg-${i}`} cx={n.x} cy={n.y} r={LARGE_RADIUS}
+                fill="none" stroke="rgba(0,200,255,0.35)" strokeWidth={0.8} />
+            ))}
+
+            {/* Collision box debug — tool geometry */}
+            {state.showCollisionBoxes && rodGeo && (() => {
+              const samples = computeRodCollisionSamples(
+                rodGeo.g,
+                state.toolInserted,
+                state.toolAnchor,
+              );
+              return (
+                <G>
+                  {samples.map((pt, i) => (
+                    <Circle key={`cb-tool-${i}`}
+                      cx={pt.x} cy={pt.y} r={rodGeo.radius}
+                      fill="rgba(255,200,0,0.08)"
+                      stroke="rgba(255,200,0,0.55)" strokeWidth={0.7} />
+                  ))}
+                </G>
+              );
+            })()}
+            {state.showCollisionBoxes && state.activeTool === TOOLS.ENEMA && enemaHead && (
+              <Circle cx={enemaHead.x} cy={enemaHead.y} r={LARGE_RADIUS + 2}
+                fill="none" stroke="rgba(100,180,255,0.55)" strokeWidth={0.8} />
+            )}
+            {state.showCollisionBoxes && state.activeTool === TOOLS.ELECTRIC &&
+              state.electrodes.map((el, i) => (
+                <Circle key={`cb-el-${i}`} cx={el.x} cy={el.y}
+                  r={30 + state.toolParam2 * 0.3}
+                  fill="none" stroke="rgba(255,255,80,0.4)" strokeWidth={0.7} />
+              ))
+            }
+            {state.showCollisionBoxes && state.activeTool === TOOLS.GRAB && handlePos && (
+              <Circle cx={handlePos.x} cy={handlePos.y}
+                r={20 + state.toolParam1 * 0.25}
+                fill="none" stroke="rgba(100,255,100,0.5)" strokeWidth={0.7} />
+            )}
 
             {/* Navel marker inside cavity */}
             <Circle cx={NAVEL_X} cy={NAVEL_Y_INTERNAL} r={4}
@@ -414,29 +510,23 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
 
         {/* Rod / Vibrator: lever or free */}
         {handlePos && (state.activeTool === TOOLS.METAL_ROD || state.activeTool === TOOLS.VIBRATOR) && (() => {
+          if (!rodGeo) return null;
           const isVib = state.activeTool === TOOLS.VIBRATOR;
-          const rodLen = 80 + state.toolParam1 * (isVib ? 1.2 : 1.0);
-          const stirAmp = state.toolActive ? (isVib ? 4 : 2 + state.toolParam2 * 0.04) : 0;
-          const g = computeRodGeoFor(state.toolInserted, state.toolAnchor, handlePos, rodLen, stirAmp, renderTime);
+          const { g } = rodGeo;
           const rodColor = isVib ? '#b078ff' : '#aaaacc';
           const rodWidth = isVib ? 6 : 5;
           return (
             <G key="rod">
-              {/* Vibration zone around head (only when active vibrator) */}
               {isVib && state.toolActive && (
                 <Circle cx={g.headX} cy={g.headY}
                   r={30 + state.toolParam2 * 0.4}
                   fill="rgba(180,120,255,0.10)"
                   stroke="rgba(180,120,255,0.5)" strokeWidth={1} strokeDasharray="4 4" />
               )}
-              {/* Full rod */}
               <Line x1={g.tailX} y1={g.tailY} x2={g.headX} y2={g.headY}
                 stroke={rodColor} strokeWidth={rodWidth} strokeLinecap="round" />
-              {/* Handle bulge */}
               <Circle cx={g.tailX} cy={g.tailY} r={isVib ? 9 : 7} fill="#666688" stroke="#222" strokeWidth={1} />
-              {/* Head bulb */}
               <Circle cx={g.headX} cy={g.headY} r={isVib ? 8 : 6} fill={rodColor} stroke="#222" strokeWidth={0.5} />
-              {/* Anchor pivot point */}
               {state.toolInserted && state.toolAnchor && (
                 <Circle cx={state.toolAnchor.x} cy={state.toolAnchor.y} r={6}
                   fill="none" stroke="#ffaa44" strokeWidth={1.5} strokeDasharray="2 2" />
@@ -447,16 +537,13 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
 
         {/* Needle: lever or free */}
         {handlePos && state.activeTool === TOOLS.NEEDLE && (() => {
-          const rodLen = 90 + state.toolParam1 * 1.0;
-          const stirAmp = state.toolActive ? 1.5 + state.toolParam2 * 0.04 : 0;
-          const g = computeRodGeoFor(state.toolInserted, state.toolAnchor, handlePos, rodLen, stirAmp, renderTime);
+          if (!rodGeo) return null;
+          const { g } = rodGeo;
           return (
             <G key="needle">
               <Line x1={g.tailX} y1={g.tailY} x2={g.headX} y2={g.headY}
                 stroke="#cccccc" strokeWidth={2.2} strokeLinecap="round" />
-              {/* Handle */}
               <Circle cx={g.tailX} cy={g.tailY} r={5} fill="#888899" stroke="#222" strokeWidth={1} />
-              {/* Sharp tip */}
               <Circle cx={g.headX} cy={g.headY} r={2} fill="#ff4040" />
               {state.toolInserted && state.toolAnchor && (
                 <Circle cx={state.toolAnchor.x} cy={state.toolAnchor.y} r={5}
@@ -480,7 +567,6 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
             <Rect x={handlePos.x - 6} y={handlePos.y - 30}
               width={12} height={30} rx={2} fill="#60c0c0" fillOpacity={0.85}
               stroke="#88aaaa" strokeWidth={0.8} />
-            {/* Plunger animation when active */}
             {state.toolActive && (
               <Rect x={handlePos.x - 4} y={handlePos.y - 28}
                 width={8} height={6} fill="#aaccff" />
@@ -499,9 +585,11 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
               fill="none" strokeLinecap="round" />
             <Path d={enemaPath} stroke="rgba(180,220,255,0.5)" strokeWidth={2.5}
               fill="none" strokeLinecap="round" />
-            {/* Head nozzle */}
             {enemaHead && (
               <G>
+                {/* Draggable head nozzle — slightly larger hit area indicated by outer ring */}
+                <Circle cx={enemaHead.x} cy={enemaHead.y} r={12}
+                  fill="rgba(50,100,180,0.15)" stroke="rgba(120,180,255,0.4)" strokeWidth={1} />
                 <Circle cx={enemaHead.x} cy={enemaHead.y} r={7}
                   fill="#3070b0" stroke="#80b0e0" strokeWidth={1.5} />
                 {state.toolActive && (
@@ -520,11 +608,9 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
         {/* Electrodes + wires + controller */}
         {(state.electrodes.length > 0 || state.activeTool === TOOLS.ELECTRIC) && (
           <G>
-            {/* Wires */}
             {state.electrodes.map((el, i) => {
               const wireColor = state.toolActive ? '#ffee44' : '#888844';
               if (isInternal) {
-                // Route via navel (top of cavity) → controller
                 return (
                   <G key={`wire-${i}`}>
                     <Line x1={el.x} y1={el.y} x2={NAVEL_X} y2={NAVEL_Y_INTERNAL}
@@ -541,7 +627,6 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
                   stroke={wireColor} strokeWidth={1} strokeOpacity={0.7} />
               );
             })}
-            {/* Electrodes */}
             {state.electrodes.map((el, i) => (
               <G key={`el-${i}`}>
                 <Circle cx={el.x} cy={el.y} r={6} fill="#ffff00" fillOpacity={0.9}
@@ -552,7 +637,6 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
                 )}
               </G>
             ))}
-            {/* Controller box bottom-left */}
             {state.activeTool === TOOLS.ELECTRIC && (
               <G>
                 <Rect x={ELEC_CTRL_X - 20} y={ELEC_CTRL_Y - 16}
