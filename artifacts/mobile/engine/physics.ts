@@ -128,7 +128,10 @@ export function stepPhysics(state: PhysicsState) {
   }
 
   // --- Constraint satisfaction ---
-  const satisfyChain = (nodes: PhysicsNode[], segLen: number, breakBroken: boolean, segs: SegmentProps[]) => {
+  const satisfyChain = (
+    nodes: PhysicsNode[], segLen: number, breakBroken: boolean,
+    segs: SegmentProps[], cavMargin: number,
+  ) => {
     for (let iter = 0; iter < PHYSICS_ITERATIONS; iter++) {
       for (let i = 0; i < nodes.length - 1; i++) {
         if (breakBroken && segs[i] && segs[i].broken) continue;
@@ -140,10 +143,27 @@ export function stepPhysics(state: PhysicsState) {
         if (!a.pinned) { a.x += dx * diff; a.y += dy * diff; }
         if (!b.pinned) { b.x -= dx * diff; b.y -= dy * diff; }
       }
+      // Re-clamp to cavity after each iteration to prevent drift outside
+      for (const n of nodes) {
+        if (!n.pinned) clampToCavity(n, cavMargin);
+      }
+    }
+    // Hard stretch limit: prevent extreme deformation (max 2.5× rest length)
+    const maxStretch = segLen * 2.5;
+    for (let i = 0; i < nodes.length - 1; i++) {
+      const a = nodes[i], b = nodes[i + 1];
+      if (a.pinned && b.pinned) continue;
+      const dx = b.x - a.x, dy = b.y - a.y;
+      const d = Math.sqrt(dx * dx + dy * dy) || 0.001;
+      if (d > maxStretch) {
+        const corr = (d - maxStretch) / d * 0.9;
+        if (!a.pinned) { a.x += dx * corr * 0.5; a.y += dy * corr * 0.5; }
+        if (!b.pinned) { b.x -= dx * corr * 0.5; b.y -= dy * corr * 0.5; }
+      }
     }
   };
-  satisfyChain(state.smallNodes, SMALL_SEG_LENGTH, true, state.smallSegs);
-  satisfyChain(state.largeNodes, LARGE_SEG_LENGTH, true, state.largeSegs);
+  satisfyChain(state.smallNodes, SMALL_SEG_LENGTH, true, state.smallSegs, 8);
+  satisfyChain(state.largeNodes, LARGE_SEG_LENGTH, true, state.largeSegs, 2);
 
   // --- Separation constraint between small and large intestine ---
   // minDist = SMALL_RADIUS + LARGE_RADIUS = 8 + 11 so nodes cannot visually overlap
@@ -285,7 +305,17 @@ export function stepPhysics(state: PhysicsState) {
       const segs = type === 'small' ? state.smallSegs : state.largeSegs;
       const n = nodes[idx];
       if (n) {
-        const dx = tp.x - n.x, dy = tp.y - n.y;
+        // Clamp drag target to cavity interior to prevent extreme stretching/clipping
+        const cavMargin = type === 'small' ? 12 : 6;
+        let tx = tp.x, ty = tp.y;
+        const tdx = tx - CAVITY_CX, tdy = ty - CAVITY_CY;
+        const tnx = tdx / (CAVITY_RX - cavMargin), tny = tdy / (CAVITY_RY - cavMargin);
+        const tr = Math.sqrt(tnx * tnx + tny * tny);
+        if (tr > 1) {
+          tx = CAVITY_CX + (tdx / tr) * (CAVITY_RX - cavMargin - 1);
+          ty = CAVITY_CY + (tdy / tr) * (CAVITY_RY - cavMargin - 1);
+        }
+        const dx = tx - n.x, dy = ty - n.y;
         const grabForce = 0.3 + state.toolParam2 * 0.005;
         n.x += dx * grabForce;
         n.y += dy * grabForce;

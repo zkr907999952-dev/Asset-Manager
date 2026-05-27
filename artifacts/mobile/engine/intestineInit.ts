@@ -1,5 +1,5 @@
 import {
-  N_SMALL, N_LARGE, CAVITY_CX, CAVITY_CY,
+  N_SMALL, N_LARGE, CAVITY_CX,
 } from '../constants/gameConfig';
 import type { PhysicsNode, PhysicsState, SegmentProps } from './physics';
 
@@ -11,84 +11,98 @@ function makeSeg(): SegmentProps {
   return { health: 100, sensitivity: 0, pain: 0, pressure: 0, ruptured: false, broken: false, perforated: false };
 }
 
-// Small intestine: organic curved coils filling the center of the cavity,
-// modeled on anatomical reference (dense loops with rounded turns).
+// Small intestine: starts at stomach/duodenum junction (top-center, pinned),
+// coils in 7 serpentine rows through the center of the cavity,
+// ends at terminal ileum near the cecum (lower-left).
 // Cavity: cx=170, cy=240, rx=118, ry=148
+// Row x-range: 116–220 (well inside large intestine frame)
+// Row y-range: 158–314, spacing 26px
 function buildSmallIntestineNodes(): PhysicsNode[] {
-  const cx = CAVITY_CX;
   const nodes: PhysicsNode[] = [];
 
-  // 5 horizontal serpentine loops, each ~5 nodes wide, with slight vertical jitter
-  // for an organic look. Y-range: 158 → 300 keeps it well clear of cavity edges.
-  const loops: { y: number; x0: number; x1: number; jitter: number }[] = [
-    { y: 158, x0: cx - 56, x1: cx + 60, jitter: 4 },
-    { y: 190, x0: cx + 62, x1: cx - 62, jitter: -3 },
-    { y: 222, x0: cx - 60, x1: cx + 64, jitter: 5 },
-    { y: 254, x0: cx + 62, x1: cx - 58, jitter: -4 },
-    { y: 286, x0: cx - 54, x1: cx + 56, jitter: 3 },
-  ];
+  // [0] Stomach / duodenum junction — top-center, pinned
+  nodes.push(makeNode(170, 130, true));
 
-  loops.forEach((loop, li) => {
-    const cols = 5;
-    for (let i = 0; i < cols; i++) {
-      const t = i / (cols - 1);
-      const x = loop.x0 + (loop.x1 - loop.x0) * t;
-      // Add curvature: sine wave bulge toward midline alternation
-      const curve = Math.sin(t * Math.PI) * loop.jitter;
-      const y = loop.y + curve + (li % 2 === 0 ? -1 : 1);
-      nodes.push(makeNode(x, y));
-    }
-  });
+  // [1] Transition: bridge from stomach to first row start (upper-right)
+  nodes.push(makeNode(194, 148));
 
-  return nodes;
+  // 7 serpentine rows, x: 116↔220, y: 158→314, step 26px
+  // Even rows (0,2,4,6) go Right→Left; odd rows (1,3,5) go Left→Right
+  const xL = 116, xM1 = 142, xC = 168, xM2 = 194, xR = 220;
+  const rowXRight = [xR, xM2, xC, xM1, xL];
+  const rowXLeft  = [xL, xM1, xC, xM2, xR];
+
+  for (let row = 0; row < 7; row++) {
+    const y = 158 + row * 26;
+    const xs = (row % 2 === 0) ? rowXRight : rowXLeft;
+    for (const x of xs) nodes.push(makeNode(x, y));
+  }
+  // Indices [2..36]: 35 nodes across 7 rows
+
+  // [37] Terminal ileum — approaches cecum (100, 340) from slightly above-right
+  nodes.push(makeNode(108, 332));
+
+  return nodes; // 38 nodes total (N_SMALL = 38)
 }
 
-// Large intestine: anatomical U-frame around small intestine.
-// Order: cecum (bottom-right) → ascending → hepatic flexure → transverse →
-//        splenic flexure → descending → sigmoid → rectum (bottom-center).
-// All nodes verified inside cavity ellipse: (x-170)²/118² + (y-240)²/148² < 1
+// Large intestine: starts at cecum (lower-left, pinned),
+// goes CLOCKWISE around the small intestine:
+//   cecum (lower-left) → ascending (left side going UP) →
+//   left flexure (top-left) → transverse (top, L→R) →
+//   right flexure (top-right) → descending (right side going DOWN) →
+//   sigmoid S-curve → anus (bottom-center, pinned)
+// All nodes verified inside cavity ellipse: (x-170)²/118² + (y-240)²/148² ≤ 1
 function buildLargeIntestineNodes(): PhysicsNode[] {
-  const cx = CAVITY_CX;  // 170
-  const cy = CAVITY_CY;  // 240
   const nodes: PhysicsNode[] = [];
 
-  // Cecum + appendix bulge (bottom-right, pinned start)
-  nodes.push(makeNode(cx + 78, cy + 92, true));    // (248,332) — cecum anchor
+  // [0] Cecum — lower left, pinned. Ileocecal spring connects here to smallNodes[N_SMALL-1].
+  nodes.push(makeNode(100, 340, true));
 
-  // Ascending colon (right side, bottom→top)
-  nodes.push(makeNode(cx + 92, cy + 60));          // (262,300)
-  nodes.push(makeNode(cx + 98, cy + 20));          // (268,260)
-  nodes.push(makeNode(cx + 98, cy - 20));          // (268,220)
-  nodes.push(makeNode(cx + 92, cy - 60));          // (262,180)
+  // Ascending colon: left side going up (indices 1–8)
+  nodes.push(makeNode( 96, 316));
+  nodes.push(makeNode( 90, 292));
+  nodes.push(makeNode( 86, 268));
+  nodes.push(makeNode( 84, 244));
+  nodes.push(makeNode( 83, 220));
+  nodes.push(makeNode( 83, 196));
+  nodes.push(makeNode( 84, 172));
+  nodes.push(makeNode( 88, 148));
 
-  // Hepatic flexure (top-right corner)
-  nodes.push(makeNode(cx + 68, cy - 100));         // (238,140)
+  // [9] Left (hepatic) flexure — top-left corner
+  nodes.push(makeNode( 92, 132));
 
-  // Transverse colon (top, slight downward sag in middle like reference)
-  nodes.push(makeNode(cx + 34, cy - 112));         // (204,128)
-  nodes.push(makeNode(cx, cy - 108));              // (170,132) — sag
-  nodes.push(makeNode(cx - 34, cy - 112));         // (136,128)
+  // Transverse colon: top, slight downward sag at center (indices 10–14)
+  nodes.push(makeNode(116, 128));
+  nodes.push(makeNode(140, 124));
+  nodes.push(makeNode(170, 122));
+  nodes.push(makeNode(200, 124));
+  nodes.push(makeNode(226, 128));
 
-  // Splenic flexure (top-left corner, slightly higher than hepatic — anatomical)
-  nodes.push(makeNode(cx - 68, cy - 100));         // (102,140)
+  // [15] Right (splenic) flexure — top-right corner
+  nodes.push(makeNode(246, 134));
 
-  // Descending colon (left side, top→bottom)
-  nodes.push(makeNode(cx - 92, cy - 60));          // (78,180)
-  nodes.push(makeNode(cx - 98, cy - 20));          // (72,220)
-  nodes.push(makeNode(cx - 98, cy + 20));          // (72,260)
-  nodes.push(makeNode(cx - 92, cy + 60));          // (78,300)
+  // Descending colon: right side going down (indices 16–22)
+  nodes.push(makeNode(254, 158));
+  nodes.push(makeNode(258, 184));
+  nodes.push(makeNode(260, 210));
+  nodes.push(makeNode(260, 236));
+  nodes.push(makeNode(258, 262));
+  nodes.push(makeNode(254, 288));
+  nodes.push(makeNode(248, 312));
 
-  // Sigmoid colon (S-curve from descending toward midline rectum)
-  nodes.push(makeNode(cx - 72, cy + 96));          // (98,336) — sigmoid loop 1
-  nodes.push(makeNode(cx - 40, cy + 116));         // (130,356) — sigmoid loop 2 (down)
-  nodes.push(makeNode(cx - 14, cy + 108));         // (156,348) — sigmoid loop 3 (up)
-  nodes.push(makeNode(cx + 6, cy + 116));          // (176,356) — toward midline
-  nodes.push(makeNode(cx + 14, cy + 102));         // (184,342) — rectum approach
+  // Sigmoid colon: S-curve from lower-right toward bottom-center (indices 23–28)
+  // Simulates the rectosigmoid junction the user described as "乙状弯折"
+  nodes.push(makeNode(250, 334));
+  nodes.push(makeNode(242, 352));
+  nodes.push(makeNode(224, 362));
+  nodes.push(makeNode(204, 368));
+  nodes.push(makeNode(185, 372));
+  nodes.push(makeNode(172, 376));
 
-  // Rectum/anus (pinned end at midline-bottom)
-  nodes.push(makeNode(cx + 4, cy + 124, true));    // (174,364)
+  // [29] Anus — bottom-center, pinned
+  nodes.push(makeNode(170, 382, true));
 
-  return nodes;
+  return nodes; // 30 nodes total (N_LARGE = 30)
 }
 
 export function createInitialPhysicsState(): PhysicsState {
@@ -110,7 +124,7 @@ export function createInitialPhysicsState(): PhysicsState {
     navelPierced: false,
     grabbedNode: null,
     electrodes: [],
-    enemaHeadIdx: Math.floor(N_LARGE / 2),
+    enemaHeadIdx: Math.floor(N_LARGE * 0.6),
     enemaInSmall: false,
     enemaSmallHeadIdx: N_SMALL - 1,
   };

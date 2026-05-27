@@ -336,19 +336,21 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
   const handlePos = state.toolPos;
   const renderTime = Date.now() / 33;
 
-  const enemaPath = (() => {
+  // Enema tube: split into two paths so colors stay correct regardless of mode
+  const enemaPathLarge = (() => {
     if (state.activeTool !== TOOLS.ENEMA || renderLargeNodes.length === 0) return '';
-    if (state.enemaInSmall && renderSmallNodes.length > 0) {
-      // Tube fills all of large intestine (anus→cecum), then continues into small intestine
-      const largePart = [...renderLargeNodes].reverse(); // anus (N_LARGE-1) → cecum (0)
-      const smallHeadIdx = Math.max(0, Math.min(renderSmallNodes.length - 1, state.enemaSmallHeadIdx));
-      // small part: from junction (N_SMALL-1) toward smallHeadIdx
-      const smallPart = [...renderSmallNodes.slice(smallHeadIdx)].reverse(); // N_SMALL-1 → smallHeadIdx
-      return buildSmoothPath([...largePart, ...smallPart]);
+    if (state.enemaInSmall) {
+      // Tube fills entire large intestine: anus (last) → cecum (0)
+      return buildSmoothPath([...renderLargeNodes].reverse());
     }
     const headIdx = Math.max(0, Math.min(renderLargeNodes.length - 1, state.enemaHeadIdx));
-    const slice = renderLargeNodes.slice(headIdx).reverse();
-    return buildSmoothPath(slice);
+    return buildSmoothPath(renderLargeNodes.slice(headIdx).reverse());
+  })();
+  const enemaPathSmall = (() => {
+    if (state.activeTool !== TOOLS.ENEMA || !state.enemaInSmall || renderSmallNodes.length === 0) return '';
+    const smallHeadIdx = Math.max(0, Math.min(renderSmallNodes.length - 1, state.enemaSmallHeadIdx));
+    // From terminal ileum (N_SMALL-1) toward head
+    return buildSmoothPath([...renderSmallNodes.slice(smallHeadIdx)].reverse());
   })();
   const enemaHead = state.activeTool === TOOLS.ENEMA
     ? (state.enemaInSmall && renderSmallNodes.length > 0
@@ -486,6 +488,20 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
               return <Line key={`lgh-${i}`} x1={a.x} y1={a.y} x2={b.x} y2={b.y}
                 stroke="rgba(255,180,160,0.2)" strokeWidth={LARGE_RADIUS * 0.6} strokeLinecap="round" />;
             })}
+            {/* Cecum end-cap: rounded cap at largeNodes[0] matching large intestine style */}
+            {renderLargeNodes.length > 0 && (() => {
+              const seg0 = renderLargeSegs[0];
+              const col = segmentColor(
+                seg0?.health ?? 100, seg0?.pain ?? 0, seg0?.pressure ?? 0,
+                seg0?.ruptured ?? false, seg0?.broken ?? false, seg0?.perforated ?? false, true,
+              );
+              const n = renderLargeNodes[0];
+              const w = LARGE_RADIUS + (seg0 ? (seg0.pressure / 100) * LARGE_RADIUS * 0.5 : 0);
+              return (
+                <Circle key="cecum" cx={n.x} cy={n.y} r={w}
+                  fill={col} stroke="rgba(200,130,110,0.35)" strokeWidth={1.2} />
+              );
+            })()}
 
             {/* Small intestine */}
             {renderSmallSegs.map((seg, i) => {
@@ -650,48 +666,48 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
           </G>
         )}
 
-        {/* Enema tube — drawn through the large intestine (and small when enemaInSmall) */}
-        {state.activeTool === TOOLS.ENEMA && enemaPath && (
+        {/* Enema tube — large intestine portion always blue */}
+        {state.activeTool === TOOLS.ENEMA && enemaPathLarge !== '' && (
           <G>
-            <Path d={enemaPath}
-              stroke={enemaHeadInSmall ? 'rgba(220,120,80,0.7)' : 'rgba(80,140,220,0.6)'}
-              strokeWidth={enemaHeadInSmall ? 4.5 : 6}
+            <Path d={enemaPathLarge} stroke="rgba(80,140,220,0.62)" strokeWidth={6}
               fill="none" strokeLinecap="round" />
-            <Path d={enemaPath}
-              stroke={enemaHeadInSmall ? 'rgba(255,200,160,0.55)' : 'rgba(180,220,255,0.5)'}
-              strokeWidth={2.5}
+            <Path d={enemaPathLarge} stroke="rgba(180,220,255,0.5)" strokeWidth={2.5}
               fill="none" strokeLinecap="round" />
-            {enemaHead && (
-              <G>
-                {/* Outer pulse ring — orange-red when in small intestine */}
-                <Circle cx={enemaHead.x} cy={enemaHead.y} r={12}
-                  fill={enemaHeadInSmall ? 'rgba(200,80,40,0.15)' : 'rgba(50,100,180,0.15)'}
-                  stroke={enemaHeadInSmall ? 'rgba(255,160,100,0.5)' : 'rgba(120,180,255,0.4)'}
-                  strokeWidth={1} />
-                <Circle cx={enemaHead.x} cy={enemaHead.y} r={7}
-                  fill={enemaHeadInSmall ? '#b04020' : '#3070b0'}
-                  stroke={enemaHeadInSmall ? '#ff9060' : '#80b0e0'}
+          </G>
+        )}
+        {/* Enema tube — small intestine portion orange-red (only when enemaInSmall) */}
+        {state.activeTool === TOOLS.ENEMA && enemaPathSmall !== '' && (
+          <G>
+            <Path d={enemaPathSmall} stroke="rgba(210,110,70,0.72)" strokeWidth={4.5}
+              fill="none" strokeLinecap="round" />
+            <Path d={enemaPathSmall} stroke="rgba(255,195,155,0.5)" strokeWidth={2}
+              fill="none" strokeLinecap="round" />
+          </G>
+        )}
+        {/* Enema head nozzle */}
+        {state.activeTool === TOOLS.ENEMA && enemaHead && (
+          <G>
+            <Circle cx={enemaHead.x} cy={enemaHead.y} r={12}
+              fill={enemaHeadInSmall ? 'rgba(200,80,40,0.15)' : 'rgba(50,100,180,0.15)'}
+              stroke={enemaHeadInSmall ? 'rgba(255,160,100,0.5)' : 'rgba(120,180,255,0.4)'}
+              strokeWidth={1} />
+            <Circle cx={enemaHead.x} cy={enemaHead.y} r={7}
+              fill={enemaHeadInSmall ? '#b04020' : '#3070b0'}
+              stroke={enemaHeadInSmall ? '#ff9060' : '#80b0e0'}
+              strokeWidth={1.5} />
+            {enemaHeadInSmall && renderLargeNodes[0] && (
+              <Circle cx={renderLargeNodes[0].x} cy={renderLargeNodes[0].y} r={9}
+                fill="none" stroke="rgba(255,200,100,0.6)" strokeWidth={1.5} strokeDasharray="3 2" />
+            )}
+            {state.toolActive && (
+              <>
+                <Circle cx={enemaHead.x} cy={enemaHead.y} r={14}
+                  fill="none"
+                  stroke={enemaHeadInSmall ? 'rgba(255,160,100,0.6)' : 'rgba(150,200,255,0.55)'}
                   strokeWidth={1.5} />
-                {enemaHeadInSmall && (
-                  /* Ileocecal marker — show a junction ring at largeNodes[0] */
-                  <>
-                    {renderLargeNodes[0] && (
-                      <Circle cx={renderLargeNodes[0].x} cy={renderLargeNodes[0].y} r={9}
-                        fill="none" stroke="rgba(255,200,100,0.6)" strokeWidth={1.5} strokeDasharray="3 2" />
-                    )}
-                  </>
-                )}
-                {state.toolActive && (
-                  <>
-                    <Circle cx={enemaHead.x} cy={enemaHead.y} r={14}
-                      fill="none"
-                      stroke={enemaHeadInSmall ? 'rgba(255,160,100,0.6)' : 'rgba(150,200,255,0.55)'}
-                      strokeWidth={1.5} />
-                    <Circle cx={enemaHead.x} cy={enemaHead.y} r={9}
-                      fill={enemaHeadInSmall ? 'rgba(255,140,80,0.3)' : 'rgba(150,200,255,0.3)'} />
-                  </>
-                )}
-              </G>
+                <Circle cx={enemaHead.x} cy={enemaHead.y} r={9}
+                  fill={enemaHeadInSmall ? 'rgba(255,140,80,0.3)' : 'rgba(150,200,255,0.3)'} />
+              </>
             )}
           </G>
         )}

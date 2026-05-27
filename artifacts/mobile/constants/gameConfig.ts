@@ -5,17 +5,17 @@ export const CAVITY_CY = 240;
 export const CAVITY_RX = 118;
 export const CAVITY_RY = 148;
 
-export const N_SMALL = 25;
-export const N_LARGE = 20;
-export const SMALL_SEG_LENGTH = 34;
-export const LARGE_SEG_LENGTH = 32;
+export const N_SMALL = 38;
+export const N_LARGE = 30;
+export const SMALL_SEG_LENGTH = 26;
+export const LARGE_SEG_LENGTH = 24;
 export const SMALL_RADIUS = 8;
 export const LARGE_RADIUS = 11;
 
 export const PHYSICS_FPS = 30;
-export const PHYSICS_ITERATIONS = 6;
-export const DAMPING = 0.97;
-export const MESENTERY_STIFFNESS = 0.025;
+export const PHYSICS_ITERATIONS = 8;
+export const DAMPING = 0.975;
+export const MESENTERY_STIFFNESS = 0.022;
 export const SEGMENT_STIFFNESS = 0.85;
 
 export const PERISTALSIS_BASE_SPEED = 0.4;
