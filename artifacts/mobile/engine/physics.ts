@@ -72,15 +72,49 @@ function insideCavity(x: number, y: number, margin = 0): boolean {
   return dx * dx + dy * dy < 1;
 }
 
+// Soft spring push: nudges nodes back without zeroing velocity.
+// This prevents the "straight-line" physics collapse that occurs when
+// hard-clamping resets px/py and destroys the Verlet velocity.
+function softCavityPush(node: PhysicsNode, margin: number) {
+  const dx = node.x - CAVITY_CX;
+  const dy = node.y - CAVITY_CY;
+  // Expand boundary by 24 px to create a gentler soft zone
+  const softRX = CAVITY_RX - margin + 24;
+  const softRY = CAVITY_RY - margin + 24;
+  const nx = dx / softRX;
+  const ny = dy / softRY;
+  const r = Math.sqrt(nx * nx + ny * ny);
+  if (r > 1) {
+    const excess = r - 1;
+    // Progressive spring: stronger when further outside
+    const k = Math.min(0.85, 0.2 + excess * 1.8);
+    node.x -= (nx / r) * excess * softRX * k;
+    node.y -= (ny / r) * excess * softRY * k;
+    // Only hard-clamp AND zero velocity if extremely far outside
+    const dx2 = node.x - CAVITY_CX;
+    const dy2 = node.y - CAVITY_CY;
+    const r2 = Math.sqrt((dx2 / softRX) ** 2 + (dy2 / softRY) ** 2);
+    if (r2 > 1.6) {
+      node.x = CAVITY_CX + (dx2 / r2) * (softRX - 1);
+      node.y = CAVITY_CY + (dy2 / r2) * (softRY - 1);
+      node.px = node.x;
+      node.py = node.y;
+    }
+  }
+}
+
+// Emergency hard clamp — only for final cleanup, never used in constraint loops
 function clampToCavity(node: PhysicsNode, margin: number) {
   const dx = node.x - CAVITY_CX;
   const dy = node.y - CAVITY_CY;
-  const nx = dx / (CAVITY_RX - margin);
-  const ny = dy / (CAVITY_RY - margin);
+  const softRX = CAVITY_RX - margin + 24;
+  const softRY = CAVITY_RY - margin + 24;
+  const nx = dx / softRX;
+  const ny = dy / softRY;
   const r = Math.sqrt(nx * nx + ny * ny);
-  if (r > 1) {
-    node.x = CAVITY_CX + (dx / r) * (CAVITY_RX - margin - 1);
-    node.y = CAVITY_CY + (dy / r) * (CAVITY_RY - margin - 1);
+  if (r > 1.4) {
+    node.x = CAVITY_CX + (nx / r) * (softRX - 1);
+    node.y = CAVITY_CY + (ny / r) * (softRY - 1);
     node.px = node.x;
     node.py = node.y;
   }
@@ -143,7 +177,7 @@ export function stepPhysics(state: PhysicsState) {
       n.y += vy;
       n.x += (n.rx - n.x) * MESENTERY_STIFFNESS;
       n.y += (n.ry - n.y) * MESENTERY_STIFFNESS;
-      clampToCavity(n, margin);
+      softCavityPush(n, margin);
     }
   };
   integrateNodes(state.smallNodes, 8);
@@ -183,8 +217,9 @@ export function stepPhysics(state: PhysicsState) {
         if (!a.pinned) { a.x += dx * diff; a.y += dy * diff; }
         if (!b.pinned) { b.x -= dx * diff; b.y -= dy * diff; }
       }
+      // Use soft push in constraint loop — never zero velocity here
       for (const n of nodes) {
-        if (!n.pinned) clampToCavity(n, cavMargin);
+        if (!n.pinned) softCavityPush(n, cavMargin);
       }
     }
     const maxStretch = segLen * 2.5;

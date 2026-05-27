@@ -1,5 +1,5 @@
 import React, {
-  createContext, useContext, useRef, useState, useCallback,
+  createContext, useContext, useRef, useState, useCallback, useEffect,
 } from 'react';
 import { createInitialPhysicsState } from '../engine/intestineInit';
 import type { PhysicsState } from '../engine/physics';
@@ -85,6 +85,7 @@ interface GameContextType {
   setEnemaHeadIdx: (idx: number) => void;
   setEnemaInSmall: (v: boolean) => void;
   setEnemaSmallHeadIdx: (idx: number) => void;
+  setEnemaTarget: (params: { largeIdx?: number; smallIdx?: number; inSmall?: boolean }) => void;
   resetPhysics: () => void;
   resetPositions: () => void;
 }
@@ -97,6 +98,16 @@ const GameContext = createContext<GameContextType | null>(null);
 export function GameProvider({ children }: { children: React.ReactNode }) {
   const physicsRef = useRef<PhysicsState>(createInitialPhysicsState());
   const dialogueTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Enema animation: tracks target independently from the animated current position
+  const enemaAnimRef = useRef({
+    targetLargeIdx: N_LARGE - 1,   // start retracted (at anus)
+    targetSmallIdx: N_SMALL - 1,
+    targetInSmall: false,
+    lastDialogueLargeDepth: -99,   // triggers dialogue every 2 segments
+    lastDialogueSmallDepth: -99,
+    dialogueFnRef: null as null | ((t: DialogueTrigger) => void),
+  });
 
   const [state, setState] = useState<GameUIState>({
     hp: 100, pleasure: 0, heartRate: 72,
@@ -164,6 +175,114 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     dialogueTimerRef.current = setTimeout(() => {
       setState(prev => ({ ...prev, currentDialogue: null }));
     }, 3500);
+  }, []);
+
+  // Keep a ref to triggerDialogue so the animation interval has stable access
+  const triggerDialogueRef = useRef(triggerDialogue);
+  triggerDialogueRef.current = triggerDialogue;
+  enemaAnimRef.current.dialogueFnRef = triggerDialogue;
+
+  // Enema insertion/retraction animation — 1 segment per 300ms, dialogue every 2 segments
+  useEffect(() => {
+    const STEP_MS = 300;
+    const timer = setInterval(() => {
+      const anim = enemaAnimRef.current;
+      const p = physicsRef.current;
+
+      // Only animate if enema tool is active (current or secondary)
+      const enemaToolState = p.toolStates['灌肠器'];
+      const enemaActive = p.toolType === '灌肠器' || enemaToolState?.active === true;
+      if (!enemaActive) return;
+
+      const td = triggerDialogueRef.current;
+      const curLarge = p.enemaHeadIdx;
+      const curSmall = p.enemaSmallHeadIdx;
+      const curInSmall = p.enemaInSmall;
+
+      if (!curInSmall && !anim.targetInSmall) {
+        // Both in large — animate toward target
+        if (curLarge === anim.targetLargeIdx) return;
+        const dir = anim.targetLargeIdx < curLarge ? -1 : 1; // -1=insert deeper, +1=retract
+        const newIdx = Math.max(0, Math.min(N_LARGE - 1, curLarge + dir));
+
+        // Depth: 0=entry (anus), N_LARGE-1=deepest (cecum)
+        // Large idx 29=anus(entry), 0=cecum(deepest) → depth = N_LARGE-1 - newIdx
+        const depth = N_LARGE - 1 - newIdx;
+        if (Math.abs(depth - anim.lastDialogueLargeDepth) >= 2) {
+          anim.lastDialogueLargeDepth = depth;
+          if (dir === -1) { // inserting
+            if (depth <= 8) td('enema_large_shallow');
+            else if (depth <= 20) td('enema_large_medium');
+            else td('enema_large_deep');
+          } else { // retracting
+            td('enema_retract');
+          }
+        }
+        p.enemaHeadIdx = newIdx;
+        setState(prev => ({ ...prev, enemaHeadIdx: newIdx }));
+
+      } else if (!curInSmall && anim.targetInSmall) {
+        // Transition: must reach cecum (idx 0) first, then enter small
+        if (curLarge > 0) {
+          const newIdx = curLarge - 1;
+          const depth = N_LARGE - 1 - newIdx;
+          if (Math.abs(depth - anim.lastDialogueLargeDepth) >= 2) {
+            anim.lastDialogueLargeDepth = depth;
+            td('enema_large_deep');
+          }
+          p.enemaHeadIdx = newIdx;
+          setState(prev => ({ ...prev, enemaHeadIdx: newIdx }));
+        } else {
+          // Now cross into small intestine
+          p.enemaInSmall = true;
+          p.enemaSmallHeadIdx = N_SMALL - 1;
+          anim.lastDialogueSmallDepth = -99;
+          td('enema_enter_small');
+          setState(prev => ({ ...prev, enemaInSmall: true, enemaSmallHeadIdx: N_SMALL - 1 }));
+        }
+
+      } else if (curInSmall && !anim.targetInSmall) {
+        // Retract from small back to large
+        if (curSmall < N_SMALL - 1) {
+          const newIdx = curSmall + 1;
+          const depth = N_SMALL - 1 - newIdx;
+          if (Math.abs(depth - anim.lastDialogueSmallDepth) >= 2) {
+            anim.lastDialogueSmallDepth = depth;
+            td('enema_retract');
+          }
+          p.enemaSmallHeadIdx = newIdx;
+          setState(prev => ({ ...prev, enemaSmallHeadIdx: newIdx }));
+        } else {
+          // Exit small intestine
+          p.enemaInSmall = false;
+          p.enemaSmallHeadIdx = N_SMALL - 1;
+          p.enemaHeadIdx = 0; // at cecum junction
+          anim.lastDialogueSmallDepth = -99;
+          setState(prev => ({ ...prev, enemaInSmall: false, enemaSmallHeadIdx: N_SMALL - 1, enemaHeadIdx: 0 }));
+        }
+
+      } else if (curInSmall && anim.targetInSmall) {
+        // Animate inside small intestine
+        if (curSmall === anim.targetSmallIdx) return;
+        const dir = anim.targetSmallIdx < curSmall ? -1 : 1; // -1=deeper, +1=retract
+        const newIdx = Math.max(0, Math.min(N_SMALL - 1, curSmall + dir));
+
+        const depth = N_SMALL - 1 - newIdx; // 0=entry(terminal ileum), N_SMALL-1=deepest
+        if (Math.abs(depth - anim.lastDialogueSmallDepth) >= 2) {
+          anim.lastDialogueSmallDepth = depth;
+          if (dir === -1) {
+            if (depth <= 10) td('enema_small_shallow');
+            else if (depth <= 24) td('enema_small_medium');
+            else td('enema_small_deep');
+          } else {
+            td('enema_retract');
+          }
+        }
+        p.enemaSmallHeadIdx = newIdx;
+        setState(prev => ({ ...prev, enemaSmallHeadIdx: newIdx }));
+      }
+    }, STEP_MS);
+    return () => clearInterval(timer);
   }, []);
 
   const setScreen = useCallback((screen: ScreenName) => {
@@ -411,6 +530,20 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     setState(prev => ({ ...prev, enemaSmallHeadIdx: clamped }));
   }, []);
 
+  // Set the target for enema animation — the head will smoothly animate toward this
+  const setEnemaTarget = useCallback((params: { largeIdx?: number; smallIdx?: number; inSmall?: boolean }) => {
+    const anim = enemaAnimRef.current;
+    if (params.largeIdx !== undefined) {
+      anim.targetLargeIdx = Math.max(0, Math.min(N_LARGE - 1, params.largeIdx));
+    }
+    if (params.smallIdx !== undefined) {
+      anim.targetSmallIdx = Math.max(0, Math.min(N_SMALL - 1, params.smallIdx));
+    }
+    if (params.inSmall !== undefined) {
+      anim.targetInSmall = params.inSmall;
+    }
+  }, []);
+
   const resetPhysics = useCallback(() => {
     const fresh = createInitialPhysicsState();
     physicsRef.current = fresh;
@@ -464,7 +597,8 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       setDebugMode, setShowCollisionBoxes,
       syncFromPhysics, triggerDialogue, addElectrode, clearElectrodes,
       insertViaNavel, retractTool, setNavelPierced, setEnemaHeadIdx,
-      setEnemaInSmall, setEnemaSmallHeadIdx, resetPhysics, resetPositions,
+      setEnemaInSmall, setEnemaSmallHeadIdx, setEnemaTarget,
+      resetPhysics, resetPositions,
     }}>
       {children}
     </GameContext.Provider>

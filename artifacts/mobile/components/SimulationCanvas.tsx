@@ -21,18 +21,21 @@ const NAVEL_Y_EXTERNAL = CAVITY_CY;
 const NAVEL_Y_INTERNAL = CAVITY_CY;
 const NAVEL_RADIUS = 28;
 
-function segmentColor(health: number, pain: number, _pressure: number, ruptured: boolean, broken: boolean, perforated: boolean, isLarge: boolean): string {
-  if (broken) return '#cc1010';
-  if (ruptured) return '#dd3030';
-  const baseR = isLarge ? 176 : 230;
-  const baseG = isLarge ? 96 : 138;
-  const baseB = isLarge ? 80 : 138;
+function segmentColor(health: number, pain: number, pressure: number, ruptured: boolean, broken: boolean, perforated: boolean, isLarge: boolean): string {
+  if (broken) return '#bb0808';
+  if (ruptured) return '#d42020';
+  // Anime art-style palette: warm salmon-pink for small, terracotta for large
+  const baseR = isLarge ? 210 : 245;
+  const baseG = isLarge ? 118 : 168;
+  const baseB = isLarge ? 92 : 150;
   const healthFactor = health / 100;
   const painFactor = pain / 100;
-  let r = Math.round(Math.min(255, baseR + painFactor * 60));
-  let g = Math.round(Math.max(20, baseG * healthFactor));
-  let b = Math.round(Math.max(20, baseB * healthFactor));
-  if (perforated) { r = Math.min(255, r + 30); g = Math.max(20, g - 20); b = Math.max(20, b - 20); }
+  const pressFactor = Math.min(1, pressure / 80);
+  // Pain makes it redder; health degradation darkens
+  let r = Math.round(Math.min(255, baseR + painFactor * 45 + pressFactor * 20));
+  let g = Math.round(Math.max(18, baseG * (0.4 + healthFactor * 0.6) - pressFactor * 15));
+  let b = Math.round(Math.max(18, baseB * (0.4 + healthFactor * 0.6) - pressFactor * 10));
+  if (perforated) { r = Math.min(255, r + 25); g = Math.max(18, g - 18); b = Math.max(18, b - 12); }
   return `rgb(${r},${g},${b})`;
 }
 
@@ -203,7 +206,7 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
   const {
     state, physicsRef, triggerDialogue, addElectrode,
     insertViaNavel, retractTool, setNavelPierced, setEnemaHeadIdx,
-    setEnemaInSmall, setEnemaSmallHeadIdx,
+    setEnemaInSmall, setEnemaSmallHeadIdx, setEnemaTarget,
   } = useGame();
   const lastDialogueTime = useRef(0);
   const isDragging = useRef(false);
@@ -230,6 +233,7 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
     setEnemaHeadIdx,
     setEnemaInSmall,
     setEnemaSmallHeadIdx,
+    setEnemaTarget,
     insertViaNavel,
     setNavelPierced,
     triggerDialogue,
@@ -240,6 +244,7 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
   hrRef.current.setEnemaHeadIdx = setEnemaHeadIdx;
   hrRef.current.setEnemaInSmall = setEnemaInSmall;
   hrRef.current.setEnemaSmallHeadIdx = setEnemaSmallHeadIdx;
+  hrRef.current.setEnemaTarget = setEnemaTarget;
   hrRef.current.insertViaNavel = insertViaNavel;
   hrRef.current.setNavelPierced = setNavelPierced;
   hrRef.current.triggerDialogue = triggerDialogue;
@@ -317,28 +322,27 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
         return;
       }
       if (s.activeTool === TOOLS.ENEMA) {
-        const { setEnemaInSmall: seis, setEnemaSmallHeadIdx: seishi, triggerDialogue: td2 } = hrRef.current;
+        // Set animation TARGET — the enema head animates smoothly toward this
+        const { setEnemaTarget: setTgt } = hrRef.current;
         if (s.enemaInSmall) {
           const cecum = physicsRef.current.largeNodes[0];
           const cecumDist = cecum ? Math.hypot(cecum.x - pos.x, cecum.y - pos.y) : 9999;
           const { idx: sIdx, dist: sDist } = findNearestSmallNodeIdx(pos);
-          if (cecumDist < 45 && cecumDist < sDist) {
-            seis(false);
-            sehi(0);
-          } else if (sIdx >= 0 && sDist < 65) {
-            seishi(sIdx);
+          if (cecumDist < 50 && cecumDist < sDist) {
+            setTgt({ inSmall: false, largeIdx: 0 });
+          } else if (sIdx >= 0 && sDist < 70) {
+            setTgt({ smallIdx: sIdx, inSmall: true });
           }
         } else {
           const { idx, dist } = findNearestLargeNodeIdx(pos);
-          if (idx >= 0 && dist < 60) {
-            sehi(idx);
+          if (idx >= 0 && dist < 65) {
+            setTgt({ largeIdx: idx });
           }
-          if (physicsRef.current.enemaHeadIdx === 0) {
+          // If near cecum, allow targeting small intestine
+          if (idx <= 2 && dist < 65) {
             const { idx: sIdx, dist: sDist } = findNearestSmallNodeIdx(pos);
-            if (sIdx >= 0 && sDist < 55) {
-              seis(true);
-              seishi(sIdx);
-              td2('enema_enter_small');
+            if (sIdx >= 0 && sDist < 60) {
+              setTgt({ inSmall: true, smallIdx: sIdx });
             }
           }
         }
@@ -346,49 +350,31 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
       }
     },
     onPanResponderMove: (evt) => {
-      const { state: s, toPhysicsCoords: tpc, setEnemaHeadIdx: sehi,
-              setEnemaInSmall: seis, setEnemaSmallHeadIdx: seishi, triggerDialogue: td } = hrRef.current;
+      const { state: s, toPhysicsCoords: tpc, triggerDialogue: td } = hrRef.current;
       const { locationX, locationY } = evt.nativeEvent;
       const pos = tpc(locationX, locationY);
 
       if (s.activeTool === TOOLS.ENEMA) {
-        const prevPos = physicsRef.current.toolPos;
-        if (prevPos && !s.enemaInSmall) {
-          const dragDx = pos.x - prevPos.x;
-          const dragDy = pos.y - prevPos.y;
-          const pullRadius = 45;
-          physicsRef.current.largeNodes.forEach(n => {
-            if (n.pinned) return;
-            const d = Math.hypot(n.x - pos.x, n.y - pos.y);
-            if (d < pullRadius && d > 0.1) {
-              const f = (1 - d / pullRadius) * 0.35;
-              n.x += dragDx * f;
-              n.y += dragDy * f;
-            }
-          });
-        }
-
+        // Update animation target as user drags
+        const { setEnemaTarget: setTgt } = hrRef.current;
         if (s.enemaInSmall) {
           const cecum = physicsRef.current.largeNodes[0];
           const cecumDist = cecum ? Math.hypot(cecum.x - pos.x, cecum.y - pos.y) : 9999;
           const { idx: sIdx, dist: sDist } = findNearestSmallNodeIdx(pos);
-          if (cecumDist < 45 && cecumDist < sDist) {
-            seis(false);
-            sehi(0);
-          } else if (sIdx >= 0 && sDist < 65) {
-            seishi(sIdx);
+          if (cecumDist < 50 && cecumDist < sDist) {
+            setTgt({ inSmall: false, largeIdx: 0 });
+          } else if (sIdx >= 0 && sDist < 70) {
+            setTgt({ smallIdx: sIdx, inSmall: true });
           }
         } else {
           const { idx, dist } = findNearestLargeNodeIdx(pos);
-          if (idx >= 0 && dist < 60) {
-            sehi(idx);
+          if (idx >= 0 && dist < 65) {
+            setTgt({ largeIdx: idx });
           }
-          if (physicsRef.current.enemaHeadIdx === 0) {
+          if (idx <= 2 && dist < 65) {
             const { idx: sIdx, dist: sDist } = findNearestSmallNodeIdx(pos);
-            if (sIdx >= 0 && sDist < 55) {
-              seis(true);
-              seishi(sIdx);
-              td('enema_enter_small');
+            if (sIdx >= 0 && sDist < 60) {
+              setTgt({ inSmall: true, smallIdx: sIdx });
             }
           }
         }
@@ -428,8 +414,11 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
   const breathVal = useBreathAnimation(state.heartRate);
   const breathAmp = state.breathAmplitude;
   const inhale = (breathVal + 1) / 2;
-  const breathImgOffsetY = -136 - inhale * 5 * breathAmp;
-  const breathImgH = 630 + inhale * 12 * breathAmp;
+  // Image enlarged to 500×715 (14% up-scale from 440×630), x=-80 centers it (canvas center=170).
+  // y=-189 places the character's navel at canvas y=248 (CAVITY_CY): navel_fraction=0.609,
+  // 0.609*715=435, 435-187=248. The breathImg shifts upward on inhale in sync with navelYBreath.
+  const breathImgOffsetY = -189 - inhale * 5 * breathAmp;
+  const breathImgH = 715 + inhale * 14 * breathAmp;
   const navelYBreath = NAVEL_Y_EXTERNAL - inhale * 5 * breathAmp;
   const breathOverlayScale = 1 + inhale * 0.025 * breathAmp;
 
@@ -525,12 +514,13 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
           </G>
         ) : (
           <G>
-            {/* External view: belly image. NAVEL_Y_EXTERNAL = CAVITY_CY = 248. */}
+            {/* External view belly image. x=-80 centers 500px img on 340px canvas.
+                y=-189 places navel at CAVITY_CY=248: 0.609*715-189=248. */}
             <SvgImage
               href={BELLY_EXTERNAL_IMG}
-              x={-50} y={breathImgOffsetY}
-              width={440} height={breathImgH}
-              preserveAspectRatio="xMidYMid slice"
+              x={-80} y={breathImgOffsetY}
+              width={500} height={breathImgH}
+              preserveAspectRatio="xMidYMid meet"
             />
             {avgPressure > 15 && (
               <Ellipse cx={CANVAS_W / 2} cy={navelYBreath}
@@ -589,7 +579,7 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
               return (
                 <G key={`lg-${i}`}>
                   <Path d={d} stroke={col} strokeWidth={w} fill="none" strokeLinecap="round" strokeLinejoin="round" />
-                  <Path d={d} stroke="rgba(255,180,160,0.2)" strokeWidth={LARGE_RADIUS * 0.7} fill="none" strokeLinecap="round" />
+                  <Path d={d} stroke="rgba(255,200,175,0.22)" strokeWidth={LARGE_RADIUS * 0.65} fill="none" strokeLinecap="round" />
                 </G>
               );
             })}

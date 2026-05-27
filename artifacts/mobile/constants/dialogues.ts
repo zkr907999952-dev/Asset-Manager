@@ -15,6 +15,13 @@ export type DialogueTrigger =
   | 'needle_pierce'
   | 'enema_start'
   | 'enema_enter_small'
+  | 'enema_large_shallow'
+  | 'enema_large_medium'
+  | 'enema_large_deep'
+  | 'enema_small_shallow'
+  | 'enema_small_medium'
+  | 'enema_small_deep'
+  | 'enema_retract'
   | 'intestine_break'
   | 'rupture'
   | 'electric'
@@ -96,11 +103,52 @@ export const DIALOGUES: Record<DialogueTrigger, string[]> = {
     '啊……里面有液体进来了……',
     '嗯……肚子开始胀了……',
   ],
+  enema_large_shallow: [
+    '嗯……有什么……进来了……',
+    '呜……肛门里……有东西插进来……',
+    '啊……什么……往里钻……',
+    '嗯……感觉到了……有什么东西……',
+  ],
+  enema_large_medium: [
+    '呜……进来好多了……！里面被撑开了……',
+    '啊……越来越深……停下来……',
+    '嗯啊……插得好深……往里走了……',
+    '不要……再往里进了……！',
+  ],
+  enema_large_deep: [
+    '啊啊……！太深了……！快出来……！',
+    '呜……进到大肠深处了……好奇怪……！',
+    '不行……！进去太深……受不了……！',
+    '嗯啊……！大肠……被撑满了……！',
+  ],
   enema_enter_small: [
     '啊啊……！进……进小肠了……！太深了……！',
     '呜……不行……越来越深……！感觉穿过去了……！',
     '嗯啊……！液体……液体进到小肠里了……！好奇怪……！',
     '不……不要再进了……！已经进到小肠了……！',
+  ],
+  enema_small_shallow: [
+    '嗯……进到小肠了……好深……',
+    '呜……小肠里……有什么在动……',
+    '啊……小肠里有东西……怪怪的……',
+  ],
+  enema_small_medium: [
+    '不行……！太深了……！小肠里……！',
+    '啊啊……小肠被撑开了……好难受……',
+    '呜啊……越来越深……！小肠……受不了……',
+    '嗯……里面好热……小肠被填满了……',
+  ],
+  enema_small_deep: [
+    '啊啊啊……！太深了太深了……！小肠最深处……！',
+    '不行了……！进到小肠最里面了……！好怪……！',
+    '呜啊啊……！小肠……撑得要爆了……！太深了……！',
+    '啊……！不要……！进得太深……！整条小肠都有感觉……！',
+  ],
+  enema_retract: [
+    '呜……慢慢……出来了……',
+    '嗯……在往外拔……',
+    '啊……出来了一点……',
+    '呜……终于……往外退了……',
   ],
   intestine_break: [
     '啊啊啊……！肠子断了……！',

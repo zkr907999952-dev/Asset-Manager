@@ -9,8 +9,8 @@ export const N_SMALL = 38;
 export const N_LARGE = 30;
 export const SMALL_SEG_LENGTH = 26;
 export const LARGE_SEG_LENGTH = 24;
-export const SMALL_RADIUS = 8;
-export const LARGE_RADIUS = 11;
+export const SMALL_RADIUS = 11;
+export const LARGE_RADIUS = 15;
 
 export const PHYSICS_FPS = 30;
 export const PHYSICS_ITERATIONS = 8;
