@@ -128,6 +128,10 @@ function applyElectricPhysics(state: PhysicsState, param1: number, param2: numbe
 }
 
 export function stepPhysics(state: PhysicsState) {
+  // Guard: ensure new fields exist on legacy state objects
+  if (!state.toolStates) (state as any).toolStates = {};
+  if (state.pressureDiffusionRate === undefined) (state as any).pressureDiffusionRate = 0.004;
+
   state.time += 1;
   const t = state.time;
   // Reset live speed to base each step; tools (e.g. enema) may raise it below.
@@ -598,12 +602,12 @@ export function stepPhysics(state: PhysicsState) {
       if (seg.broken) continue;
       // diffuse to neighbors
       if (i > 0 && !segs[i - 1].broken) {
-        const diff = (prevPressures[i] - prevPressures[i - 1]) * PRESSURE_DIFFUSION_RATE;
+        const diff = (prevPressures[i] - prevPressures[i - 1]) * state.pressureDiffusionRate;
         seg.pressure -= diff;
         segs[i - 1].pressure += diff;
       }
       if (i < n - 1 && !segs[i + 1].broken) {
-        const diff = (prevPressures[i] - prevPressures[i + 1]) * PRESSURE_DIFFUSION_RATE;
+        const diff = (prevPressures[i] - prevPressures[i + 1]) * state.pressureDiffusionRate;
         seg.pressure -= diff;
         segs[i + 1].pressure += diff;
       }

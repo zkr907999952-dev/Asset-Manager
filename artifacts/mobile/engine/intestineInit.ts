@@ -1,5 +1,6 @@
 import {
   N_SMALL, N_LARGE, CAVITY_CX, EXPANSION_SCALE_DEFAULT,
+  PRESSURE_DIFFUSION_RATE_DEFAULT, createDefaultToolStates,
 } from '../constants/gameConfig';
 import type { PhysicsNode, PhysicsState, SegmentProps } from './physics';
 
@@ -124,9 +125,11 @@ export function createInitialPhysicsState(): PhysicsState {
     navelPierced: false,
     grabbedNode: null,
     electrodes: [],
-    enemaHeadIdx: Math.floor(N_LARGE * 0.6),
+    enemaHeadIdx: N_LARGE - 1,
     enemaInSmall: false,
     enemaSmallHeadIdx: N_SMALL - 1,
     expansionScale: EXPANSION_SCALE_DEFAULT,
+    pressureDiffusionRate: PRESSURE_DIFFUSION_RATE_DEFAULT,
+    toolStates: createDefaultToolStates(),
   };
 }
