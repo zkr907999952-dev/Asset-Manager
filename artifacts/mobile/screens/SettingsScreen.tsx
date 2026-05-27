@@ -77,7 +77,8 @@ export function SettingsScreen({ onMenuPress }: Props) {
   const {
     state,
     setDebugMode, setShowCollisionBoxes,
-    setPeriSpeed, setBreathAmplitude, setExpansionScale, setPressureDiffusionRate,
+    setPeriSpeed, setPeriWaveAmplitude, setPeriWaveSpeed,
+    setBreathAmplitude, setExpansionScale, setPressureDiffusionRate,
   } = useGame();
   const topPad = Platform.OS === 'web' ? 67 : insets.top;
   const bottomPad = Platform.OS === 'web' ? 34 : insets.bottom;
@@ -105,6 +106,24 @@ export function SettingsScreen({ onMenuPress }: Props) {
             displayValue={`${state.peristalsisSpeed.toFixed(1)}×`}
             min={0.3} max={3.0} step={0.1}
             onValueChange={setPeriSpeed}
+            trackColor={colors.primary}
+          />
+          <View style={[styles.divider, { backgroundColor: colors.border }]} />
+          <SliderRow
+            label="蠕动波幅"
+            value={state.peristalsisWaveAmplitude}
+            displayValue={state.peristalsisWaveAmplitude.toFixed(2)}
+            min={0.0} max={0.6} step={0.01}
+            onValueChange={setPeriWaveAmplitude}
+            trackColor={colors.primary}
+          />
+          <View style={[styles.divider, { backgroundColor: colors.border }]} />
+          <SliderRow
+            label="蠕动传导速度"
+            value={state.peristalsisWaveSpeed}
+            displayValue={`${state.peristalsisWaveSpeed.toFixed(1)}×`}
+            min={0.2} max={4.0} step={0.1}
+            onValueChange={setPeriWaveSpeed}
             trackColor={colors.primary}
           />
           <View style={[styles.divider, { backgroundColor: colors.border }]} />

@@ -420,7 +420,10 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
     },
   })).current;
 
-  const { renderSmallNodes, renderLargeNodes, renderSmallSegs, renderLargeSegs } = state;
+  const {
+    renderSmallNodes, renderLargeNodes, renderSmallSegs, renderLargeSegs,
+    periScaleSmall, periScaleLarge,
+  } = state;
   const isInternal = state.viewMode === 'internal';
 
   const avgPain = renderSmallSegs.length > 0
@@ -603,7 +606,8 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
               if (seg.broken) return null; // visual gap at break
               const d = buildSmoothSegPath(renderLargeNodes, i);
               if (!d) return null;
-              const w = LARGE_RADIUS * 2 + (seg.pressure / LARGE_RUPTURE_PRESSURE) * LARGE_RADIUS * expansionScale;
+              const lPeriScale = (periScaleLarge?.[i] ?? 1);
+              const w = LARGE_RADIUS * lPeriScale * 2 + (seg.pressure / LARGE_RUPTURE_PRESSURE) * LARGE_RADIUS * expansionScale;
               const col = segmentColor(seg.health, seg.pain, seg.pressure, seg.ruptured, seg.broken, seg.perforated, true);
               return (
                 <G key={`lg-${i}`}>
@@ -679,7 +683,8 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
               if (seg.broken) return null; // visual gap at break
               const d = buildSmoothSegPath(renderSmallNodes, i);
               if (!d) return null;
-              const w = SMALL_RADIUS * 2 + (seg.pressure / 100) * SMALL_RADIUS * expansionScale;
+              const sPeriScale = (periScaleSmall?.[i] ?? 1);
+              const w = SMALL_RADIUS * sPeriScale * 2 + (seg.pressure / 100) * SMALL_RADIUS * expansionScale;
               const col = segmentColor(seg.health, seg.pain, seg.pressure, seg.ruptured, seg.broken, seg.perforated, false);
               return (
                 <G key={`sm-${i}`}>
@@ -783,15 +788,25 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
               );
             })}
 
-            {/* Collision box debug */}
-            {state.showCollisionBoxes && renderSmallNodes.map((n, i) => (
-              <Circle key={`cb-sm-${i}`} cx={n.x} cy={n.y} r={SMALL_RADIUS}
-                fill="none" stroke="rgba(0,255,255,0.4)" strokeWidth={0.8} />
-            ))}
-            {state.showCollisionBoxes && renderLargeNodes.map((n, i) => (
-              <Circle key={`cb-lg-${i}`} cx={n.x} cy={n.y} r={LARGE_RADIUS}
-                fill="none" stroke="rgba(0,200,255,0.35)" strokeWidth={0.8} />
-            ))}
+            {/* Collision box debug — radii match actual physics: periScale * base * (1 + pressure expansion) */}
+            {state.showCollisionBoxes && renderSmallNodes.map((n, i) => {
+              const seg = renderSmallSegs[Math.min(i, renderSmallSegs.length - 1)];
+              const sPeriScale = periScaleSmall?.[i] ?? 1;
+              const r = SMALL_RADIUS * sPeriScale * (1 + ((seg?.pressure ?? 0) / 100) * expansionScale * 0.45);
+              return (
+                <Circle key={`cb-sm-${i}`} cx={n.x} cy={n.y} r={r}
+                  fill="none" stroke="rgba(0,255,255,0.4)" strokeWidth={0.8} />
+              );
+            })}
+            {state.showCollisionBoxes && renderLargeNodes.map((n, i) => {
+              const seg = renderLargeSegs[Math.min(i, renderLargeSegs.length - 1)];
+              const lPeriScale = periScaleLarge?.[i] ?? 1;
+              const r = LARGE_RADIUS * lPeriScale * (1 + ((seg?.pressure ?? 0) / LARGE_RUPTURE_PRESSURE) * expansionScale * 0.45);
+              return (
+                <Circle key={`cb-lg-${i}`} cx={n.x} cy={n.y} r={r}
+                  fill="none" stroke="rgba(0,200,255,0.35)" strokeWidth={0.8} />
+              );
+            })}
 
             {state.showCollisionBoxes && rodGeo && (() => {
               const samples = computeRodCollisionSamples(

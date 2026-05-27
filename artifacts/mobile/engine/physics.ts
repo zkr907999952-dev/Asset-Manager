@@ -4,6 +4,7 @@ import {
   SMALL_RADIUS, LARGE_RADIUS,
   PHYSICS_ITERATIONS, DAMPING, MESENTERY_STIFFNESS, SEGMENT_STIFFNESS,
   PERISTALSIS_BASE_SPEED, PERISTALSIS_AMPLITUDE,
+  PERISTALSIS_WAVE_AMPLITUDE_DEFAULT, PERISTALSIS_WAVE_SPEED_DEFAULT,
   PRESSURE_DECAY_RATE,
   LARGE_RUPTURE_PRESSURE, EXPANSION_SCALE_DEFAULT,
 } from '../constants/gameConfig';
@@ -33,6 +34,11 @@ export interface PhysicsState {
   time: number;
   peristalsisSpeed: number;
   peristalsisBase: number;
+  // Peristalsis wave expansion per node (scale factor, 1.0 = no expansion)
+  periScaleSmall: number[];
+  periScaleLarge: number[];
+  peristalsisWaveAmplitude: number;
+  peristalsisWaveSpeed: number;
   // tool state
   toolPos: { x: number; y: number } | null;
   toolType: string | null;
@@ -156,18 +162,59 @@ function applyElectricPhysics(state: PhysicsState, param1: number, param2: numbe
   }
 }
 
+// Per-node mesentery stiffness + dead zone for large intestine
+// Bend/flexure indices: 0(cecum,pinned), 9(hepatic flex), 15(splenic flex), 22-24(sigmoid), 26-29(rectum/anus)
+function largeNodeMesentery(idx: number): { stiffness: number; deadZone: number } {
+  // Rectum + anus region: very high stiffness, zero dead zone
+  if (idx >= 25) return { stiffness: 0.42, deadZone: 0 };
+  // Sigmoid curve: high stiffness, tiny dead zone
+  if (idx >= 22 && idx <= 25) return { stiffness: 0.18, deadZone: 1.0 };
+  // Splenic flexure neighborhood
+  if (idx >= 14 && idx <= 16) return { stiffness: 0.20, deadZone: 1.5 };
+  // Hepatic flexure neighborhood
+  if (idx >= 8 && idx <= 10) return { stiffness: 0.20, deadZone: 1.5 };
+  // Cecum region
+  if (idx <= 2) return { stiffness: 0.14, deadZone: 2.0 };
+  // All other large intestine nodes
+  return { stiffness: 0.038, deadZone: 4.5 };
+}
+
 export function stepPhysics(state: PhysicsState) {
   // Guard: ensure new fields exist on legacy state objects
   if (!state.toolStates) (state as any).toolStates = {};
   if (state.pressureDiffusionRate === undefined) (state as any).pressureDiffusionRate = 0.004;
+  if (!state.periScaleSmall) (state as any).periScaleSmall = new Array(N_SMALL).fill(1);
+  if (!state.periScaleLarge) (state as any).periScaleLarge = new Array(N_LARGE).fill(1);
+  if (state.peristalsisWaveAmplitude === undefined) (state as any).peristalsisWaveAmplitude = PERISTALSIS_WAVE_AMPLITUDE_DEFAULT;
+  if (state.peristalsisWaveSpeed === undefined) (state as any).peristalsisWaveSpeed = PERISTALSIS_WAVE_SPEED_DEFAULT;
 
   state.time += 1;
   const t = state.time;
   state.peristalsisSpeed = state.peristalsisBase;
   const periSpeed = state.peristalsisSpeed * PERISTALSIS_BASE_SPEED;
 
-  // --- Verlet integration ---
-  const integrateNodes = (nodes: PhysicsNode[], margin: number) => {
+  // --- Compute per-node peristalsis wave expansion scale ---
+  // Traveling wave: 3 peaks along small intestine, 2 along large intestine
+  // Amplitude is reduced by local pressure (high pressure = less room to expand)
+  const waveAmp = state.peristalsisWaveAmplitude;
+  const waveSpeed = state.peristalsisWaveSpeed;
+  for (let i = 0; i < N_SMALL; i++) {
+    const seg = state.smallSegs[Math.min(i, state.smallSegs.length - 1)];
+    const pressureRatio = seg ? clamp(seg.pressure / 100, 0, 1) : 0;
+    const effectiveAmp = waveAmp * Math.max(0, 1 - pressureRatio * 0.88);
+    const phase = (i / N_SMALL) * Math.PI * 6 - t * periSpeed * waveSpeed * 0.055;
+    state.periScaleSmall[i] = 1 + effectiveAmp * Math.max(0, Math.sin(phase));
+  }
+  for (let i = 0; i < N_LARGE; i++) {
+    const seg = state.largeSegs[Math.min(i, state.largeSegs.length - 1)];
+    const pressureRatio = seg ? clamp(seg.pressure / LARGE_RUPTURE_PRESSURE, 0, 1) : 0;
+    const effectiveAmp = waveAmp * 0.85 * Math.max(0, 1 - pressureRatio * 0.88);
+    const phase = (i / N_LARGE) * Math.PI * 4 - t * periSpeed * waveSpeed * 0.038;
+    state.periScaleLarge[i] = 1 + effectiveAmp * Math.max(0, Math.sin(phase));
+  }
+
+  // --- Verlet integration with per-node mesentery ---
+  const integrateSmallNodes = (nodes: PhysicsNode[], margin: number) => {
     for (const n of nodes) {
       if (n.pinned) continue;
       const vx = (n.x - n.px) * DAMPING;
@@ -175,13 +222,41 @@ export function stepPhysics(state: PhysicsState) {
       n.px = n.x; n.py = n.y;
       n.x += vx;
       n.y += vy;
-      n.x += (n.rx - n.x) * MESENTERY_STIFFNESS;
-      n.y += (n.ry - n.y) * MESENTERY_STIFFNESS;
+      // Small intestine: uniform mesentery with small dead zone
+      const dx = n.rx - n.x, dy = n.ry - n.y;
+      const disp = Math.sqrt(dx * dx + dy * dy);
+      const deadZone = 5.0;
+      if (disp > deadZone) {
+        const factor = (disp - deadZone) / disp;
+        n.x += dx * MESENTERY_STIFFNESS * factor;
+        n.y += dy * MESENTERY_STIFFNESS * factor;
+      }
       softCavityPush(n, margin);
     }
   };
-  integrateNodes(state.smallNodes, 8);
-  integrateNodes(state.largeNodes, 2);
+  const integrateLargeNodes = (nodes: PhysicsNode[], margin: number) => {
+    for (let idx = 0; idx < nodes.length; idx++) {
+      const n = nodes[idx];
+      if (n.pinned) continue;
+      const vx = (n.x - n.px) * DAMPING;
+      const vy = (n.y - n.py) * DAMPING;
+      n.px = n.x; n.py = n.y;
+      n.x += vx;
+      n.y += vy;
+      // Per-node mesentery with dead zone for large intestine
+      const { stiffness, deadZone } = largeNodeMesentery(idx);
+      const dx = n.rx - n.x, dy = n.ry - n.y;
+      const disp = Math.sqrt(dx * dx + dy * dy);
+      if (disp > deadZone) {
+        const factor = deadZone > 0 ? (disp - deadZone) / disp : 1;
+        n.x += dx * stiffness * factor;
+        n.y += dy * stiffness * factor;
+      }
+      softCavityPush(n, margin);
+    }
+  };
+  integrateSmallNodes(state.smallNodes, 8);
+  integrateLargeNodes(state.largeNodes, 2);
 
   // --- Peristalsis wave forces on small intestine ---
   for (let i = 0; i < N_SMALL; i++) {
@@ -242,12 +317,15 @@ export function stepPhysics(state: PhysicsState) {
   for (let si = 0; si < state.smallNodes.length; si++) {
     const sn = state.smallNodes[si];
     const sSeg = state.smallSegs[Math.min(si, state.smallSegs.length - 1)];
-    const sExpR = SMALL_RADIUS * (1 + (sSeg.pressure / 100) * state.expansionScale * 0.45);
+    const sPeriScale = state.periScaleSmall[si] ?? 1;
+    // Peristalsis wave scales the base radius; pressure expansion adds on top
+    const sExpR = SMALL_RADIUS * sPeriScale * (1 + (sSeg.pressure / 100) * state.expansionScale * 0.45);
 
     for (let li = 0; li < state.largeNodes.length; li++) {
       const ln = state.largeNodes[li];
       const lSeg = state.largeSegs[Math.min(li, state.largeSegs.length - 1)];
-      const lExpR = LARGE_RADIUS * (1 + (lSeg.pressure / LARGE_RUPTURE_PRESSURE) * state.expansionScale * 0.45);
+      const lPeriScale = state.periScaleLarge[li] ?? 1;
+      const lExpR = LARGE_RADIUS * lPeriScale * (1 + (lSeg.pressure / LARGE_RUPTURE_PRESSURE) * state.expansionScale * 0.45);
 
       const dx = sn.x - ln.x, dy = sn.y - ln.y;
       const d = Math.sqrt(dx * dx + dy * dy);

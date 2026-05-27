@@ -1,6 +1,7 @@
 import {
   N_SMALL, N_LARGE, CAVITY_CX, CAVITY_CY, EXPANSION_SCALE_DEFAULT,
   PRESSURE_DIFFUSION_RATE_DEFAULT, createDefaultToolStates,
+  PERISTALSIS_WAVE_AMPLITUDE_DEFAULT, PERISTALSIS_WAVE_SPEED_DEFAULT,
 } from '../constants/gameConfig';
 import type { PhysicsNode, PhysicsState, SegmentProps } from './physics';
 
@@ -152,6 +153,10 @@ export function createInitialPhysicsState(): PhysicsState {
     time: 0,
     peristalsisSpeed: 1.0,
     peristalsisBase: 1.0,
+    periScaleSmall: new Array(N_SMALL).fill(1),
+    periScaleLarge: new Array(N_LARGE).fill(1),
+    peristalsisWaveAmplitude: PERISTALSIS_WAVE_AMPLITUDE_DEFAULT,
+    peristalsisWaveSpeed: PERISTALSIS_WAVE_SPEED_DEFAULT,
     toolPos: null,
     toolType: null,
     toolActive: false,

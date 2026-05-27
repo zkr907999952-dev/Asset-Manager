@@ -8,6 +8,7 @@ import {
   TOOLS, N_LARGE, N_SMALL, CAVITY_CX, CAVITY_CY,
   BREATH_AMPLITUDE_DEFAULT, EXPANSION_SCALE_DEFAULT,
   PRESSURE_DIFFUSION_RATE_DEFAULT,
+  PERISTALSIS_WAVE_AMPLITUDE_DEFAULT, PERISTALSIS_WAVE_SPEED_DEFAULT,
 } from '../constants/gameConfig';
 import { getRandomDialogue, type DialogueTrigger } from '../constants/dialogues';
 
@@ -42,6 +43,8 @@ export interface GameUIState {
   currentScreen: ScreenName;
   currentDialogue: string | null;
   peristalsisSpeed: number;
+  peristalsisWaveAmplitude: number;
+  peristalsisWaveSpeed: number;
   breathAmplitude: number;
   expansionScale: number;
   debugMode: boolean;
@@ -50,6 +53,8 @@ export interface GameUIState {
   renderLargeNodes: { x: number; y: number }[];
   renderSmallSegs: RenderSegment[];
   renderLargeSegs: RenderSegment[];
+  periScaleSmall: number[];
+  periScaleLarge: number[];
   electrodes: { x: number; y: number }[];
   toolPos: { x: number; y: number } | null;
   toolAnchor: { x: number; y: number } | null;
@@ -70,6 +75,8 @@ interface GameContextType {
   setToolParam2: (v: number) => void;
   setToolState: (toolId: string, patch: Partial<ToolInstanceState>) => void;
   setPeriSpeed: (v: number) => void;
+  setPeriWaveAmplitude: (v: number) => void;
+  setPeriWaveSpeed: (v: number) => void;
   setBreathAmplitude: (v: number) => void;
   setExpansionScale: (v: number) => void;
   setPressureDiffusionRate: (v: number) => void;
@@ -117,6 +124,8 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     pressureDiffusionRate: physicsRef.current.pressureDiffusionRate,
     viewMode: 'internal', currentScreen: 'simulation',
     currentDialogue: null, peristalsisSpeed: 1.0,
+    peristalsisWaveAmplitude: PERISTALSIS_WAVE_AMPLITUDE_DEFAULT,
+    peristalsisWaveSpeed: PERISTALSIS_WAVE_SPEED_DEFAULT,
     breathAmplitude: BREATH_AMPLITUDE_DEFAULT,
     expansionScale: EXPANSION_SCALE_DEFAULT,
     debugMode: false, showCollisionBoxes: false,
@@ -124,6 +133,8 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     renderLargeNodes: physicsRef.current.largeNodes.map(n => ({ x: n.x, y: n.y })),
     renderSmallSegs: physicsRef.current.smallSegs.map(s => ({ ...s })),
     renderLargeSegs: physicsRef.current.largeSegs.map(s => ({ ...s })),
+    periScaleSmall: [...physicsRef.current.periScaleSmall],
+    periScaleLarge: [...physicsRef.current.periScaleLarge],
     electrodes: [],
     toolPos: null,
     toolAnchor: null,
@@ -157,6 +168,8 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       renderLargeNodes: p.largeNodes.map(n => ({ x: n.x, y: n.y })),
       renderSmallSegs: smallSegs.map(s => ({ ...s })),
       renderLargeSegs: largeSegs.map(s => ({ ...s })),
+      periScaleSmall: [...p.periScaleSmall],
+      periScaleLarge: [...p.periScaleLarge],
       toolPos: p.toolPos ? { ...p.toolPos } : null,
       toolAnchor: p.toolAnchor ? { ...p.toolAnchor } : null,
       toolInserted: p.toolInserted,
@@ -449,6 +462,16 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     setState(prev => ({ ...prev, peristalsisSpeed: v }));
   }, []);
 
+  const setPeriWaveAmplitude = useCallback((v: number) => {
+    physicsRef.current.peristalsisWaveAmplitude = v;
+    setState(prev => ({ ...prev, peristalsisWaveAmplitude: v }));
+  }, []);
+
+  const setPeriWaveSpeed = useCallback((v: number) => {
+    physicsRef.current.peristalsisWaveSpeed = v;
+    setState(prev => ({ ...prev, peristalsisWaveSpeed: v }));
+  }, []);
+
   const setBreathAmplitude = useCallback((v: number) => {
     setState(prev => ({ ...prev, breathAmplitude: v }));
   }, []);
@@ -555,12 +578,16 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       toolStates: fresh.toolStates,
       pressureDiffusionRate: fresh.pressureDiffusionRate,
       currentDialogue: null, peristalsisSpeed: 1.0,
+      peristalsisWaveAmplitude: PERISTALSIS_WAVE_AMPLITUDE_DEFAULT,
+      peristalsisWaveSpeed: PERISTALSIS_WAVE_SPEED_DEFAULT,
       breathAmplitude: BREATH_AMPLITUDE_DEFAULT,
       expansionScale: EXPANSION_SCALE_DEFAULT,
       renderSmallNodes: fresh.smallNodes.map(n => ({ x: n.x, y: n.y })),
       renderLargeNodes: fresh.largeNodes.map(n => ({ x: n.x, y: n.y })),
       renderSmallSegs: fresh.smallSegs.map(s => ({ ...s })),
       renderLargeSegs: fresh.largeSegs.map(s => ({ ...s })),
+      periScaleSmall: [...fresh.periScaleSmall],
+      periScaleLarge: [...fresh.periScaleLarge],
       electrodes: [],
       toolPos: null, toolAnchor: null, toolInserted: false,
       enemaHeadIdx: fresh.enemaHeadIdx,
@@ -593,6 +620,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       state, physicsRef,
       setScreen, setViewMode, setActiveTool, setToolActive,
       setToolParam1, setToolParam2, setToolState, setPeriSpeed,
+      setPeriWaveAmplitude, setPeriWaveSpeed,
       setBreathAmplitude, setExpansionScale, setPressureDiffusionRate,
       setDebugMode, setShowCollisionBoxes,
       syncFromPhysics, triggerDialogue, addElectrode, clearElectrodes,
