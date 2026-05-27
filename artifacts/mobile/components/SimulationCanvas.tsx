@@ -1,5 +1,6 @@
 import React, { useRef, useCallback } from 'react';
 import { View, PanResponder, StyleSheet } from 'react-native';
+import { useBreathAnimation } from '@/hooks/useBreathAnimation';
 import Svg, {
   Ellipse, Circle, Line, Path, Rect, Defs, RadialGradient, LinearGradient, Stop, G,
   Image as SvgImage, ClipPath,
@@ -333,6 +334,17 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
     ? renderSmallSegs.reduce((a, s) => a + s.pressure, 0) / renderSmallSegs.length : 0;
   const bulge = 1 + avgPressure * 0.003;
 
+  const breathVal = useBreathAnimation(state.heartRate);
+  // inhale = 0..1 (0 = full exhale, 1 = full inhale)
+  const inhale = (breathVal + 1) / 2;
+  // Belly image shifts up slightly on inhale, expands vertically
+  const breathImgOffsetY = -90 - inhale * 5;
+  const breathImgH = 630 + inhale * 12;
+  // Navel point shifts up with image
+  const navelYBreath = NAVEL_Y_EXTERNAL - inhale * 5;
+  // Overlay ellipses expand slightly with breathing
+  const breathOverlayScale = 1 + inhale * 0.025;
+
   const smallPath = buildSmoothPath(renderSmallNodes);
 
   const handlePos = state.toolPos;
@@ -418,41 +430,42 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
           <G>
             {/* External view: zoomed in on abdomen portion of the belly image.
                 belly_external.png is 896×1280. Rendered at 440×630 with -50,-90 offset
-                to crop to the mid-torso / abdomen area. */}
+                to crop to the mid-torso / abdomen area.
+                breathImgOffsetY and breathImgH animate the image up/expand on inhale. */}
             <SvgImage
               href={BELLY_EXTERNAL_IMG}
-              x={-50} y={-90}
-              width={440} height={630}
+              x={-50} y={breathImgOffsetY}
+              width={440} height={breathImgH}
               preserveAspectRatio="xMidYMid slice"
             />
             {avgPressure > 15 && (
-              <Ellipse cx={CANVAS_W / 2} cy={NAVEL_Y_EXTERNAL}
-                rx={CANVAS_W * 0.32 * (1 + avgPressure * 0.003) * bulge}
-                ry={CANVAS_H * 0.14 * (1 + avgPressure * 0.003) * bulge}
+              <Ellipse cx={CANVAS_W / 2} cy={navelYBreath}
+                rx={CANVAS_W * 0.32 * (1 + avgPressure * 0.003) * bulge * breathOverlayScale}
+                ry={CANVAS_H * 0.14 * (1 + avgPressure * 0.003) * bulge * breathOverlayScale}
                 fill={`rgba(220,70,90,${Math.min(0.32, avgPressure * 0.003)})`} />
             )}
             {avgPain > 20 && (
-              <Ellipse cx={CANVAS_W / 2} cy={NAVEL_Y_EXTERNAL + 10}
-                rx={CANVAS_W * 0.28} ry={CANVAS_H * 0.11}
+              <Ellipse cx={CANVAS_W / 2} cy={navelYBreath + 10}
+                rx={CANVAS_W * 0.28 * breathOverlayScale} ry={CANVAS_H * 0.11 * breathOverlayScale}
                 fill={`rgba(255,80,80,${Math.min(0.28, avgPain * 0.003)})`} />
             )}
             {(state.activeTool === TOOLS.NEEDLE ||
               ((state.activeTool === TOOLS.METAL_ROD || state.activeTool === TOOLS.VIBRATOR) && state.navelPierced)) && (
-              <Circle cx={NAVEL_X} cy={NAVEL_Y_EXTERNAL} r={NAVEL_RADIUS}
+              <Circle cx={NAVEL_X} cy={navelYBreath} r={NAVEL_RADIUS}
                 fill="none" stroke="rgba(255,180,80,0.5)" strokeWidth={1.5} strokeDasharray="3 3" />
             )}
             {state.navelPierced && (
               <G>
-                <Line x1={NAVEL_X} y1={NAVEL_Y_EXTERNAL - 14}
-                  x2={NAVEL_X} y2={NAVEL_Y_EXTERNAL + 14}
+                <Line x1={NAVEL_X} y1={navelYBreath - 14}
+                  x2={NAVEL_X} y2={navelYBreath + 14}
                   stroke="#dcdcdc" strokeWidth={2.5} strokeLinecap="round" />
-                <Circle cx={NAVEL_X} cy={NAVEL_Y_EXTERNAL - 14} r={3} fill="#f0f0f0" />
-                <Circle cx={NAVEL_X} cy={NAVEL_Y_EXTERNAL + 14} r={3} fill="#f0f0f0" />
+                <Circle cx={NAVEL_X} cy={navelYBreath - 14} r={3} fill="#f0f0f0" />
+                <Circle cx={NAVEL_X} cy={navelYBreath + 14} r={3} fill="#f0f0f0" />
               </G>
             )}
             {state.renderSmallSegs.filter(s => s.ruptured).slice(0, 3).map((_, i) => (
               <Ellipse key={`rup-${i}`}
-                cx={CANVAS_W * (0.35 + i * 0.15)} cy={NAVEL_Y_EXTERNAL * (0.95 + i * 0.05)}
+                cx={CANVAS_W * (0.35 + i * 0.15)} cy={navelYBreath * (0.95 + i * 0.05)}
                 rx={14 + i * 3} ry={8 + i * 2}
                 fill="rgba(140,20,20,0.55)" />
             ))}
