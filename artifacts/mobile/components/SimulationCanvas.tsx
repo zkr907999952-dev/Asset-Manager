@@ -5,7 +5,6 @@ import Svg, {
   Image as SvgImage, ClipPath,
 } from 'react-native-svg';
 
-const CAVITY_BG = require('@/assets/images/cavity_bg.png');
 const INTESTINES_REF = require('@/assets/images/intestines.png');
 const BELLY_EXTERNAL_IMG = require('@/assets/images/belly_external.png');
 import {
@@ -17,8 +16,11 @@ import { useGame } from '../contexts/GameContext';
 import { TOOLS } from '../constants/gameConfig';
 
 const NAVEL_X = CANVAS_W / 2;
-const NAVEL_Y_EXTERNAL = CANVAS_H * 0.575;
-const NAVEL_Y_INTERNAL = CAVITY_CY - 20;
+// Belly_external.png is 896×1280. Abdomen center ≈ 52% body height.
+// With the image zoomed in (rendered at 440×630 offset -50,-90), the navel lands at:
+// 1280 * 0.52 * (440/896) - 90 ≈ 328 - 90 = 238 → ~52% of canvas height
+const NAVEL_Y_EXTERNAL = CANVAS_H * 0.52;
+const NAVEL_Y_INTERNAL = CAVITY_CY;
 const NAVEL_RADIUS = 28;
 
 function segmentColor(health: number, pain: number, _pressure: number, ruptured: boolean, broken: boolean, perforated: boolean, isLarge: boolean): string {
@@ -407,36 +409,31 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
         {/* ===== BACKGROUND LAYER ===== */}
         {isInternal ? (
           <G>
-            <SvgImage
-              href={CAVITY_BG}
-              x={CAVITY_CX - CAVITY_RX * bulge - 8}
-              y={CAVITY_CY - CAVITY_RY - 8}
-              width={(CAVITY_RX * bulge + 8) * 2}
-              height={(CAVITY_RY + 8) * 2}
-              preserveAspectRatio="xMidYMid slice"
-              clipPath="url(#cavityClip)"
-            />
+            {/* Internal view: no spine bg — only the cavity outline */}
             <Ellipse cx={CAVITY_CX} cy={CAVITY_CY}
               rx={CAVITY_RX * bulge} ry={CAVITY_RY}
-              fill="none" stroke="#6a2020" strokeWidth={2} />
+              fill="#120404" stroke="#6a2020" strokeWidth={2} />
           </G>
         ) : (
           <G>
+            {/* External view: zoomed in on abdomen portion of the belly image.
+                belly_external.png is 896×1280. Rendered at 440×630 with -50,-90 offset
+                to crop to the mid-torso / abdomen area. */}
             <SvgImage
               href={BELLY_EXTERNAL_IMG}
-              x={0} y={0}
-              width={CANVAS_W} height={CANVAS_H}
+              x={-50} y={-90}
+              width={440} height={630}
               preserveAspectRatio="xMidYMid slice"
             />
             {avgPressure > 15 && (
-              <Ellipse cx={CANVAS_W / 2} cy={CANVAS_H * 0.48}
-                rx={CANVAS_W * 0.30 * (1 + avgPressure * 0.003) * bulge}
-                ry={CANVAS_H * 0.13 * (1 + avgPressure * 0.003) * bulge}
+              <Ellipse cx={CANVAS_W / 2} cy={NAVEL_Y_EXTERNAL}
+                rx={CANVAS_W * 0.32 * (1 + avgPressure * 0.003) * bulge}
+                ry={CANVAS_H * 0.14 * (1 + avgPressure * 0.003) * bulge}
                 fill={`rgba(220,70,90,${Math.min(0.32, avgPressure * 0.003)})`} />
             )}
             {avgPain > 20 && (
-              <Ellipse cx={CANVAS_W / 2} cy={CANVAS_H * 0.50}
-                rx={CANVAS_W * 0.28} ry={CANVAS_H * 0.10}
+              <Ellipse cx={CANVAS_W / 2} cy={NAVEL_Y_EXTERNAL + 10}
+                rx={CANVAS_W * 0.28} ry={CANVAS_H * 0.11}
                 fill={`rgba(255,80,80,${Math.min(0.28, avgPain * 0.003)})`} />
             )}
             {(state.activeTool === TOOLS.NEEDLE ||
@@ -455,7 +452,7 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
             )}
             {state.renderSmallSegs.filter(s => s.ruptured).slice(0, 3).map((_, i) => (
               <Ellipse key={`rup-${i}`}
-                cx={CANVAS_W * (0.35 + i * 0.15)} cy={CANVAS_H * (0.42 + i * 0.03)}
+                cx={CANVAS_W * (0.35 + i * 0.15)} cy={NAVEL_Y_EXTERNAL * (0.95 + i * 0.05)}
                 rx={14 + i * 3} ry={8 + i * 2}
                 fill="rgba(140,20,20,0.55)" />
             ))}

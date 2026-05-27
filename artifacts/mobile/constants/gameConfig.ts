@@ -1,9 +1,9 @@
 export const CANVAS_W = 340;
 export const CANVAS_H = 460;
 export const CAVITY_CX = 170;
-export const CAVITY_CY = 240;
-export const CAVITY_RX = 118;
-export const CAVITY_RY = 148;
+export const CAVITY_CY = 248;
+export const CAVITY_RX = 148;
+export const CAVITY_RY = 175;
 
 export const N_SMALL = 38;
 export const N_LARGE = 30;

@@ -66,6 +66,7 @@ interface GameContextType {
   setEnemaHeadIdx: (idx: number) => void;
   setEnemaInSmall: (v: boolean) => void;
   setEnemaSmallHeadIdx: (idx: number) => void;
+  resetPhysics: () => void;
 }
 
 const GameContext = createContext<GameContextType | null>(null);
@@ -213,12 +214,11 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const insertViaNavel = useCallback(() => {
-    // Navel point in canvas coords: ~ (CAVITY_CX, CAVITY_CY * 0.555/0.5) — use navel position from external view (CANVAS_H * 0.575)
-    physicsRef.current.toolAnchor = { x: CAVITY_CX, y: CAVITY_CY - 20 };
+    physicsRef.current.toolAnchor = { x: CAVITY_CX, y: CAVITY_CY };
     physicsRef.current.toolInserted = true;
     setState(prev => ({
       ...prev,
-      toolAnchor: { x: CAVITY_CX, y: CAVITY_CY - 20 },
+      toolAnchor: { x: CAVITY_CX, y: CAVITY_CY },
       toolInserted: true,
       viewMode: 'internal',
     }));
@@ -259,6 +259,27 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     setState(prev => ({ ...prev, enemaSmallHeadIdx: clamped }));
   }, []);
 
+  const resetPhysics = useCallback(() => {
+    const fresh = createInitialPhysicsState();
+    physicsRef.current = fresh;
+    setState(prev => ({
+      ...prev,
+      hp: 100, pleasure: 0, heartRate: 72,
+      navelPierced: false, intestinalRuptures: 0, intestinalBreaks: 0,
+      activeTool: null, toolActive: false, toolParam1: 50, toolParam2: 50,
+      currentDialogue: null, peristalsisSpeed: 1.0,
+      renderSmallNodes: fresh.smallNodes.map(n => ({ x: n.x, y: n.y })),
+      renderLargeNodes: fresh.largeNodes.map(n => ({ x: n.x, y: n.y })),
+      renderSmallSegs: fresh.smallSegs.map(s => ({ ...s })),
+      renderLargeSegs: fresh.largeSegs.map(s => ({ ...s })),
+      electrodes: [],
+      toolPos: null, toolAnchor: null, toolInserted: false,
+      enemaHeadIdx: fresh.enemaHeadIdx,
+      enemaInSmall: false,
+      enemaSmallHeadIdx: fresh.enemaSmallHeadIdx,
+    }));
+  }, []);
+
   return (
     <GameContext.Provider value={{
       state, physicsRef,
@@ -267,7 +288,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       setDebugMode, setShowCollisionBoxes,
       syncFromPhysics, triggerDialogue, addElectrode, clearElectrodes,
       insertViaNavel, retractTool, setNavelPierced, setEnemaHeadIdx,
-      setEnemaInSmall, setEnemaSmallHeadIdx,
+      setEnemaInSmall, setEnemaSmallHeadIdx, resetPhysics,
     }}>
       {children}
     </GameContext.Provider>

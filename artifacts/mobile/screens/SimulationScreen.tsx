@@ -19,7 +19,7 @@ interface Props {
 export function SimulationScreen({ onMenuPress }: Props) {
   const colors = useColors();
   const insets = useSafeAreaInsets();
-  const { state, physicsRef, syncFromPhysics, setViewMode, triggerDialogue } = useGame();
+  const { state, physicsRef, syncFromPhysics, setViewMode, triggerDialogue, resetPhysics } = useGame();
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const frameCount = useRef(0);
   const canvasLayout = useRef<{ x: number; y: number; width: number; height: number } | null>(null);
@@ -91,6 +91,12 @@ export function SimulationScreen({ onMenuPress }: Props) {
         </TouchableOpacity>
         <Text style={[styles.title, { color: colors.foreground }]}>腹部交互</Text>
         <TouchableOpacity
+          style={[styles.resetBtn, { borderColor: colors.border }]}
+          onPress={resetPhysics}
+        >
+          <Feather name="refresh-cw" size={14} color={colors.mutedForeground} />
+        </TouchableOpacity>
+        <TouchableOpacity
           style={[styles.viewToggle, {
             backgroundColor: state.viewMode === 'internal' ? colors.primary : colors.secondary,
             borderColor: colors.border,
@@ -148,6 +154,12 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 15,
     fontFamily: 'Inter_600SemiBold',
+  },
+  resetBtn: {
+    padding: 6,
+    marginRight: 6,
+    borderRadius: 6,
+    borderWidth: 1,
   },
   viewToggle: {
     flexDirection: 'row',

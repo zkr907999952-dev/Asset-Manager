@@ -80,6 +80,9 @@ function clampToCavity(node: PhysicsNode, margin: number) {
   if (r > 1) {
     node.x = CAVITY_CX + (dx / r) * (CAVITY_RX - margin - 1);
     node.y = CAVITY_CY + (dy / r) * (CAVITY_RY - margin - 1);
+    // Zero velocity so node doesn't tunnel through the wall on the next integration step
+    node.px = node.x;
+    node.py = node.y;
   }
 }
 
@@ -549,6 +552,10 @@ export function stepPhysics(state: PhysicsState) {
   };
   diffuseAndUpdate(state.smallSegs);
   diffuseAndUpdate(state.largeSegs);
+
+  // --- Final hard clamp: catches any node pushed outside by tool forces, springs, or separation ---
+  for (const n of state.smallNodes) { if (!n.pinned) clampToCavity(n, 8); }
+  for (const n of state.largeNodes) { if (!n.pinned) clampToCavity(n, 2); }
 }
 
 export function buildSmoothPath(nodes: { x: number; y: number }[]): string {
