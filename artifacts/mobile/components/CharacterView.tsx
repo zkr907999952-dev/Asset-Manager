@@ -23,6 +23,7 @@ export function CharacterView({ width, height }: Props) {
     : 0;
 
   const breathVal = useBreathAnimation(state.heartRate);
+  const amp = state.breathAmplitude;
 
   const bellyBulge = 1 + avgPressure * 0.004;
   const painFlush = avgPain / 100;
@@ -37,13 +38,10 @@ export function CharacterView({ width, height }: Props) {
   const bellyG = Math.round(80 - painFlush * 50);
   const bellyB = Math.round(80 - painFlush * 50);
 
-  // Breathing: chest rises (image moves up) and belly slightly swells on inhale
-  // breathVal is -1..1; inhale = positive peak, exhale = negative peak
-  const inhale = (breathVal + 1) / 2; // 0..1, 1 = full inhale
-  const breathTranslateY = -inhale * 4;
-  const breathBellyScale = 1 + inhale * 0.018;
-
-  // SVG belly transform: scale from belly center
+  // Breathing: inhale lifts the torso and slightly expands the belly
+  const inhale = (breathVal + 1) / 2;
+  const breathTranslateY = -inhale * 4 * amp;
+  const breathBellyScale = 1 + inhale * 0.018 * amp;
   const bellyTransform = `translate(${cx}, ${bellyCy}) scale(1, ${breathBellyScale}) translate(${-cx}, ${-bellyCy})`;
 
   return (
@@ -61,7 +59,7 @@ export function CharacterView({ width, height }: Props) {
       <Svg width={width} height={height} viewBox={`0 0 ${width} ${height}`} style={styles.overlay}>
         {/* Belly breathing group — scales from belly center */}
         <G transform={bellyTransform}>
-          {/* Pain flush over belly area */}
+          {/* Pain flush */}
           {avgPain > 20 && (
             <Ellipse
               cx={cx} cy={bellyCy}
@@ -92,7 +90,7 @@ export function CharacterView({ width, height }: Props) {
             />
           )}
 
-          {/* Rupture holes on belly */}
+          {/* Rupture holes */}
           {Array.from({ length: Math.min(ruptures, 5) }).map((_, i) => (
             <Circle
               key={`rpt-${i}`}
@@ -116,7 +114,7 @@ export function CharacterView({ width, height }: Props) {
             />
           )}
 
-          {/* Navel piercing indicator */}
+          {/* Navel piercing */}
           {state.navelPierced && (
             <Line
               x1={cx} y1={bellyCy - bellyRy * 0.3}
@@ -128,7 +126,7 @@ export function CharacterView({ width, height }: Props) {
           )}
         </G>
 
-        {/* Cheek blush — not in belly group, no breathing scale needed */}
+        {/* Cheek blush */}
         {(avgPain > 40 || avgPressure > 50) && (
           <>
             <Ellipse

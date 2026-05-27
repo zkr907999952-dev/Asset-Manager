@@ -1,5 +1,5 @@
 import {
-  N_SMALL, N_LARGE, CAVITY_CX,
+  N_SMALL, N_LARGE, CAVITY_CX, EXPANSION_SCALE_DEFAULT,
 } from '../constants/gameConfig';
 import type { PhysicsNode, PhysicsState, SegmentProps } from './physics';
 
@@ -127,5 +127,6 @@ export function createInitialPhysicsState(): PhysicsState {
     enemaHeadIdx: Math.floor(N_LARGE * 0.6),
     enemaInSmall: false,
     enemaSmallHeadIdx: N_SMALL - 1,
+    expansionScale: EXPANSION_SCALE_DEFAULT,
   };
 }

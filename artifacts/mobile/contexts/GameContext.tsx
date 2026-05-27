@@ -4,7 +4,7 @@ import React, {
 import { createInitialPhysicsState } from '../engine/intestineInit';
 import type { PhysicsState, SegmentProps } from '../engine/physics';
 import type { ToolType } from '../constants/gameConfig';
-import { TOOLS, N_LARGE, N_SMALL, CAVITY_CX, CAVITY_CY } from '../constants/gameConfig';
+import { TOOLS, N_LARGE, N_SMALL, CAVITY_CX, CAVITY_CY, BREATH_AMPLITUDE_DEFAULT, EXPANSION_SCALE_DEFAULT } from '../constants/gameConfig';
 import { getRandomDialogue, type DialogueTrigger } from '../constants/dialogues';
 
 export type ScreenName = 'character' | 'simulation' | 'console' | 'settings';
@@ -29,6 +29,8 @@ export interface GameUIState {
   currentScreen: ScreenName;
   currentDialogue: string | null;
   peristalsisSpeed: number;
+  breathAmplitude: number;
+  expansionScale: number;
   debugMode: boolean;
   showCollisionBoxes: boolean;
   renderSmallNodes: { x: number; y: number }[];
@@ -54,6 +56,8 @@ interface GameContextType {
   setToolParam1: (v: number) => void;
   setToolParam2: (v: number) => void;
   setPeriSpeed: (v: number) => void;
+  setBreathAmplitude: (v: number) => void;
+  setExpansionScale: (v: number) => void;
   setDebugMode: (v: boolean) => void;
   setShowCollisionBoxes: (v: boolean) => void;
   syncFromPhysics: () => void;
@@ -81,6 +85,8 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     activeTool: null, toolActive: false, toolParam1: 50, toolParam2: 50,
     viewMode: 'internal', currentScreen: 'simulation',
     currentDialogue: null, peristalsisSpeed: 1.0,
+    breathAmplitude: BREATH_AMPLITUDE_DEFAULT,
+    expansionScale: EXPANSION_SCALE_DEFAULT,
     debugMode: false, showCollisionBoxes: false,
     renderSmallNodes: physicsRef.current.smallNodes.map(n => ({ x: n.x, y: n.y })),
     renderLargeNodes: physicsRef.current.largeNodes.map(n => ({ x: n.x, y: n.y })),
@@ -192,6 +198,15 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     setState(prev => ({ ...prev, peristalsisSpeed: v }));
   }, []);
 
+  const setBreathAmplitude = useCallback((v: number) => {
+    setState(prev => ({ ...prev, breathAmplitude: v }));
+  }, []);
+
+  const setExpansionScale = useCallback((v: number) => {
+    physicsRef.current.expansionScale = v;
+    setState(prev => ({ ...prev, expansionScale: v }));
+  }, []);
+
   const setDebugMode = useCallback((v: boolean) => {
     setState(prev => ({ ...prev, debugMode: v }));
   }, []);
@@ -268,6 +283,8 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       navelPierced: false, intestinalRuptures: 0, intestinalBreaks: 0,
       activeTool: null, toolActive: false, toolParam1: 50, toolParam2: 50,
       currentDialogue: null, peristalsisSpeed: 1.0,
+      breathAmplitude: BREATH_AMPLITUDE_DEFAULT,
+      expansionScale: EXPANSION_SCALE_DEFAULT,
       renderSmallNodes: fresh.smallNodes.map(n => ({ x: n.x, y: n.y })),
       renderLargeNodes: fresh.largeNodes.map(n => ({ x: n.x, y: n.y })),
       renderSmallSegs: fresh.smallSegs.map(s => ({ ...s })),
@@ -285,6 +302,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       state, physicsRef,
       setScreen, setViewMode, setActiveTool, setToolActive,
       setToolParam1, setToolParam2, setPeriSpeed,
+      setBreathAmplitude, setExpansionScale,
       setDebugMode, setShowCollisionBoxes,
       syncFromPhysics, triggerDialogue, addElectrode, clearElectrodes,
       insertViaNavel, retractTool, setNavelPierced, setEnemaHeadIdx,

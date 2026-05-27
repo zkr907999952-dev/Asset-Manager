@@ -1,9 +1,11 @@
 import {
   CANVAS_W, CANVAS_H, CAVITY_CX, CAVITY_CY, CAVITY_RX, CAVITY_RY,
   N_SMALL, N_LARGE, SMALL_SEG_LENGTH, LARGE_SEG_LENGTH,
+  SMALL_RADIUS, LARGE_RADIUS,
   PHYSICS_ITERATIONS, DAMPING, MESENTERY_STIFFNESS, SEGMENT_STIFFNESS,
   PERISTALSIS_BASE_SPEED, PERISTALSIS_AMPLITUDE,
   PRESSURE_DIFFUSION_RATE, PRESSURE_DECAY_RATE,
+  LARGE_RUPTURE_PRESSURE, EXPANSION_SCALE_DEFAULT,
 } from '../constants/gameConfig';
 
 export interface PhysicsNode {
@@ -54,6 +56,8 @@ export interface PhysicsState {
   enemaInSmall: boolean;
   // Head index into smallNodes when in small intestine (N_SMALL-1 = junction end, toward 0)
   enemaSmallHeadIdx: number;
+  // How much intestine nodes expand when pressure rises (0=none, 1=moderate, 3=extreme)
+  expansionScale: number;
 }
 
 function clamp(v: number, min: number, max: number) {
@@ -169,12 +173,20 @@ export function stepPhysics(state: PhysicsState) {
   satisfyChain(state.largeNodes, LARGE_SEG_LENGTH, true, state.largeSegs, 2);
 
   // --- Separation constraint between small and large intestine ---
-  // minDist = SMALL_RADIUS + LARGE_RADIUS = 8 + 11 so nodes cannot visually overlap
-  for (const sn of state.smallNodes) {
-    for (const ln of state.largeNodes) {
+  // Base minDist = SMALL_RADIUS + LARGE_RADIUS; expands with pressure when expansionScale > 0
+  for (let si = 0; si < state.smallNodes.length; si++) {
+    const sn = state.smallNodes[si];
+    const sSeg = state.smallSegs[Math.min(si, state.smallSegs.length - 1)];
+    const sExpR = SMALL_RADIUS * (1 + (sSeg.pressure / 100) * state.expansionScale * 0.45);
+
+    for (let li = 0; li < state.largeNodes.length; li++) {
+      const ln = state.largeNodes[li];
+      const lSeg = state.largeSegs[Math.min(li, state.largeSegs.length - 1)];
+      const lExpR = LARGE_RADIUS * (1 + (lSeg.pressure / LARGE_RUPTURE_PRESSURE) * state.expansionScale * 0.45);
+
       const dx = sn.x - ln.x, dy = sn.y - ln.y;
       const d = Math.sqrt(dx * dx + dy * dy);
-      const minDist = 19;
+      const minDist = sExpR + lExpR;
       if (d < minDist && d > 0.01) {
         const push = (minDist - d) / d * 0.55;
         sn.x += dx * push * 0.6;
@@ -396,7 +408,7 @@ export function stepPhysics(state: PhysicsState) {
         }
       }
       if (state.toolActive) {
-        const flow = 0.1 + state.toolParam1 * 0.012;
+        const flow = 0.1 + state.toolParam1 * 0.025;
         const stim = state.toolParam2 * 0.005;
         if (!state.enemaInSmall) {
           // Pressure surges fastest at the head segment in large intestine
@@ -499,7 +511,8 @@ export function stepPhysics(state: PhysicsState) {
   }
 
   // --- Pressure diffusion & effects ---
-  const diffuseAndUpdate = (segs: SegmentProps[]) => {
+  // maxPressure: rupture threshold — small intestine=100, large intestine=LARGE_RUPTURE_PRESSURE
+  const diffuseAndUpdate = (segs: SegmentProps[], maxPressure: number) => {
     const n = segs.length;
     const prevPressures = segs.map(s => s.pressure);
     for (let i = 0; i < n; i++) {
@@ -517,41 +530,41 @@ export function stepPhysics(state: PhysicsState) {
         segs[i + 1].pressure += diff;
       }
       // natural decay
-      seg.pressure = clamp(seg.pressure - PRESSURE_DECAY_RATE, 0, 100);
+      seg.pressure = clamp(seg.pressure - PRESSURE_DECAY_RATE, 0, maxPressure);
       seg.pain = clamp(seg.pain - 0.005, 0, 100);
       seg.sensitivity = clamp(seg.sensitivity - 0.002, 0, 100);
 
-      // pressure effects
-      if (seg.pressure >= 100 && !seg.ruptured) {
+      // pressure effects — thresholds scale with maxPressure
+      if (seg.pressure >= maxPressure && !seg.ruptured) {
         seg.ruptured = true;
         seg.pain = clamp(seg.pain + 40, 0, 100);
         seg.health = clamp(seg.health - 30, 0, 100);
       }
       if (seg.ruptured) {
-        seg.pressure = clamp(seg.pressure - 1, 0, 100);
+        seg.pressure = clamp(seg.pressure - 1.5, 0, maxPressure);
       }
-      // health→damage
-      if (seg.pressure > 80) {
+      // pain and sensitivity rise as pressure approaches capacity
+      if (seg.pressure > maxPressure * 0.8) {
         seg.pain = clamp(seg.pain + 0.05, 0, 100);
       }
-      if (seg.pressure > 40) {
+      if (seg.pressure > maxPressure * 0.4) {
         seg.sensitivity = clamp(seg.sensitivity + 0.03, 0, 100);
       }
       // health check
       if (seg.health <= 0 && !seg.broken) {
         seg.broken = true;
         seg.pain = 100;
-        if (i > 0) segs[i - 1].pressure = clamp(segs[i - 1].pressure * 0.3, 0, 100);
-        if (i < n - 1) segs[i + 1].pressure = clamp(segs[i + 1].pressure * 0.3, 0, 100);
+        if (i > 0) segs[i - 1].pressure = clamp(segs[i - 1].pressure * 0.3, 0, maxPressure);
+        if (i < n - 1) segs[i + 1].pressure = clamp(segs[i + 1].pressure * 0.3, 0, maxPressure);
       }
-      seg.pressure = clamp(seg.pressure, 0, 100);
+      seg.pressure = clamp(seg.pressure, 0, maxPressure);
       seg.pain = clamp(seg.pain, 0, 100);
       seg.sensitivity = clamp(seg.sensitivity, 0, 100);
       seg.health = clamp(seg.health, 0, 100);
     }
   };
-  diffuseAndUpdate(state.smallSegs);
-  diffuseAndUpdate(state.largeSegs);
+  diffuseAndUpdate(state.smallSegs, 100);
+  diffuseAndUpdate(state.largeSegs, LARGE_RUPTURE_PRESSURE);
 
   // --- Final hard clamp: catches any node pushed outside by tool forces, springs, or separation ---
   for (const n of state.smallNodes) { if (!n.pinned) clampToCavity(n, 8); }

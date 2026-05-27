@@ -24,6 +24,13 @@ export const PERISTALSIS_AMPLITUDE = 1.8;
 export const PRESSURE_DIFFUSION_RATE = 0.008;
 export const PRESSURE_DECAY_RATE = 0.002;
 
+// Large intestine has larger capacity and is harder to rupture
+export const LARGE_RUPTURE_PRESSURE = 180;
+
+// Defaults for user-adjustable simulation parameters
+export const BREATH_AMPLITUDE_DEFAULT = 1.2;
+export const EXPANSION_SCALE_DEFAULT = 1.3;
+
 export const TOOLS = {
   METAL_ROD: '金属棒',
   GRAB: '抓握',

@@ -1,19 +1,19 @@
 import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
-import Slider from '@react-native-community/slider';
+import { GameSlider } from './GameSlider';
 import { Feather } from '@expo/vector-icons';
 import { useColors } from '@/hooks/useColors';
 import { useGame } from '@/contexts/GameContext';
 import { TOOLS } from '../constants/gameConfig';
 
-const TOOL_PARAMS: Record<string, { p1Label: string; p1Max: number; p2Label: string; p2Max: number }> = {
-  [TOOLS.METAL_ROD]:  { p1Label: '杆长', p1Max: 100, p2Label: '搅动强度', p2Max: 100 },
-  [TOOLS.GRAB]:       { p1Label: '抓取范围', p1Max: 100, p2Label: '抓取力度', p2Max: 100 },
-  [TOOLS.VIBRATOR]:   { p1Label: '震动强度', p1Max: 100, p2Label: '震动范围', p2Max: 100 },
-  [TOOLS.NEEDLE]:     { p1Label: '针长', p1Max: 100, p2Label: '穿刺强度', p2Max: 100 },
-  [TOOLS.ELECTRIC]:   { p1Label: '电压', p1Max: 100, p2Label: '电击范围', p2Max: 100 },
-  [TOOLS.SYRINGE]:    { p1Label: '注射速度', p1Max: 100, p2Label: '泻药浓度', p2Max: 100 },
-  [TOOLS.ENEMA]:      { p1Label: '灌肠流量', p1Max: 100, p2Label: '刺激程度', p2Max: 100 },
+const TOOL_PARAMS: Record<string, { p1Label: string; p1Max: number; p1Step: number; p2Label: string; p2Max: number; p2Step: number }> = {
+  [TOOLS.METAL_ROD]:  { p1Label: '杆长', p1Max: 100, p1Step: 1, p2Label: '搅动强度', p2Max: 100, p2Step: 1 },
+  [TOOLS.GRAB]:       { p1Label: '抓取范围', p1Max: 100, p1Step: 1, p2Label: '抓取力度', p2Max: 100, p2Step: 1 },
+  [TOOLS.VIBRATOR]:   { p1Label: '震动强度', p1Max: 100, p1Step: 1, p2Label: '震动范围', p2Max: 100, p2Step: 1 },
+  [TOOLS.NEEDLE]:     { p1Label: '针长', p1Max: 100, p1Step: 1, p2Label: '穿刺强度', p2Max: 100, p2Step: 1 },
+  [TOOLS.ELECTRIC]:   { p1Label: '电压', p1Max: 100, p1Step: 1, p2Label: '电击范围', p2Max: 100, p2Step: 1 },
+  [TOOLS.SYRINGE]:    { p1Label: '注射速度', p1Max: 100, p1Step: 1, p2Label: '泻药浓度', p2Max: 100, p2Step: 1 },
+  [TOOLS.ENEMA]:      { p1Label: '灌肠流量', p1Max: 200, p1Step: 1, p2Label: '刺激程度', p2Max: 100, p2Step: 1 },
 };
 
 export function ToolControls() {
@@ -70,10 +70,10 @@ export function ToolControls() {
           <Text style={[styles.sliderLabel, { color: colors.mutedForeground }]}>
             {params.p1Label}: <Text style={{ color: colors.foreground }}>{Math.round(toolParam1)}</Text>
           </Text>
-          <Slider
-            style={styles.slider}
+          <GameSlider
             minimumValue={0}
             maximumValue={params.p1Max}
+            step={params.p1Step}
             value={toolParam1}
             onValueChange={setToolParam1}
             minimumTrackTintColor={colors.primary}
@@ -85,10 +85,10 @@ export function ToolControls() {
           <Text style={[styles.sliderLabel, { color: colors.mutedForeground }]}>
             {params.p2Label}: <Text style={{ color: colors.foreground }}>{Math.round(toolParam2)}</Text>
           </Text>
-          <Slider
-            style={styles.slider}
+          <GameSlider
             minimumValue={0}
             maximumValue={params.p2Max}
+            step={params.p2Step}
             value={toolParam2}
             onValueChange={setToolParam2}
             minimumTrackTintColor={colors.accent}
@@ -159,5 +159,4 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontFamily: 'Inter_400Regular',
   },
-  slider: { height: 28 },
 });

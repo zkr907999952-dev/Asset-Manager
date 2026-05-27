@@ -6,6 +6,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
 import { useColors } from '@/hooks/useColors';
 import { useGame } from '@/contexts/GameContext';
+import { GameSlider } from '@/components/GameSlider';
 
 interface Props {
   onMenuPress: () => void;
@@ -37,10 +38,47 @@ function ToggleRow({ label, description, value, onToggle, color }: ToggleRowProp
   );
 }
 
+interface SliderRowProps {
+  label: string;
+  value: number;
+  displayValue: string;
+  min: number;
+  max: number;
+  step: number;
+  onValueChange: (v: number) => void;
+  trackColor?: string;
+}
+
+function SliderRow({ label, value, displayValue, min, max, step, onValueChange, trackColor }: SliderRowProps) {
+  const colors = useColors();
+  return (
+    <View style={styles.sliderBlock}>
+      <View style={styles.sliderHeader}>
+        <Text style={[styles.sliderLabel, { color: colors.foreground }]}>{label}</Text>
+        <Text style={[styles.sliderValue, { color: trackColor ?? colors.primary }]}>{displayValue}</Text>
+      </View>
+      <GameSlider
+        value={value}
+        minimumValue={min}
+        maximumValue={max}
+        step={step}
+        onValueChange={onValueChange}
+        minimumTrackTintColor={trackColor ?? colors.primary}
+        maximumTrackTintColor={colors.secondary}
+        thumbTintColor={trackColor ?? colors.primary}
+      />
+    </View>
+  );
+}
+
 export function SettingsScreen({ onMenuPress }: Props) {
   const colors = useColors();
   const insets = useSafeAreaInsets();
-  const { state, setDebugMode, setShowCollisionBoxes } = useGame();
+  const {
+    state,
+    setDebugMode, setShowCollisionBoxes,
+    setPeriSpeed, setBreathAmplitude, setExpansionScale,
+  } = useGame();
   const topPad = Platform.OS === 'web' ? 67 : insets.top;
   const bottomPad = Platform.OS === 'web' ? 34 : insets.bottom;
 
@@ -58,6 +96,37 @@ export function SettingsScreen({ onMenuPress }: Props) {
         contentContainerStyle={[styles.content, { paddingBottom: bottomPad + 20 }]}
         showsVerticalScrollIndicator={false}
       >
+        {/* Simulation parameters */}
+        <Text style={[styles.sectionTitle, { color: colors.primary }]}>模拟参数</Text>
+        <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
+          <SliderRow
+            label="蠕动速度"
+            value={state.peristalsisSpeed}
+            displayValue={`${state.peristalsisSpeed.toFixed(1)}×`}
+            min={0.3} max={3.0} step={0.1}
+            onValueChange={setPeriSpeed}
+            trackColor={colors.primary}
+          />
+          <View style={[styles.divider, { backgroundColor: colors.border }]} />
+          <SliderRow
+            label="呼吸幅度"
+            value={state.breathAmplitude}
+            displayValue={state.breathAmplitude.toFixed(1)}
+            min={0.2} max={3.0} step={0.1}
+            onValueChange={setBreathAmplitude}
+            trackColor={colors.pleasure}
+          />
+          <View style={[styles.divider, { backgroundColor: colors.border }]} />
+          <SliderRow
+            label="膨胀系数"
+            value={state.expansionScale}
+            displayValue={state.expansionScale.toFixed(1)}
+            min={0.0} max={4.0} step={0.1}
+            onValueChange={setExpansionScale}
+            trackColor={colors.hp}
+          />
+        </View>
+
         {/* Debug section */}
         <Text style={[styles.sectionTitle, { color: colors.primary }]}>调试模式</Text>
         <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
@@ -99,11 +168,13 @@ export function SettingsScreen({ onMenuPress }: Props) {
         <Text style={[styles.sectionTitle, { color: colors.primary }]}>物理参数</Text>
         <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
           {[
-            { label: '小肠节段数', value: '25 段' },
-            { label: '大肠节段数', value: '19 段' },
+            { label: '小肠节段数', value: '37 段' },
+            { label: '大肠节段数', value: '29 段' },
+            { label: '小肠爆破压力', value: '100' },
+            { label: '大肠爆破压力', value: '180' },
             { label: '物理刷新率', value: '30 fps' },
-            { label: '约束迭代次数', value: '6 次/帧' },
-            { label: '当前蠕动速度', value: `${state.peristalsisSpeed.toFixed(1)}x` },
+            { label: '约束迭代次数', value: '8 次/帧' },
+            { label: '当前蠕动速度', value: `${state.peristalsisSpeed.toFixed(1)}×` },
           ].map(({ label, value }) => (
             <View key={label} style={styles.infoRow}>
               <Text style={[styles.infoLabel, { color: colors.mutedForeground }]}>{label}</Text>
@@ -134,9 +205,9 @@ export function SettingsScreen({ onMenuPress }: Props) {
         <View style={[styles.aboutCard, { borderColor: colors.border }]}>
           <Text style={[styles.aboutTitle, { color: colors.primary }]}>玉腹模拟器</Text>
           <Text style={[styles.aboutText, { color: colors.mutedForeground }]}>
-            v1.0 · 腹腔物理仿真引擎{'\n'}
+            v1.1 · 腹腔物理仿真引擎{'\n'}
             基于位置约束的肠道动力学模拟{'\n'}
-            支持大小肠蠕动、压力传导、肠段损伤系统
+            大肠容积180·小肠容积100·差异化破裂阈值
           </Text>
         </View>
       </ScrollView>
@@ -182,6 +253,17 @@ const styles = StyleSheet.create({
   toggleLabel: { fontSize: 14, fontFamily: 'Inter_500Medium' },
   toggleDesc: { fontSize: 11, fontFamily: 'Inter_400Regular', marginTop: 2 },
   divider: { height: 1 },
+  sliderBlock: {
+    paddingVertical: 10,
+  },
+  sliderHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 2,
+  },
+  sliderLabel: { fontSize: 13, fontFamily: 'Inter_500Medium' },
+  sliderValue: { fontSize: 13, fontFamily: 'Inter_700Bold' },
   legendCard: {
     borderRadius: 8,
     borderWidth: 1,

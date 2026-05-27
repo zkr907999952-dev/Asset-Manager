@@ -10,7 +10,7 @@ const INTESTINES_REF = require('@/assets/images/intestines.png');
 const BELLY_EXTERNAL_IMG = require('@/assets/images/belly_external.png');
 import {
   CANVAS_W, CANVAS_H, CAVITY_CX, CAVITY_CY, CAVITY_RX, CAVITY_RY,
-  SMALL_RADIUS, LARGE_RADIUS,
+  SMALL_RADIUS, LARGE_RADIUS, LARGE_RUPTURE_PRESSURE,
 } from '../constants/gameConfig';
 import { buildSmoothPath } from '../engine/physics';
 import { useGame } from '../contexts/GameContext';
@@ -333,17 +333,19 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
   const avgPressure = renderSmallSegs.length > 0
     ? renderSmallSegs.reduce((a, s) => a + s.pressure, 0) / renderSmallSegs.length : 0;
   const bulge = 1 + avgPressure * 0.003;
+  const expansionScale = state.expansionScale;
 
   const breathVal = useBreathAnimation(state.heartRate);
+  const breathAmp = state.breathAmplitude;
   // inhale = 0..1 (0 = full exhale, 1 = full inhale)
   const inhale = (breathVal + 1) / 2;
-  // Belly image shifts up slightly on inhale, expands vertically
-  const breathImgOffsetY = -90 - inhale * 5;
-  const breathImgH = 630 + inhale * 12;
+  // Belly image shifts up slightly on inhale, expands vertically — scaled by breathAmplitude
+  const breathImgOffsetY = -90 - inhale * 5 * breathAmp;
+  const breathImgH = 630 + inhale * 12 * breathAmp;
   // Navel point shifts up with image
-  const navelYBreath = NAVEL_Y_EXTERNAL - inhale * 5;
+  const navelYBreath = NAVEL_Y_EXTERNAL - inhale * 5 * breathAmp;
   // Overlay ellipses expand slightly with breathing
-  const breathOverlayScale = 1 + inhale * 0.025;
+  const breathOverlayScale = 1 + inhale * 0.025 * breathAmp;
 
   const smallPath = buildSmoothPath(renderSmallNodes);
 
@@ -487,7 +489,7 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
             {renderLargeSegs.map((seg, i) => {
               if (i >= renderLargeNodes.length - 1) return null;
               const a = renderLargeNodes[i], b = renderLargeNodes[i + 1];
-              const w = LARGE_RADIUS * 2 + (seg.pressure / 100) * LARGE_RADIUS;
+              const w = LARGE_RADIUS * 2 + (seg.pressure / LARGE_RUPTURE_PRESSURE) * LARGE_RADIUS * expansionScale;
               const col = segmentColor(seg.health, seg.pain, seg.pressure, seg.ruptured, seg.broken, seg.perforated, true);
               return <Line key={`lg-${i}`} x1={a.x} y1={a.y} x2={b.x} y2={b.y}
                 stroke={col} strokeWidth={w} strokeLinecap="round" />;
@@ -506,7 +508,7 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
                 seg0?.ruptured ?? false, seg0?.broken ?? false, seg0?.perforated ?? false, true,
               );
               const n = renderLargeNodes[0];
-              const w = LARGE_RADIUS + (seg0 ? (seg0.pressure / 100) * LARGE_RADIUS * 0.5 : 0);
+              const w = LARGE_RADIUS + (seg0 ? (seg0.pressure / LARGE_RUPTURE_PRESSURE) * LARGE_RADIUS * 0.5 * expansionScale : 0);
               return (
                 <Circle key="cecum" cx={n.x} cy={n.y} r={w}
                   fill={col} stroke="rgba(200,130,110,0.35)" strokeWidth={1.2} />
@@ -517,7 +519,7 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
             {renderSmallSegs.map((seg, i) => {
               if (i >= renderSmallNodes.length - 1) return null;
               const a = renderSmallNodes[i], b = renderSmallNodes[i + 1];
-              const w = SMALL_RADIUS * 2 + (seg.pressure / 100) * SMALL_RADIUS;
+              const w = SMALL_RADIUS * 2 + (seg.pressure / 100) * SMALL_RADIUS * expansionScale;
               const col = segmentColor(seg.health, seg.pain, seg.pressure, seg.ruptured, seg.broken, seg.perforated, false);
               return <Line key={`sm-${i}`} x1={a.x} y1={a.y} x2={b.x} y2={b.y}
                 stroke={col} strokeWidth={w} strokeLinecap="round" />;
