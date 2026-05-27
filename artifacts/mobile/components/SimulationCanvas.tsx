@@ -103,6 +103,7 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
   const {
     state, physicsRef, triggerDialogue, addElectrode,
     insertViaNavel, retractTool, setNavelPierced, setEnemaHeadIdx,
+    setEnemaInSmall, setEnemaSmallHeadIdx,
   } = useGame();
   const lastDialogueTime = useRef(0);
   const isDragging = useRef(false);
@@ -128,6 +129,8 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
     toPhysicsCoords,
     addElectrode,
     setEnemaHeadIdx,
+    setEnemaInSmall,
+    setEnemaSmallHeadIdx,
     insertViaNavel,
     setNavelPierced,
     triggerDialogue,
@@ -136,6 +139,8 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
   hrRef.current.toPhysicsCoords = toPhysicsCoords;
   hrRef.current.addElectrode = addElectrode;
   hrRef.current.setEnemaHeadIdx = setEnemaHeadIdx;
+  hrRef.current.setEnemaInSmall = setEnemaInSmall;
+  hrRef.current.setEnemaSmallHeadIdx = setEnemaSmallHeadIdx;
   hrRef.current.insertViaNavel = insertViaNavel;
   hrRef.current.setNavelPierced = setNavelPierced;
   hrRef.current.triggerDialogue = triggerDialogue;
@@ -143,6 +148,15 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
   const findNearestLargeNodeIdx = (pos: { x: number; y: number }) => {
     let best = -1, bestD = 9999;
     physicsRef.current.largeNodes.forEach((n, i) => {
+      const d = Math.hypot(n.x - pos.x, n.y - pos.y);
+      if (d < bestD) { bestD = d; best = i; }
+    });
+    return { idx: best, dist: bestD };
+  };
+
+  const findNearestSmallNodeIdx = (pos: { x: number; y: number }) => {
+    let best = -1, bestD = 9999;
+    physicsRef.current.smallNodes.forEach((n, i) => {
       const d = Math.hypot(n.x - pos.x, n.y - pos.y);
       if (d < bestD) { bestD = d; best = i; }
     });
@@ -204,22 +218,46 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
         return;
       }
       if (s.activeTool === TOOLS.ENEMA) {
-        const { idx, dist } = findNearestLargeNodeIdx(pos);
-        if (idx >= 0 && dist < 60) {
-          sehi(idx);
+        const { setEnemaInSmall: seis, setEnemaSmallHeadIdx: seishi, triggerDialogue: td } = hrRef.current;
+        if (s.enemaInSmall) {
+          // In small intestine — find nearest small node, allow retreat to large
+          const cecum = physicsRef.current.largeNodes[0];
+          const cecumDist = cecum ? Math.hypot(cecum.x - pos.x, cecum.y - pos.y) : 9999;
+          const { idx: sIdx, dist: sDist } = findNearestSmallNodeIdx(pos);
+          if (cecumDist < 45 && cecumDist < sDist) {
+            seis(false);
+            sehi(0);
+          } else if (sIdx >= 0 && sDist < 65) {
+            seishi(sIdx);
+          }
+        } else {
+          const { idx, dist } = findNearestLargeNodeIdx(pos);
+          if (idx >= 0 && dist < 60) {
+            sehi(idx);
+          }
+          // Check if tube head has reached cecum (idx 0) and user is near small intestine
+          if (physicsRef.current.enemaHeadIdx === 0) {
+            const { idx: sIdx, dist: sDist } = findNearestSmallNodeIdx(pos);
+            if (sIdx >= 0 && sDist < 55) {
+              seis(true);
+              seishi(sIdx);
+              td('enema_enter_small');
+            }
+          }
         }
         return;
       }
     },
     onPanResponderMove: (evt) => {
-      const { state: s, toPhysicsCoords: tpc, setEnemaHeadIdx: sehi, triggerDialogue: td } = hrRef.current;
+      const { state: s, toPhysicsCoords: tpc, setEnemaHeadIdx: sehi,
+              setEnemaInSmall: seis, setEnemaSmallHeadIdx: seishi, triggerDialogue: td } = hrRef.current;
       const { locationX, locationY } = evt.nativeEvent;
       const pos = tpc(locationX, locationY);
 
       if (s.activeTool === TOOLS.ENEMA) {
         const prevPos = physicsRef.current.toolPos;
         // Pull nearby large intestine nodes along with the tube drag
-        if (prevPos) {
+        if (prevPos && !s.enemaInSmall) {
           const dragDx = pos.x - prevPos.x;
           const dragDy = pos.y - prevPos.y;
           const pullRadius = 45;
@@ -233,10 +271,33 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
             }
           });
         }
-        // Move head freely to nearest large node — no delta constraint
-        const { idx, dist } = findNearestLargeNodeIdx(pos);
-        if (idx >= 0 && dist < 60) {
-          sehi(idx);
+
+        if (s.enemaInSmall) {
+          // In small intestine — find nearest small node, allow retreat to large
+          const cecum = physicsRef.current.largeNodes[0];
+          const cecumDist = cecum ? Math.hypot(cecum.x - pos.x, cecum.y - pos.y) : 9999;
+          const { idx: sIdx, dist: sDist } = findNearestSmallNodeIdx(pos);
+          if (cecumDist < 45 && cecumDist < sDist) {
+            seis(false);
+            sehi(0);
+          } else if (sIdx >= 0 && sDist < 65) {
+            seishi(sIdx);
+          }
+        } else {
+          // Move head freely to nearest large node
+          const { idx, dist } = findNearestLargeNodeIdx(pos);
+          if (idx >= 0 && dist < 60) {
+            sehi(idx);
+          }
+          // Check transition into small intestine
+          if (physicsRef.current.enemaHeadIdx === 0) {
+            const { idx: sIdx, dist: sDist } = findNearestSmallNodeIdx(pos);
+            if (sIdx >= 0 && sDist < 55) {
+              seis(true);
+              seishi(sIdx);
+              td('enema_enter_small');
+            }
+          }
         }
         physicsRef.current.toolPos = pos;
         return;
@@ -277,13 +338,24 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
 
   const enemaPath = (() => {
     if (state.activeTool !== TOOLS.ENEMA || renderLargeNodes.length === 0) return '';
+    if (state.enemaInSmall && renderSmallNodes.length > 0) {
+      // Tube fills all of large intestine (anus→cecum), then continues into small intestine
+      const largePart = [...renderLargeNodes].reverse(); // anus (N_LARGE-1) → cecum (0)
+      const smallHeadIdx = Math.max(0, Math.min(renderSmallNodes.length - 1, state.enemaSmallHeadIdx));
+      // small part: from junction (N_SMALL-1) toward smallHeadIdx
+      const smallPart = [...renderSmallNodes.slice(smallHeadIdx)].reverse(); // N_SMALL-1 → smallHeadIdx
+      return buildSmoothPath([...largePart, ...smallPart]);
+    }
     const headIdx = Math.max(0, Math.min(renderLargeNodes.length - 1, state.enemaHeadIdx));
     const slice = renderLargeNodes.slice(headIdx).reverse();
     return buildSmoothPath(slice);
   })();
   const enemaHead = state.activeTool === TOOLS.ENEMA
-    ? renderLargeNodes[Math.max(0, Math.min(renderLargeNodes.length - 1, state.enemaHeadIdx))]
+    ? (state.enemaInSmall && renderSmallNodes.length > 0
+        ? renderSmallNodes[Math.max(0, Math.min(renderSmallNodes.length - 1, state.enemaSmallHeadIdx))]
+        : renderLargeNodes[Math.max(0, Math.min(renderLargeNodes.length - 1, state.enemaHeadIdx))])
     : null;
+  const enemaHeadInSmall = state.activeTool === TOOLS.ENEMA && state.enemaInSmall;
 
   const ELEC_CTRL_X = 36;
   const ELEC_CTRL_Y = CANVAS_H - 38;
@@ -578,26 +650,45 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
           </G>
         )}
 
-        {/* Enema tube — drawn through the large intestine */}
+        {/* Enema tube — drawn through the large intestine (and small when enemaInSmall) */}
         {state.activeTool === TOOLS.ENEMA && enemaPath && (
           <G>
-            <Path d={enemaPath} stroke="rgba(80,140,220,0.6)" strokeWidth={6}
+            <Path d={enemaPath}
+              stroke={enemaHeadInSmall ? 'rgba(220,120,80,0.7)' : 'rgba(80,140,220,0.6)'}
+              strokeWidth={enemaHeadInSmall ? 4.5 : 6}
               fill="none" strokeLinecap="round" />
-            <Path d={enemaPath} stroke="rgba(180,220,255,0.5)" strokeWidth={2.5}
+            <Path d={enemaPath}
+              stroke={enemaHeadInSmall ? 'rgba(255,200,160,0.55)' : 'rgba(180,220,255,0.5)'}
+              strokeWidth={2.5}
               fill="none" strokeLinecap="round" />
             {enemaHead && (
               <G>
-                {/* Draggable head nozzle — slightly larger hit area indicated by outer ring */}
+                {/* Outer pulse ring — orange-red when in small intestine */}
                 <Circle cx={enemaHead.x} cy={enemaHead.y} r={12}
-                  fill="rgba(50,100,180,0.15)" stroke="rgba(120,180,255,0.4)" strokeWidth={1} />
+                  fill={enemaHeadInSmall ? 'rgba(200,80,40,0.15)' : 'rgba(50,100,180,0.15)'}
+                  stroke={enemaHeadInSmall ? 'rgba(255,160,100,0.5)' : 'rgba(120,180,255,0.4)'}
+                  strokeWidth={1} />
                 <Circle cx={enemaHead.x} cy={enemaHead.y} r={7}
-                  fill="#3070b0" stroke="#80b0e0" strokeWidth={1.5} />
+                  fill={enemaHeadInSmall ? '#b04020' : '#3070b0'}
+                  stroke={enemaHeadInSmall ? '#ff9060' : '#80b0e0'}
+                  strokeWidth={1.5} />
+                {enemaHeadInSmall && (
+                  /* Ileocecal marker — show a junction ring at largeNodes[0] */
+                  <>
+                    {renderLargeNodes[0] && (
+                      <Circle cx={renderLargeNodes[0].x} cy={renderLargeNodes[0].y} r={9}
+                        fill="none" stroke="rgba(255,200,100,0.6)" strokeWidth={1.5} strokeDasharray="3 2" />
+                    )}
+                  </>
+                )}
                 {state.toolActive && (
                   <>
                     <Circle cx={enemaHead.x} cy={enemaHead.y} r={14}
-                      fill="none" stroke="rgba(150,200,255,0.55)" strokeWidth={1.5} />
+                      fill="none"
+                      stroke={enemaHeadInSmall ? 'rgba(255,160,100,0.6)' : 'rgba(150,200,255,0.55)'}
+                      strokeWidth={1.5} />
                     <Circle cx={enemaHead.x} cy={enemaHead.y} r={9}
-                      fill="rgba(150,200,255,0.3)" />
+                      fill={enemaHeadInSmall ? 'rgba(255,140,80,0.3)' : 'rgba(150,200,255,0.3)'} />
                   </>
                 )}
               </G>

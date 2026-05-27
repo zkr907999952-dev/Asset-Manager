@@ -111,5 +111,7 @@ export function createInitialPhysicsState(): PhysicsState {
     grabbedNode: null,
     electrodes: [],
     enemaHeadIdx: Math.floor(N_LARGE / 2),
+    enemaInSmall: false,
+    enemaSmallHeadIdx: N_SMALL - 1,
   };
 }

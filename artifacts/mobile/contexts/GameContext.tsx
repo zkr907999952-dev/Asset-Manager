@@ -4,7 +4,7 @@ import React, {
 import { createInitialPhysicsState } from '../engine/intestineInit';
 import type { PhysicsState, SegmentProps } from '../engine/physics';
 import type { ToolType } from '../constants/gameConfig';
-import { TOOLS, N_LARGE, CAVITY_CX, CAVITY_CY } from '../constants/gameConfig';
+import { TOOLS, N_LARGE, N_SMALL, CAVITY_CX, CAVITY_CY } from '../constants/gameConfig';
 import { getRandomDialogue, type DialogueTrigger } from '../constants/dialogues';
 
 export type ScreenName = 'character' | 'simulation' | 'console' | 'settings';
@@ -40,6 +40,8 @@ export interface GameUIState {
   toolAnchor: { x: number; y: number } | null;
   toolInserted: boolean;
   enemaHeadIdx: number;
+  enemaInSmall: boolean;
+  enemaSmallHeadIdx: number;
 }
 
 interface GameContextType {
@@ -62,6 +64,8 @@ interface GameContextType {
   retractTool: () => void;
   setNavelPierced: (v: boolean) => void;
   setEnemaHeadIdx: (idx: number) => void;
+  setEnemaInSmall: (v: boolean) => void;
+  setEnemaSmallHeadIdx: (idx: number) => void;
 }
 
 const GameContext = createContext<GameContextType | null>(null);
@@ -86,6 +90,8 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     toolAnchor: null,
     toolInserted: false,
     enemaHeadIdx: physicsRef.current.enemaHeadIdx,
+    enemaInSmall: false,
+    enemaSmallHeadIdx: physicsRef.current.enemaSmallHeadIdx,
   });
 
   const syncFromPhysics = useCallback(() => {
@@ -117,6 +123,8 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       toolInserted: p.toolInserted,
       navelPierced: p.navelPierced,
       enemaHeadIdx: p.enemaHeadIdx,
+      enemaInSmall: p.enemaInSmall,
+      enemaSmallHeadIdx: p.enemaSmallHeadIdx,
       electrodes: [...p.electrodes],
     }));
   }, []);
@@ -148,6 +156,8 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     // Initialize enema head when selecting enema
     if (tool === TOOLS.ENEMA) {
       physicsRef.current.enemaHeadIdx = Math.floor(N_LARGE / 2);
+      physicsRef.current.enemaInSmall = false;
+      physicsRef.current.enemaSmallHeadIdx = N_SMALL - 1;
     }
     setState(prev => ({
       ...prev,
@@ -156,6 +166,8 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       toolAnchor: null,
       toolInserted: false,
       enemaHeadIdx: physicsRef.current.enemaHeadIdx,
+      enemaInSmall: false,
+      enemaSmallHeadIdx: N_SMALL - 1,
     }));
   }, []);
 
@@ -229,6 +241,24 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     setState(prev => ({ ...prev, enemaHeadIdx: clamped }));
   }, []);
 
+  const setEnemaInSmall = useCallback((v: boolean) => {
+    physicsRef.current.enemaInSmall = v;
+    if (!v) {
+      physicsRef.current.enemaSmallHeadIdx = N_SMALL - 1;
+    }
+    setState(prev => ({
+      ...prev,
+      enemaInSmall: v,
+      enemaSmallHeadIdx: v ? prev.enemaSmallHeadIdx : N_SMALL - 1,
+    }));
+  }, []);
+
+  const setEnemaSmallHeadIdx = useCallback((idx: number) => {
+    const clamped = Math.max(0, Math.min(N_SMALL - 1, Math.floor(idx)));
+    physicsRef.current.enemaSmallHeadIdx = clamped;
+    setState(prev => ({ ...prev, enemaSmallHeadIdx: clamped }));
+  }, []);
+
   return (
     <GameContext.Provider value={{
       state, physicsRef,
@@ -237,6 +267,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       setDebugMode, setShowCollisionBoxes,
       syncFromPhysics, triggerDialogue, addElectrode, clearElectrodes,
       insertViaNavel, retractTool, setNavelPierced, setEnemaHeadIdx,
+      setEnemaInSmall, setEnemaSmallHeadIdx,
     }}>
       {children}
     </GameContext.Provider>

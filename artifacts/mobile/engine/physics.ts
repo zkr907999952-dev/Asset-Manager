@@ -50,6 +50,10 @@ export interface PhysicsState {
   electrodes: { x: number; y: number }[];
   // Enema tube head — index into largeNodes (anus = last, head moves toward 0)
   enemaHeadIdx: number;
+  // Enema has crossed ileocecal junction into small intestine
+  enemaInSmall: boolean;
+  // Head index into smallNodes when in small intestine (N_SMALL-1 = junction end, toward 0)
+  enemaSmallHeadIdx: number;
 }
 
 function clamp(v: number, min: number, max: number) {
@@ -142,15 +146,33 @@ export function stepPhysics(state: PhysicsState) {
   satisfyChain(state.largeNodes, LARGE_SEG_LENGTH, true, state.largeSegs);
 
   // --- Separation constraint between small and large intestine ---
+  // minDist = SMALL_RADIUS + LARGE_RADIUS = 8 + 11 so nodes cannot visually overlap
   for (const sn of state.smallNodes) {
     for (const ln of state.largeNodes) {
       const dx = sn.x - ln.x, dy = sn.y - ln.y;
       const d = Math.sqrt(dx * dx + dy * dy);
-      const minDist = 10;
+      const minDist = 19;
       if (d < minDist && d > 0.01) {
-        const push = (minDist - d) / d * 0.3;
-        sn.x += dx * push * 0.5;
-        sn.y += dy * push * 0.5;
+        const push = (minDist - d) / d * 0.55;
+        sn.x += dx * push * 0.6;
+        sn.y += dy * push * 0.6;
+      }
+    }
+  }
+
+  // --- Ileocecal junction spring: connect terminal ileum (smallNodes[N_SMALL-1]) to cecum (largeNodes[0]) ---
+  {
+    const terminalIleum = state.smallNodes[N_SMALL - 1];
+    const cecum = state.largeNodes[0];
+    if (terminalIleum && cecum && !terminalIleum.pinned) {
+      const jDx = cecum.x - terminalIleum.x;
+      const jDy = cecum.y - terminalIleum.y;
+      const jDist = Math.sqrt(jDx * jDx + jDy * jDy);
+      const restDist = 22; // ileocecal valve anatomical gap
+      if (jDist > 0.01) {
+        const springF = (jDist - restDist) / jDist * 0.07;
+        terminalIleum.x += jDx * springF;
+        terminalIleum.y += jDy * springF;
       }
     }
   }
@@ -330,7 +352,7 @@ export function stepPhysics(state: PhysicsState) {
       const headIdx = clamp(state.enemaHeadIdx, 0, state.largeNodes.length - 1);
       const headNode = state.largeNodes[headIdx];
       // Tube exerts gentle push on intestine where head is (deformation)
-      if (headNode) {
+      if (headNode && !state.enemaInSmall) {
         const tubePush = 0.3;
         for (let i = Math.max(0, headIdx - 2); i <= Math.min(state.largeNodes.length - 1, headIdx + 2); i++) {
           const n = state.largeNodes[i];
@@ -343,23 +365,57 @@ export function stepPhysics(state: PhysicsState) {
       if (state.toolActive) {
         const flow = 0.1 + state.toolParam1 * 0.012;
         const stim = state.toolParam2 * 0.005;
-        // Pressure surges fastest at the head segment, falls off with distance
-        const N = state.largeSegs.length;
-        for (let i = 0; i < N; i++) {
-          const seg = state.largeSegs[i];
-          if (seg.broken) continue;
-          const d = Math.abs(i - headIdx);
-          const falloff = Math.max(0, 1 - d / 5);
-          if (falloff > 0) {
-            seg.pressure = clamp(seg.pressure + flow * falloff, 0, 100);
-            seg.sensitivity = clamp(seg.sensitivity + stim * falloff, 0, 100);
-            if (seg.pressure > 60) {
-              seg.pain = clamp(seg.pain + stim * 0.6, 0, 100);
+        if (!state.enemaInSmall) {
+          // Pressure surges fastest at the head segment in large intestine
+          const N = state.largeSegs.length;
+          for (let i = 0; i < N; i++) {
+            const seg = state.largeSegs[i];
+            if (seg.broken) continue;
+            const d = Math.abs(i - headIdx);
+            const falloff = Math.max(0, 1 - d / 5);
+            if (falloff > 0) {
+              seg.pressure = clamp(seg.pressure + flow * falloff, 0, 100);
+              seg.sensitivity = clamp(seg.sensitivity + stim * falloff, 0, 100);
+              if (seg.pressure > 60) {
+                seg.pain = clamp(seg.pain + stim * 0.6, 0, 100);
+              }
             }
+          }
+        } else {
+          // Tube fills entire large intestine — apply moderate pressure throughout
+          for (let i = 0; i < state.largeSegs.length; i++) {
+            const seg = state.largeSegs[i];
+            if (seg.broken) continue;
+            seg.pressure = clamp(seg.pressure + flow * 0.4, 0, 100);
+            seg.sensitivity = clamp(seg.sensitivity + stim * 0.3, 0, 100);
+          }
+          // Head is now in small intestine — stronger localized effect there
+          const smallHead = clamp(state.enemaSmallHeadIdx, 0, N_SMALL - 1);
+          for (let i = 0; i < state.smallSegs.length; i++) {
+            const seg = state.smallSegs[i];
+            if (seg.broken) continue;
+            const d = Math.abs(i - smallHead);
+            const falloff = Math.max(0, 1 - d / 4);
+            if (falloff > 0) {
+              seg.pressure = clamp(seg.pressure + flow * 1.1 * falloff, 0, 100);
+              seg.sensitivity = clamp(seg.sensitivity + stim * 1.3 * falloff, 0, 100);
+              if (seg.pressure > 50) {
+                seg.pain = clamp(seg.pain + stim * 0.8 * falloff, 0, 100);
+              }
+            }
+          }
+          // Small intestine deformation wobble near head
+          for (let i = Math.max(0, smallHead - 2); i <= Math.min(N_SMALL - 1, smallHead + 2); i++) {
+            const n = state.smallNodes[i];
+            if (n.pinned) continue;
+            const wobble = Math.sin(state.time * 0.18 + i) * 0.35;
+            n.x += wobble;
+            n.y += wobble * 0.5;
           }
         }
         // Boost peristalsis dynamically through stim (handled at state level)
-        state.peristalsisSpeed = Math.max(state.peristalsisSpeed, 1 + state.toolParam2 * 0.025);
+        const periBoost = state.enemaInSmall ? 0.035 : 0.025;
+        state.peristalsisSpeed = Math.max(state.peristalsisSpeed, 1 + state.toolParam2 * periBoost);
       }
     }
 

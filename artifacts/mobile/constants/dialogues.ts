@@ -14,6 +14,7 @@ export type DialogueTrigger =
   | 'vibrate'
   | 'needle_pierce'
   | 'enema_start'
+  | 'enema_enter_small'
   | 'intestine_break'
   | 'rupture'
   | 'electric'
@@ -94,6 +95,12 @@ export const DIALOGUES: Record<DialogueTrigger, string[]> = {
     '呜……在灌什么进来……',
     '啊……里面有液体进来了……',
     '嗯……肚子开始胀了……',
+  ],
+  enema_enter_small: [
+    '啊啊……！进……进小肠了……！太深了……！',
+    '呜……不行……越来越深……！感觉穿过去了……！',
+    '嗯啊……！液体……液体进到小肠里了……！好奇怪……！',
+    '不……不要再进了……！已经进到小肠了……！',
   ],
   intestine_break: [
     '啊啊啊……！肠子断了……！',
