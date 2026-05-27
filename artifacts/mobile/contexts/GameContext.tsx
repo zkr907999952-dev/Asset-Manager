@@ -22,6 +22,7 @@ export interface ToolInstanceState {
   active: boolean;
   param1: number;
   param2: number;
+  pos?: { x: number; y: number } | null;
 }
 
 export interface GameUIState {
@@ -87,6 +88,9 @@ interface GameContextType {
   resetPhysics: () => void;
   resetPositions: () => void;
 }
+
+// Default tool position: slightly above cavity center, so tools activate in a meaningful spot
+const DEFAULT_TOOL_POS = { x: CAVITY_CX, y: CAVITY_CY - 40 };
 
 const GameContext = createContext<GameContextType | null>(null);
 
@@ -171,17 +175,31 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const setActiveTool = useCallback((tool: ToolType | null) => {
-    physicsRef.current.toolType = tool;
-    physicsRef.current.grabbedNode = null;
-    physicsRef.current.toolAnchor = null;
-    physicsRef.current.toolInserted = false;
+    const p = physicsRef.current;
+
+    // Save current tool's last position before switching
+    const prevTool = p.toolType;
+    if (prevTool && p.toolStates[prevTool]) {
+      p.toolStates[prevTool].pos = p.toolPos ? { ...p.toolPos } : null;
+    }
+
+    p.toolType = tool;
+    p.grabbedNode = null;
+    p.toolAnchor = null;
+    p.toolInserted = false;
 
     if (tool) {
-      // Load per-tool persistent state when switching to this tool
-      const ts = physicsRef.current.toolStates[tool] ?? { active: false, param1: 50, param2: 50 };
-      physicsRef.current.toolActive = ts.active;
-      physicsRef.current.toolParam1 = ts.param1;
-      physicsRef.current.toolParam2 = ts.param2;
+      const ts = p.toolStates[tool] ?? { active: false, param1: 50, param2: 50 };
+      p.toolActive = ts.active;
+      p.toolParam1 = ts.param1;
+      p.toolParam2 = ts.param2;
+      // Restore last position for this tool if it had one
+      if (ts.pos) {
+        p.toolPos = { ...ts.pos };
+      } else if (ts.active && !p.toolPos) {
+        // Tool was active but has no stored pos — give it a default
+        p.toolPos = { ...DEFAULT_TOOL_POS };
+      }
       setState(prev => ({
         ...prev,
         activeTool: tool,
@@ -190,10 +208,11 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         toolParam2: ts.param2,
         toolAnchor: null,
         toolInserted: false,
-        enemaHeadIdx: physicsRef.current.enemaHeadIdx,
+        toolPos: p.toolPos ? { ...p.toolPos } : null,
+        enemaHeadIdx: p.enemaHeadIdx,
       }));
     } else {
-      physicsRef.current.toolActive = false;
+      p.toolActive = false;
       setState(prev => ({
         ...prev,
         activeTool: null,
@@ -205,17 +224,36 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const setToolActive = useCallback((active: boolean) => {
-    physicsRef.current.toolActive = active;
-    const toolId = physicsRef.current.toolType;
-    if (toolId && physicsRef.current.toolStates[toolId]) {
-      physicsRef.current.toolStates[toolId].active = active;
+    const p = physicsRef.current;
+    p.toolActive = active;
+
+    // If activating with no position set, give a default position
+    if (active && !p.toolPos) {
+      p.toolPos = { ...DEFAULT_TOOL_POS };
+    }
+
+    const toolId = p.toolType;
+    if (toolId && p.toolStates[toolId]) {
+      p.toolStates[toolId].active = active;
+      if (active && p.toolPos) {
+        p.toolStates[toolId].pos = { ...p.toolPos };
+      }
     }
     setState(prev => {
       const newToolStates = { ...prev.toolStates };
       if (prev.activeTool && newToolStates[prev.activeTool]) {
-        newToolStates[prev.activeTool] = { ...newToolStates[prev.activeTool], active };
+        newToolStates[prev.activeTool] = {
+          ...newToolStates[prev.activeTool],
+          active,
+          pos: active && p.toolPos ? { ...p.toolPos } : newToolStates[prev.activeTool].pos,
+        };
       }
-      return { ...prev, toolActive: active, toolStates: newToolStates };
+      return {
+        ...prev,
+        toolActive: active,
+        toolStates: newToolStates,
+        toolPos: p.toolPos ? { ...p.toolPos } : prev.toolPos,
+      };
     });
   }, []);
 
@@ -250,8 +288,14 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const setToolState = useCallback((toolId: string, patch: Partial<ToolInstanceState>) => {
-    if (physicsRef.current.toolStates[toolId]) {
-      physicsRef.current.toolStates[toolId] = { ...physicsRef.current.toolStates[toolId], ...patch };
+    const p = physicsRef.current;
+    if (p.toolStates[toolId]) {
+      p.toolStates[toolId] = { ...p.toolStates[toolId], ...patch };
+    }
+    // If activating via setToolState and no pos yet, set default
+    if (patch.active === true && !p.toolStates[toolId]?.pos && !p.toolPos) {
+      if (p.toolStates[toolId]) p.toolStates[toolId].pos = { ...DEFAULT_TOOL_POS };
+      if (p.toolType === toolId) p.toolPos = { ...DEFAULT_TOOL_POS };
     }
     setState(prev => {
       const newToolStates = { ...prev.toolStates };
@@ -262,15 +306,19 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       if (prev.activeTool === toolId) {
         if (patch.active !== undefined) {
           updates.toolActive = patch.active;
-          physicsRef.current.toolActive = patch.active;
+          p.toolActive = patch.active;
+          if (patch.active && !p.toolPos) {
+            p.toolPos = { ...DEFAULT_TOOL_POS };
+            updates.toolPos = { ...DEFAULT_TOOL_POS };
+          }
         }
         if (patch.param1 !== undefined) {
           updates.toolParam1 = patch.param1;
-          physicsRef.current.toolParam1 = patch.param1;
+          p.toolParam1 = patch.param1;
         }
         if (patch.param2 !== undefined) {
           updates.toolParam2 = patch.param2;
-          physicsRef.current.toolParam2 = patch.param2;
+          p.toolParam2 = patch.param2;
         }
       }
       return { ...prev, ...updates };
@@ -363,7 +411,6 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     setState(prev => ({ ...prev, enemaSmallHeadIdx: clamped }));
   }, []);
 
-  // Full reset — resets everything including tool states and HP
   const resetPhysics = useCallback(() => {
     const fresh = createInitialPhysicsState();
     physicsRef.current = fresh;
@@ -389,7 +436,6 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     }));
   }, []);
 
-  // Positions-only reset — resets node coordinates and segment physics, keeps everything else
   const resetPositions = useCallback(() => {
     const fresh = createInitialPhysicsState();
     const p = physicsRef.current;
@@ -398,7 +444,6 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     p.smallSegs = fresh.smallSegs;
     p.largeSegs = fresh.largeSegs;
     p.time = 0;
-    // Preserve: toolStates, toolType, toolActive, toolParam1/2, navelPierced, electrodes, settings
     setState(prev => ({
       ...prev,
       renderSmallNodes: fresh.smallNodes.map(n => ({ x: n.x, y: n.y })),

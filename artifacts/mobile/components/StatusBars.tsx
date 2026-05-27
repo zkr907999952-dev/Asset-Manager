@@ -24,7 +24,7 @@ function AnimatedBar({ value, color, bgColor, label }: {
             styles.barFill,
             {
               backgroundColor: color,
-              width: anim.interpolate({ inputRange: [0, 100], outputRange: ['0%', '100%'] }),
+              height: anim.interpolate({ inputRange: [0, 100], outputRange: ['0%', '100%'] }),
             },
           ]}
         />

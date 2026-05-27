@@ -32,33 +32,29 @@ export interface PhysicsState {
   largeSegs: SegmentProps[];
   time: number;
   peristalsisSpeed: number;
-  // peristalsisSpeed is the live speed (may be boosted by enema); the user-set
-  // base is kept separately so physics can reset/raise it each step.
   peristalsisBase: number;
   // tool state
-  toolPos: { x: number; y: number } | null;     // handle / drag end
+  toolPos: { x: number; y: number } | null;
   toolType: string | null;
   toolActive: boolean;
   toolParam1: number;
   toolParam2: number;
   // Lever-mode insertion (rod / vibrator / needle when inserted via navel)
-  toolAnchor: { x: number; y: number } | null;  // pivot point (navel) when inserted
+  toolAnchor: { x: number; y: number } | null;
   toolInserted: boolean;
-  // Navel pierced (once true, rod/vibrator can be inserted via navel)
+  // Navel pierced
   navelPierced: boolean;
   // Grab tool
   grabbedNode: { type: 'small' | 'large'; idx: number } | null;
   // Electric
   electrodes: { x: number; y: number }[];
-  // Enema tube head — index into largeNodes (anus = last, head moves toward 0)
+  // Enema tube head
   enemaHeadIdx: number;
-  // Enema has crossed ileocecal junction into small intestine
   enemaInSmall: boolean;
-  // Head index into smallNodes when in small intestine (N_SMALL-1 = junction end, toward 0)
   enemaSmallHeadIdx: number;
   expansionScale: number;
   pressureDiffusionRate: number;
-  toolStates: Record<string, { active: boolean; param1: number; param2: number }>;
+  toolStates: Record<string, { active: boolean; param1: number; param2: number; pos?: { x: number; y: number } | null }>;
 }
 
 function clamp(v: number, min: number, max: number) {
@@ -85,7 +81,6 @@ function clampToCavity(node: PhysicsNode, margin: number) {
   if (r > 1) {
     node.x = CAVITY_CX + (dx / r) * (CAVITY_RX - margin - 1);
     node.y = CAVITY_CY + (dy / r) * (CAVITY_RY - margin - 1);
-    // Zero velocity so node doesn't tunnel through the wall on the next integration step
     node.px = node.x;
     node.py = node.y;
   }
@@ -134,7 +129,6 @@ export function stepPhysics(state: PhysicsState) {
 
   state.time += 1;
   const t = state.time;
-  // Reset live speed to base each step; tools (e.g. enema) may raise it below.
   state.peristalsisSpeed = state.peristalsisBase;
   const periSpeed = state.peristalsisSpeed * PERISTALSIS_BASE_SPEED;
 
@@ -147,7 +141,6 @@ export function stepPhysics(state: PhysicsState) {
       n.px = n.x; n.py = n.y;
       n.x += vx;
       n.y += vy;
-      // mesentery spring
       n.x += (n.rx - n.x) * MESENTERY_STIFFNESS;
       n.y += (n.ry - n.y) * MESENTERY_STIFFNESS;
       clampToCavity(n, margin);
@@ -166,7 +159,6 @@ export function stepPhysics(state: PhysicsState) {
     n.x += fx * 0.4;
     n.y += fy * 0.4;
   }
-  // peristalsis on large intestine (slower)
   for (let i = 0; i < N_LARGE; i++) {
     const n = state.largeNodes[i];
     if (n.pinned) continue;
@@ -191,12 +183,10 @@ export function stepPhysics(state: PhysicsState) {
         if (!a.pinned) { a.x += dx * diff; a.y += dy * diff; }
         if (!b.pinned) { b.x -= dx * diff; b.y -= dy * diff; }
       }
-      // Re-clamp to cavity after each iteration to prevent drift outside
       for (const n of nodes) {
         if (!n.pinned) clampToCavity(n, cavMargin);
       }
     }
-    // Hard stretch limit: prevent extreme deformation (max 2.5× rest length)
     const maxStretch = segLen * 2.5;
     for (let i = 0; i < nodes.length - 1; i++) {
       const a = nodes[i], b = nodes[i + 1];
@@ -214,7 +204,6 @@ export function stepPhysics(state: PhysicsState) {
   satisfyChain(state.largeNodes, LARGE_SEG_LENGTH, true, state.largeSegs, 2);
 
   // --- Separation constraint between small and large intestine ---
-  // Base minDist = SMALL_RADIUS + LARGE_RADIUS; expands with pressure when expansionScale > 0
   for (let si = 0; si < state.smallNodes.length; si++) {
     const sn = state.smallNodes[si];
     const sSeg = state.smallSegs[Math.min(si, state.smallSegs.length - 1)];
@@ -236,7 +225,7 @@ export function stepPhysics(state: PhysicsState) {
     }
   }
 
-  // --- Ileocecal junction spring: connect terminal ileum (smallNodes[N_SMALL-1]) to cecum (largeNodes[0]) ---
+  // --- Ileocecal junction spring ---
   {
     const terminalIleum = state.smallNodes[N_SMALL - 1];
     const cecum = state.largeNodes[0];
@@ -244,7 +233,7 @@ export function stepPhysics(state: PhysicsState) {
       const jDx = cecum.x - terminalIleum.x;
       const jDy = cecum.y - terminalIleum.y;
       const jDist = Math.sqrt(jDx * jDx + jDy * jDy);
-      const restDist = 22; // ileocecal valve anatomical gap
+      const restDist = 22;
       if (jDist > 0.01) {
         const springF = (jDist - restDist) / jDist * 0.07;
         terminalIleum.x += jDx * springF;
@@ -253,10 +242,7 @@ export function stepPhysics(state: PhysicsState) {
     }
   }
 
-  // --- Compute lever rod geometry (rod / vibrator / needle when inserted) ---
-  // Returns array of points along the rod inside the cavity (for collision)
-  // plus the head position. When not inserted, head = toolPos and tail extends
-  // back away from cavity center.
+  // --- Compute lever rod geometry ---
   const computeRodGeometry = (rodLen: number, autoStirAmp = 0): { head: { x: number; y: number }; segments: { x: number; y: number }[]; insideLen: number } => {
     const tp = state.toolPos!;
     if (state.toolInserted && state.toolAnchor) {
@@ -269,7 +255,6 @@ export function stepPhysics(state: PhysicsState) {
       let dx = a.x - tp.x, dy = a.y - tp.y;
       const dmag = Math.sqrt(dx * dx + dy * dy) || 1;
       dx /= dmag; dy /= dmag;
-      // Auto-stir: small orthogonal oscillation of the head
       let ox = 0, oy = 0;
       if (autoStirAmp > 0) {
         const stir = Math.sin(state.time * 0.25) * autoStirAmp;
@@ -277,7 +262,6 @@ export function stepPhysics(state: PhysicsState) {
         oy = dx * stir;
       }
       const head = { x: a.x + dx * insideLen + ox, y: a.y + dy * insideLen + oy };
-      // Sample points along the inside portion of the rod
       const segments: { x: number; y: number }[] = [];
       const samples = 6;
       for (let i = 1; i <= samples; i++) {
@@ -286,21 +270,18 @@ export function stepPhysics(state: PhysicsState) {
       }
       return { head, segments, insideLen };
     }
-    // Free mode: rod extends upward from head (= toolPos). Tail at toolPos - (0, rodLen).
-    // Sample the entire rod length so collision matches render.
     const head = tp;
     let stir = 0;
     if (autoStirAmp > 0) stir = Math.sin(state.time * 0.25) * autoStirAmp;
     const segments: { x: number; y: number }[] = [];
     const samples = 8;
     for (let i = 0; i <= samples; i++) {
-      const t = i / samples;
-      segments.push({ x: tp.x + stir * (1 - t), y: tp.y - rodLen * t });
+      const tt = i / samples;
+      segments.push({ x: tp.x + stir * (1 - tt), y: tp.y - rodLen * tt });
     }
     return { head, segments, insideLen: rodLen };
   };
 
-  // Rod-style collision: push intestine nodes away from any rod sample point
   const applyRodCollision = (rodSegments: { x: number; y: number }[], rodRadius: number) => {
     const allNodes = [state.smallNodes, state.largeNodes];
     for (const nodes of allNodes) {
@@ -321,19 +302,15 @@ export function stepPhysics(state: PhysicsState) {
   if (state.toolPos) {
     const tp = state.toolPos;
 
-    // === METAL ROD / VIBRATOR (lever or free mode) ===
     if (state.toolType === '金属棒' || state.toolType === '振动器') {
       const isVib = state.toolType === '振动器';
-      // rodLen from param1 (杆长 / 震动强度 acts as the rod length proxy for vibrator wand)
       const rodLen = 80 + state.toolParam1 * (isVib ? 1.2 : 1.0);
-      // auto-stir: only metal rod auto-stirs when active; vibrator always oscillates at high amp when active
       const stirAmp = state.toolActive ? (isVib ? 4 : 2 + state.toolParam2 * 0.04) : 0;
       const { head, segments } = computeRodGeometry(rodLen, stirAmp);
       const rodRadius = 9;
       applyRodCollision(segments, rodRadius);
 
       if (state.toolActive) {
-        // Sensitivity / vibration zone around head
         const zone = isVib ? 30 + state.toolParam2 * 0.4 : 18;
         const sensRate = isVib ? 0.18 : 0.04;
         const painRate = isVib ? 0.025 : 0.01;
@@ -361,7 +338,6 @@ export function stepPhysics(state: PhysicsState) {
       const segs = type === 'small' ? state.smallSegs : state.largeSegs;
       const n = nodes[idx];
       if (n) {
-        // Clamp drag target to cavity interior to prevent extreme stretching/clipping
         const cavMargin = type === 'small' ? 12 : 6;
         let tx = tp.x, ty = tp.y;
         const tdx = tx - CAVITY_CX, tdy = ty - CAVITY_CY;
@@ -415,15 +391,12 @@ export function stepPhysics(state: PhysicsState) {
       }
     }
 
-    // === NEEDLE (lever mode when inserted, or free probe) ===
     if (state.toolType === '长柄针') {
-      const rodLen = 90 + state.toolParam1 * 1.0;   // 针长
-      // Auto wobble proportional to active state — "搅动越激烈刺激越快"
+      const rodLen = 90 + state.toolParam1 * 1.0;
       const stirAmp = state.toolActive ? 1.5 + state.toolParam2 * 0.04 : 0;
       const { head, segments } = computeRodGeometry(rodLen, stirAmp);
       applyRodCollision(segments, 5);
       if (state.toolActive) {
-        // Damage segments near head
         const strength = 0.05 + state.toolParam2 * 0.004;
         const stirSpeed = Math.abs(Math.sin(state.time * 0.25)) * stirAmp;
         const range = 14;
@@ -436,7 +409,6 @@ export function stepPhysics(state: PhysicsState) {
                 seg.pain = clamp(seg.pain + strength * (5 + stirSpeed * 6), 0, 100);
                 seg.sensitivity = clamp(seg.sensitivity + strength * (2 + stirSpeed * 3), 0, 100);
                 seg.health = clamp(seg.health - strength * 0.8, 0, 100);
-                // First strong pierce flags perforation
                 if (state.toolParam2 > 40 && !seg.perforated && Math.random() < 0.03) {
                   seg.perforated = true;
                 }
@@ -449,11 +421,9 @@ export function stepPhysics(state: PhysicsState) {
       }
     }
 
-    // === ENEMA: tube travels through large intestine from anus to enemaHeadIdx ===
     if (state.toolType === '灌肠器') {
       const headIdx = clamp(state.enemaHeadIdx, 0, state.largeNodes.length - 1);
       const headNode = state.largeNodes[headIdx];
-      // Tube exerts gentle push on intestine where head is (deformation)
       if (headNode && !state.enemaInSmall) {
         const tubePush = 0.3;
         for (let i = Math.max(0, headIdx - 2); i <= Math.min(state.largeNodes.length - 1, headIdx + 2); i++) {
@@ -468,7 +438,6 @@ export function stepPhysics(state: PhysicsState) {
         const flow = 0.1 + state.toolParam1 * 0.025;
         const stim = state.toolParam2 * 0.005;
         if (!state.enemaInSmall) {
-          // Pressure surges fastest at the head segment in large intestine
           const N = state.largeSegs.length;
           for (let i = 0; i < N; i++) {
             const seg = state.largeSegs[i];
@@ -484,14 +453,12 @@ export function stepPhysics(state: PhysicsState) {
             }
           }
         } else {
-          // Tube fills entire large intestine — apply moderate pressure throughout
           for (let i = 0; i < state.largeSegs.length; i++) {
             const seg = state.largeSegs[i];
             if (seg.broken) continue;
             seg.pressure = clamp(seg.pressure + flow * 0.4, 0, 100);
             seg.sensitivity = clamp(seg.sensitivity + stim * 0.3, 0, 100);
           }
-          // Head is now in small intestine — stronger localized effect there
           const smallHead = clamp(state.enemaSmallHeadIdx, 0, N_SMALL - 1);
           for (let i = 0; i < state.smallSegs.length; i++) {
             const seg = state.smallSegs[i];
@@ -506,7 +473,6 @@ export function stepPhysics(state: PhysicsState) {
               }
             }
           }
-          // Small intestine deformation wobble near head
           for (let i = Math.max(0, smallHead - 2); i <= Math.min(N_SMALL - 1, smallHead + 2); i++) {
             const n = state.smallNodes[i];
             if (n.pinned) continue;
@@ -515,7 +481,6 @@ export function stepPhysics(state: PhysicsState) {
             n.y += wobble * 0.5;
           }
         }
-        // Boost peristalsis dynamically through stim (handled at state level)
         const periBoost = state.enemaInSmall ? 0.035 : 0.025;
         state.peristalsisSpeed = Math.max(state.peristalsisSpeed, 1 + state.toolParam2 * periBoost);
       }
@@ -527,7 +492,6 @@ export function stepPhysics(state: PhysicsState) {
   }
 
   // === SECONDARY TOOL PHYSICS: tools that persist independently ===
-  // Enema: keeps running even when not the active tool
   const ENEMA_KEY = '灌肠器';
   if (state.toolType !== ENEMA_KEY && state.toolStates[ENEMA_KEY]?.active) {
     const ts = state.toolStates[ENEMA_KEY];
@@ -571,14 +535,13 @@ export function stepPhysics(state: PhysicsState) {
     }
   }
 
-  // Electric: keeps running even when not the active tool
   const ELEC_KEY = '电击器';
   if (state.toolType !== ELEC_KEY && state.toolStates[ELEC_KEY]?.active && state.electrodes.length > 0) {
     const ts = state.toolStates[ELEC_KEY];
     applyElectricPhysics(state, ts.param1, ts.param2);
   }
 
-  // --- Perforation leakage: perforated segments slowly lose pressure but accumulate pain ---
+  // --- Perforation leakage ---
   for (const seg of state.smallSegs) {
     if (seg.perforated && !seg.broken) {
       seg.pressure = clamp(seg.pressure - 0.05, 0, 100);
@@ -593,14 +556,13 @@ export function stepPhysics(state: PhysicsState) {
   }
 
   // --- Pressure diffusion & effects ---
-  // maxPressure: rupture threshold — small intestine=100, large intestine=LARGE_RUPTURE_PRESSURE
-  const diffuseAndUpdate = (segs: SegmentProps[], maxPressure: number) => {
+  const diffuseAndUpdate = (segs: SegmentProps[], nodes: PhysicsNode[], maxPressure: number) => {
     const n = segs.length;
     const prevPressures = segs.map(s => s.pressure);
     for (let i = 0; i < n; i++) {
       const seg = segs[i];
       if (seg.broken) continue;
-      // diffuse to neighbors
+      // diffuse to neighbors (only across intact connections)
       if (i > 0 && !segs[i - 1].broken) {
         const diff = (prevPressures[i] - prevPressures[i - 1]) * state.pressureDiffusionRate;
         seg.pressure -= diff;
@@ -611,44 +573,99 @@ export function stepPhysics(state: PhysicsState) {
         seg.pressure -= diff;
         segs[i + 1].pressure += diff;
       }
-      // natural decay
       seg.pressure = clamp(seg.pressure - PRESSURE_DECAY_RATE, 0, maxPressure);
       seg.pain = clamp(seg.pain - 0.005, 0, 100);
       seg.sensitivity = clamp(seg.sensitivity - 0.002, 0, 100);
 
-      // pressure effects — thresholds scale with maxPressure
+      // === RUPTURE: pressure exceeds max — BURST EVENT ===
       if (seg.pressure >= maxPressure && !seg.ruptured) {
         seg.ruptured = true;
-        seg.pain = clamp(seg.pain + 40, 0, 100);
-        seg.health = clamp(seg.health - 30, 0, 100);
+        // Explosive decompression: instantly drop pressure to near zero
+        seg.pressure = clamp(seg.pressure * 0.05, 0, maxPressure);
+        // Massive pain spike from sudden tearing
+        seg.pain = clamp(seg.pain + 65, 0, 100);
+        // Pleasure spike from intense stimulation
+        seg.sensitivity = clamp(seg.sensitivity + 35, 0, 100);
+        seg.health = clamp(seg.health - 40, 0, 100);
+        // Pressure wave to neighbors — burst splashes adjacent segments
+        if (i > 0 && !segs[i - 1].broken) {
+          segs[i - 1].pain = clamp(segs[i - 1].pain + 25, 0, 100);
+          segs[i - 1].pressure = clamp(segs[i - 1].pressure * 0.6, 0, maxPressure);
+        }
+        if (i < n - 1 && !segs[i + 1].broken) {
+          segs[i + 1].pain = clamp(segs[i + 1].pain + 25, 0, 100);
+          segs[i + 1].pressure = clamp(segs[i + 1].pressure * 0.6, 0, maxPressure);
+        }
+        // Physical burst: push nodes away from each other
+        if (nodes[i] && nodes[i + 1] && !nodes[i].pinned) {
+          const bDx = nodes[i + 1].x - nodes[i].x;
+          const bDy = nodes[i + 1].y - nodes[i].y;
+          const bD = Math.sqrt(bDx * bDx + bDy * bDy) || 1;
+          const burstForce = 6;
+          nodes[i].x -= (bDx / bD) * burstForce;
+          nodes[i].y -= (bDy / bD) * burstForce;
+        }
       }
-      if (seg.ruptured) {
-        seg.pressure = clamp(seg.pressure - 1.5, 0, maxPressure);
+      // Ongoing ruptured segment: slow continued pressure drain
+      if (seg.ruptured && !seg.broken) {
+        seg.pressure = clamp(seg.pressure - 1.2, 0, maxPressure);
+        // Ruptured segments continue to hurt
+        seg.pain = clamp(seg.pain + 0.04, 0, 100);
       }
-      // pain and sensitivity rise as pressure approaches capacity
+
+      // Pain and sensitivity rise as pressure approaches capacity
       if (seg.pressure > maxPressure * 0.8) {
         seg.pain = clamp(seg.pain + 0.05, 0, 100);
       }
       if (seg.pressure > maxPressure * 0.4) {
         seg.sensitivity = clamp(seg.sensitivity + 0.03, 0, 100);
       }
-      // health check
+
+      // === BREAK: health depletes — SEVERING EVENT ===
       if (seg.health <= 0 && !seg.broken) {
         seg.broken = true;
         seg.pain = 100;
-        if (i > 0) segs[i - 1].pressure = clamp(segs[i - 1].pressure * 0.3, 0, maxPressure);
-        if (i < n - 1) segs[i + 1].pressure = clamp(segs[i + 1].pressure * 0.3, 0, maxPressure);
+        // Intense pleasure spike from the severing sensation
+        seg.sensitivity = clamp(seg.sensitivity + 45, 0, 100);
+        // Complete pressure release at break point — severed ends decompress instantly
+        seg.pressure = 0;
+        if (i > 0) {
+          segs[i - 1].pressure = 0;
+          segs[i - 1].pain = clamp(segs[i - 1].pain + 30, 0, 100);
+          segs[i - 1].sensitivity = clamp(segs[i - 1].sensitivity + 20, 0, 100);
+        }
+        if (i < n - 1) {
+          segs[i + 1].pressure = 0;
+          segs[i + 1].pain = clamp(segs[i + 1].pain + 30, 0, 100);
+          segs[i + 1].sensitivity = clamp(segs[i + 1].sensitivity + 20, 0, 100);
+        }
+        // Physical severing: push adjacent nodes apart dramatically
+        if (nodes[i] && nodes[i + 1]) {
+          const sDx = nodes[i + 1].x - nodes[i].x;
+          const sDy = nodes[i + 1].y - nodes[i].y;
+          const sD = Math.sqrt(sDx * sDx + sDy * sDy) || 1;
+          const severForce = 12;
+          if (!nodes[i].pinned) {
+            nodes[i].x -= (sDx / sD) * severForce;
+            nodes[i].y -= (sDy / sD) * severForce;
+          }
+          if (!nodes[i + 1].pinned) {
+            nodes[i + 1].x += (sDx / sD) * severForce;
+            nodes[i + 1].y += (sDy / sD) * severForce;
+          }
+        }
       }
+
       seg.pressure = clamp(seg.pressure, 0, maxPressure);
       seg.pain = clamp(seg.pain, 0, 100);
       seg.sensitivity = clamp(seg.sensitivity, 0, 100);
       seg.health = clamp(seg.health, 0, 100);
     }
   };
-  diffuseAndUpdate(state.smallSegs, 100);
-  diffuseAndUpdate(state.largeSegs, LARGE_RUPTURE_PRESSURE);
+  diffuseAndUpdate(state.smallSegs, state.smallNodes, 100);
+  diffuseAndUpdate(state.largeSegs, state.largeNodes, LARGE_RUPTURE_PRESSURE);
 
-  // --- Final hard clamp: catches any node pushed outside by tool forces, springs, or separation ---
+  // --- Final hard clamp ---
   for (const n of state.smallNodes) { if (!n.pinned) clampToCavity(n, 8); }
   for (const n of state.largeNodes) { if (!n.pinned) clampToCavity(n, 2); }
 }

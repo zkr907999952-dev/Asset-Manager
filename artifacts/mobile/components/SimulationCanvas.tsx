@@ -17,8 +17,6 @@ import { useGame } from '../contexts/GameContext';
 import { TOOLS } from '../constants/gameConfig';
 
 const NAVEL_X = CANVAS_W / 2;
-// Both views use the same Y so the navel always aligns between external and internal.
-// External image offset adjusted from -90 → -81 to place the navel at CAVITY_CY=248.
 const NAVEL_Y_EXTERNAL = CAVITY_CY;
 const NAVEL_Y_INTERNAL = CAVITY_CY;
 const NAVEL_RADIUS = 28;
@@ -36,6 +34,30 @@ function segmentColor(health: number, pain: number, _pressure: number, ruptured:
   let b = Math.round(Math.max(20, baseB * healthFactor));
   if (perforated) { r = Math.min(255, r + 30); g = Math.max(20, g - 20); b = Math.max(20, b - 20); }
   return `rgb(${r},${g},${b})`;
+}
+
+// Render intestine as smooth bezier segments with per-segment coloring.
+// Each segment is drawn as a quadratic bezier from mid(prev,curr) → Q(curr) → mid(curr,next),
+// giving smooth curved corners while preserving per-segment health/pain colors.
+function buildSmoothSegPath(
+  nodes: { x: number; y: number }[],
+  i: number,
+): string {
+  const n = nodes.length;
+  if (i >= n - 1) return '';
+  const curr = nodes[i];
+  const next = nodes[i + 1];
+  const startX = i > 0 ? (nodes[i - 1].x + curr.x) / 2 : curr.x;
+  const startY = i > 0 ? (nodes[i - 1].y + curr.y) / 2 : curr.y;
+  const endX = i < n - 2 ? (next.x + nodes[i + 2].x) / 2 : next.x;
+  const endY = i < n - 2 ? (next.y + nodes[i + 2].y) / 2 : next.y;
+  const midX = (curr.x + next.x) / 2;
+  const midY = (curr.y + next.y) / 2;
+  return (
+    `M${startX.toFixed(1)},${startY.toFixed(1)}` +
+    ` Q${curr.x.toFixed(1)},${curr.y.toFixed(1)} ${midX.toFixed(1)},${midY.toFixed(1)}` +
+    ` Q${next.x.toFixed(1)},${next.y.toFixed(1)} ${endX.toFixed(1)},${endY.toFixed(1)}`
+  );
 }
 
 function computeRodGeoFor(
@@ -76,7 +98,6 @@ function computeRodGeoFor(
   };
 }
 
-// Compute sample points along the collision-active part of a rod for debug visualization
 function computeRodCollisionSamples(
   g: { headX: number; headY: number; tailX: number; tailY: number },
   inserted: boolean,
@@ -94,6 +115,83 @@ function computeRodCollisionSamples(
     });
   }
   return pts;
+}
+
+// Render a tool at a given position (for suspended/hanging tool display)
+function SuspendedToolOverlay({
+  toolId, pos, param1, param2, time,
+}: {
+  toolId: string; pos: { x: number; y: number }; param1: number; param2: number; time: number;
+}) {
+  const tp = pos;
+  if (toolId === TOOLS.METAL_ROD) {
+    const rodLen = 80 + param1 * 1.0;
+    const tailY = tp.y - rodLen;
+    return (
+      <G opacity={0.55}>
+        <Line x1={tp.x} y1={tailY} x2={tp.x} y2={tp.y}
+          stroke="#aaaacc" strokeWidth={4} strokeLinecap="round" />
+        <Circle cx={tp.x} cy={tailY} r={6} fill="#555577" stroke="#222" strokeWidth={1} />
+        <Circle cx={tp.x} cy={tp.y} r={5} fill="#aaaacc" stroke="#222" strokeWidth={0.5} />
+      </G>
+    );
+  }
+  if (toolId === TOOLS.VIBRATOR) {
+    const rodLen = 80 + param1 * 1.2;
+    const tailY = tp.y - rodLen;
+    return (
+      <G opacity={0.55}>
+        <Circle cx={tp.x} cy={tp.y}
+          r={28 + param2 * 0.35}
+          fill="rgba(180,120,255,0.07)" stroke="rgba(180,120,255,0.35)" strokeWidth={1} strokeDasharray="4 4" />
+        <Line x1={tp.x} y1={tailY} x2={tp.x} y2={tp.y}
+          stroke="#b078ff" strokeWidth={5} strokeLinecap="round" />
+        <Circle cx={tp.x} cy={tailY} r={8} fill="#555577" stroke="#222" strokeWidth={1} />
+        <Circle cx={tp.x} cy={tp.y} r={7} fill="#b078ff" stroke="#222" strokeWidth={0.5} />
+      </G>
+    );
+  }
+  if (toolId === TOOLS.SYRINGE) {
+    return (
+      <G opacity={0.55}>
+        <Rect x={tp.x - 6} y={tp.y - 30} width={12} height={30} rx={2}
+          fill="#60c0c0" fillOpacity={0.85} stroke="#88aaaa" strokeWidth={0.8} />
+        <Line x1={tp.x} y1={tp.y} x2={tp.x} y2={tp.y + 18} stroke="#aaaaaa" strokeWidth={2} />
+        <Circle cx={tp.x} cy={tp.y + 18} r={1.8} fill="#ff4040" />
+        <Circle cx={tp.x} cy={tp.y - 28} r={4} fill="rgba(200,240,255,0.5)" />
+      </G>
+    );
+  }
+  if (toolId === TOOLS.NEEDLE) {
+    const rodLen = 90 + param1 * 1.0;
+    const tailY = tp.y - rodLen;
+    return (
+      <G opacity={0.55}>
+        <Line x1={tp.x} y1={tailY} x2={tp.x} y2={tp.y}
+          stroke="#cccccc" strokeWidth={1.8} strokeLinecap="round" />
+        <Circle cx={tp.x} cy={tailY} r={4} fill="#888899" stroke="#222" strokeWidth={1} />
+        <Circle cx={tp.x} cy={tp.y} r={2} fill="#ff4040" />
+      </G>
+    );
+  }
+  if (toolId === TOOLS.ELECTRIC) {
+    return (
+      <G opacity={0.55}>
+        <Circle cx={tp.x} cy={tp.y} r={5} fill="#ffff00" fillOpacity={0.9} stroke="#ffaa00" strokeWidth={1} />
+        <Circle cx={tp.x} cy={tp.y} r={28 + param2 * 0.3}
+          fill="rgba(255,255,0,0.05)" stroke="rgba(255,255,0,0.25)" strokeWidth={0.7} />
+      </G>
+    );
+  }
+  if (toolId === TOOLS.GRAB) {
+    return (
+      <G opacity={0.55}>
+        <Circle cx={tp.x} cy={tp.y} r={10 + param1 * 0.25}
+          fill="rgba(96,192,96,0.15)" stroke="#60c060" strokeWidth={1.2} />
+      </G>
+    );
+  }
+  return null;
 }
 
 interface CanvasProps {
@@ -125,7 +223,6 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
     };
   }, [canvasLayout]);
 
-  // Ref bundle so panResponder always sees latest values (avoids stale closure)
   const hrRef = useRef({
     state,
     toPhysicsCoords,
@@ -220,9 +317,8 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
         return;
       }
       if (s.activeTool === TOOLS.ENEMA) {
-        const { setEnemaInSmall: seis, setEnemaSmallHeadIdx: seishi, triggerDialogue: td } = hrRef.current;
+        const { setEnemaInSmall: seis, setEnemaSmallHeadIdx: seishi, triggerDialogue: td2 } = hrRef.current;
         if (s.enemaInSmall) {
-          // In small intestine — find nearest small node, allow retreat to large
           const cecum = physicsRef.current.largeNodes[0];
           const cecumDist = cecum ? Math.hypot(cecum.x - pos.x, cecum.y - pos.y) : 9999;
           const { idx: sIdx, dist: sDist } = findNearestSmallNodeIdx(pos);
@@ -237,13 +333,12 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
           if (idx >= 0 && dist < 60) {
             sehi(idx);
           }
-          // Check if tube head has reached cecum (idx 0) and user is near small intestine
           if (physicsRef.current.enemaHeadIdx === 0) {
             const { idx: sIdx, dist: sDist } = findNearestSmallNodeIdx(pos);
             if (sIdx >= 0 && sDist < 55) {
               seis(true);
               seishi(sIdx);
-              td('enema_enter_small');
+              td2('enema_enter_small');
             }
           }
         }
@@ -258,7 +353,6 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
 
       if (s.activeTool === TOOLS.ENEMA) {
         const prevPos = physicsRef.current.toolPos;
-        // Pull nearby large intestine nodes along with the tube drag
         if (prevPos && !s.enemaInSmall) {
           const dragDx = pos.x - prevPos.x;
           const dragDy = pos.y - prevPos.y;
@@ -275,7 +369,6 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
         }
 
         if (s.enemaInSmall) {
-          // In small intestine — find nearest small node, allow retreat to large
           const cecum = physicsRef.current.largeNodes[0];
           const cecumDist = cecum ? Math.hypot(cecum.x - pos.x, cecum.y - pos.y) : 9999;
           const { idx: sIdx, dist: sDist } = findNearestSmallNodeIdx(pos);
@@ -286,12 +379,10 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
             seishi(sIdx);
           }
         } else {
-          // Move head freely to nearest large node
           const { idx, dist } = findNearestLargeNodeIdx(pos);
           if (idx >= 0 && dist < 60) {
             sehi(idx);
           }
-          // Check transition into small intestine
           if (physicsRef.current.enemaHeadIdx === 0) {
             const { idx: sIdx, dist: sDist } = findNearestSmallNodeIdx(pos);
             if (sIdx >= 0 && sDist < 55) {
@@ -336,27 +427,18 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
 
   const breathVal = useBreathAnimation(state.heartRate);
   const breathAmp = state.breathAmplitude;
-  // inhale = 0..1 (0 = full exhale, 1 = full inhale)
   const inhale = (breathVal + 1) / 2;
-  // Belly image shifts up slightly on inhale, expands vertically — scaled by breathAmplitude
-  const breathImgOffsetY = -81 - inhale * 5 * breathAmp;
+  const breathImgOffsetY = -136 - inhale * 5 * breathAmp;
   const breathImgH = 630 + inhale * 12 * breathAmp;
-  // Navel point shifts up with image
   const navelYBreath = NAVEL_Y_EXTERNAL - inhale * 5 * breathAmp;
-  // Overlay ellipses expand slightly with breathing
   const breathOverlayScale = 1 + inhale * 0.025 * breathAmp;
-
-  const smallPath = buildSmoothPath(renderSmallNodes);
 
   const handlePos = state.toolPos;
   const renderTime = Date.now() / 33;
 
-  // Enema is visible when selected OR when its toolState is active (multi-tool coexistence)
   const enemaVisible = state.activeTool === TOOLS.ENEMA || state.toolStates?.[TOOLS.ENEMA]?.active === true;
-  // Electric is independently active when toolState says so
   const electricIndepActive = state.toolStates?.[TOOLS.ELECTRIC]?.active === true;
 
-  // Enema tube: split into two paths so colors stay correct regardless of mode
   const enemaPathLarge = (() => {
     if (!enemaVisible || renderLargeNodes.length === 0) return '';
     if (state.enemaInSmall) {
@@ -380,7 +462,6 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
   const ELEC_CTRL_X = 36;
   const ELEC_CTRL_Y = CANVAS_H - 38;
 
-  // Compute rod geometry for current tool (used for rendering + collision box debug)
   const rodGeo = (() => {
     if (!handlePos) return null;
     const tool = state.activeTool;
@@ -397,6 +478,12 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
     }
     return null;
   })();
+
+  // Suspended tools: active tools that are not the current tool, with stored positions
+  const suspendedTools = Object.entries(state.toolStates ?? {}).filter(([id, ts]) => {
+    if (id === state.activeTool) return false;
+    return ts.active && ts.pos != null;
+  });
 
   return (
     <View
@@ -425,7 +512,6 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
         {/* ===== BACKGROUND LAYER ===== */}
         {isInternal ? (
           <G>
-            {/* Internal view: show the same belly image at low opacity so the two views align */}
             <SvgImage
               href={BELLY_EXTERNAL_IMG}
               x={-50} y={breathImgOffsetY}
@@ -439,9 +525,7 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
           </G>
         ) : (
           <G>
-            {/* External view: zoomed in on abdomen portion of the belly image.
-                belly_external.png is 896×1280. Rendered at 440×630 with -50,-81 offset
-                so the navel lands at CAVITY_CY=248, matching the internal view. */}
+            {/* External view: belly image. NAVEL_Y_EXTERNAL = CAVITY_CY = 248. */}
             <SvgImage
               href={BELLY_EXTERNAL_IMG}
               x={-50} y={breathImgOffsetY}
@@ -485,32 +569,35 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
         {/* ===== INTERNAL ORGANS LAYER ===== */}
         {isInternal && (
           <G clipPath="url(#cavityClip)">
+            {/* Intestine anatomical background image — enlarged to fill cavity better */}
             <SvgImage
               href={INTESTINES_REF}
-              x={CAVITY_CX - CAVITY_RX * 0.92} y={CAVITY_CY - CAVITY_RY * 0.92}
-              width={CAVITY_RX * 0.92 * 2} height={CAVITY_RY * 0.92 * 2}
+              x={CAVITY_CX - CAVITY_RX * 1.05} y={CAVITY_CY - CAVITY_RY * 1.05}
+              width={CAVITY_RX * 1.05 * 2} height={CAVITY_RY * 1.05 * 2}
               preserveAspectRatio="xMidYMid meet" opacity={0.42} />
             <Ellipse cx={CAVITY_CX} cy={CAVITY_CY} rx={CAVITY_RX - 2} ry={CAVITY_RY - 2}
               fill="none" stroke="#3a1010" strokeWidth={4} />
 
-            {/* Large intestine */}
+            {/* ===== LARGE INTESTINE — smooth bezier segments ===== */}
             {renderLargeSegs.map((seg, i) => {
               if (i >= renderLargeNodes.length - 1) return null;
-              const a = renderLargeNodes[i], b = renderLargeNodes[i + 1];
+              if (seg.broken) return null; // visual gap at break
+              const d = buildSmoothSegPath(renderLargeNodes, i);
+              if (!d) return null;
               const w = LARGE_RADIUS * 2 + (seg.pressure / LARGE_RUPTURE_PRESSURE) * LARGE_RADIUS * expansionScale;
               const col = segmentColor(seg.health, seg.pain, seg.pressure, seg.ruptured, seg.broken, seg.perforated, true);
-              return <Line key={`lg-${i}`} x1={a.x} y1={a.y} x2={b.x} y2={b.y}
-                stroke={col} strokeWidth={w} strokeLinecap="round" />;
+              return (
+                <G key={`lg-${i}`}>
+                  <Path d={d} stroke={col} strokeWidth={w} fill="none" strokeLinecap="round" strokeLinejoin="round" />
+                  <Path d={d} stroke="rgba(255,180,160,0.2)" strokeWidth={LARGE_RADIUS * 0.7} fill="none" strokeLinecap="round" />
+                </G>
+              );
             })}
-            {renderLargeSegs.map((seg, i) => {
-              if (i >= renderLargeNodes.length - 1) return null;
-              const a = renderLargeNodes[i], b = renderLargeNodes[i + 1];
-              return <Line key={`lgh-${i}`} x1={a.x} y1={a.y} x2={b.x} y2={b.y}
-                stroke="rgba(255,180,160,0.2)" strokeWidth={LARGE_RADIUS * 0.6} strokeLinecap="round" />;
-            })}
-            {/* Cecum end-cap: rounded cap at largeNodes[0] matching large intestine style */}
+
+            {/* Large intestine cecum end-cap */}
             {renderLargeNodes.length > 0 && (() => {
               const seg0 = renderLargeSegs[0];
+              if (seg0?.broken) return null;
               const col = segmentColor(
                 seg0?.health ?? 100, seg0?.pain ?? 0, seg0?.pressure ?? 0,
                 seg0?.ruptured ?? false, seg0?.broken ?? false, seg0?.perforated ?? false, true,
@@ -523,25 +610,120 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
               );
             })()}
 
-            {/* Small intestine */}
+            {/* Large intestine break markers */}
+            {renderLargeSegs.map((seg, i) => {
+              if (!seg.broken) return null;
+              const nodeA = renderLargeNodes[i];
+              const nodeB = renderLargeNodes[i + 1];
+              if (!nodeA || !nodeB) return null;
+              const mx = (nodeA.x + nodeB.x) / 2;
+              const my = (nodeA.y + nodeB.y) / 2;
+              return (
+                <G key={`lgbrk-${i}`}>
+                  {/* Torn ends */}
+                  <Circle cx={nodeA.x} cy={nodeA.y} r={LARGE_RADIUS * 0.9}
+                    fill="#8a1010" stroke="#cc1010" strokeWidth={1.5} />
+                  <Circle cx={nodeB.x} cy={nodeB.y} r={LARGE_RADIUS * 0.9}
+                    fill="#8a1010" stroke="#cc1010" strokeWidth={1.5} />
+                  {/* Gap sever mark */}
+                  <Line x1={mx - 5} y1={my - 5} x2={mx + 5} y2={my + 5}
+                    stroke="#ff2020" strokeWidth={2} strokeLinecap="round" />
+                  <Line x1={mx + 5} y1={my - 5} x2={mx - 5} y2={my + 5}
+                    stroke="#ff2020" strokeWidth={2} strokeLinecap="round" />
+                </G>
+              );
+            })}
+
+            {/* ===== SMALL INTESTINE — smooth bezier segments ===== */}
             {renderSmallSegs.map((seg, i) => {
               if (i >= renderSmallNodes.length - 1) return null;
-              const a = renderSmallNodes[i], b = renderSmallNodes[i + 1];
+              if (seg.broken) return null; // visual gap at break
+              const d = buildSmoothSegPath(renderSmallNodes, i);
+              if (!d) return null;
               const w = SMALL_RADIUS * 2 + (seg.pressure / 100) * SMALL_RADIUS * expansionScale;
               const col = segmentColor(seg.health, seg.pain, seg.pressure, seg.ruptured, seg.broken, seg.perforated, false);
-              return <Line key={`sm-${i}`} x1={a.x} y1={a.y} x2={b.x} y2={b.y}
-                stroke={col} strokeWidth={w} strokeLinecap="round" />;
+              return (
+                <G key={`sm-${i}`}>
+                  <Path d={d} stroke={col} strokeWidth={w} fill="none" strokeLinecap="round" strokeLinejoin="round" />
+                  <Path d={d} stroke="rgba(255,220,200,0.18)" strokeWidth={SMALL_RADIUS * 0.7} fill="none" strokeLinecap="round" />
+                </G>
+              );
             })}
-            {renderSmallNodes.length > 1 && (
-              <Path d={smallPath} stroke="rgba(255,220,200,0.15)" strokeWidth={3} fill="none" strokeLinecap="round" />
-            )}
 
-            {/* Rupture & perforation markers */}
+            {/* Rupture burst markers */}
+            {renderSmallSegs.map((seg, i) => {
+              if (!seg.ruptured) return null;
+              const n = renderSmallNodes[i];
+              if (!n) return null;
+              return (
+                <G key={`rpt-${i}`}>
+                  {/* Burst glow */}
+                  <Circle cx={n.x} cy={n.y} r={12}
+                    fill="rgba(220,30,30,0.22)" stroke="rgba(255,60,60,0.6)" strokeWidth={1.2} />
+                  <Circle cx={n.x} cy={n.y} r={5}
+                    fill="#200000" stroke="#cc2020" strokeWidth={1} />
+                  {/* Radial burst lines */}
+                  {[0, 45, 90, 135].map(angle => {
+                    const rad = (angle * Math.PI) / 180;
+                    const r1 = 7, r2 = 13;
+                    return (
+                      <Line key={`rptl-${i}-${angle}`}
+                        x1={n.x + Math.cos(rad) * r1} y1={n.y + Math.sin(rad) * r1}
+                        x2={n.x + Math.cos(rad) * r2} y2={n.y + Math.sin(rad) * r2}
+                        stroke="rgba(255,80,40,0.7)" strokeWidth={1.2} strokeLinecap="round" />
+                    );
+                  })}
+                </G>
+              );
+            })}
+            {renderLargeSegs.map((seg, i) => {
+              if (!seg.ruptured) return null;
+              const n = renderLargeNodes[i];
+              if (!n) return null;
+              return (
+                <G key={`lgrpt-${i}`}>
+                  <Circle cx={n.x} cy={n.y} r={15}
+                    fill="rgba(220,30,30,0.22)" stroke="rgba(255,60,60,0.6)" strokeWidth={1.5} />
+                  <Circle cx={n.x} cy={n.y} r={6}
+                    fill="#200000" stroke="#cc2020" strokeWidth={1.2} />
+                  {[0, 45, 90, 135].map(angle => {
+                    const rad = (angle * Math.PI) / 180;
+                    return (
+                      <Line key={`lgrptl-${i}-${angle}`}
+                        x1={n.x + Math.cos(rad) * 8} y1={n.y + Math.sin(rad) * 8}
+                        x2={n.x + Math.cos(rad) * 16} y2={n.y + Math.sin(rad) * 16}
+                        stroke="rgba(255,80,40,0.7)" strokeWidth={1.5} strokeLinecap="round" />
+                    );
+                  })}
+                </G>
+              );
+            })}
+
+            {/* Small intestine break markers */}
+            {renderSmallSegs.map((seg, i) => {
+              if (!seg.broken) return null;
+              const nodeA = renderSmallNodes[i];
+              const nodeB = renderSmallNodes[i + 1];
+              if (!nodeA || !nodeB) return null;
+              const mx = (nodeA.x + nodeB.x) / 2;
+              const my = (nodeA.y + nodeB.y) / 2;
+              return (
+                <G key={`smbrk-${i}`}>
+                  <Circle cx={nodeA.x} cy={nodeA.y} r={SMALL_RADIUS * 0.9}
+                    fill="#660808" stroke="#aa1010" strokeWidth={1.2} />
+                  <Circle cx={nodeB.x} cy={nodeB.y} r={SMALL_RADIUS * 0.9}
+                    fill="#660808" stroke="#aa1010" strokeWidth={1.2} />
+                  <Line x1={mx - 4} y1={my - 4} x2={mx + 4} y2={my + 4}
+                    stroke="#ff2020" strokeWidth={1.5} strokeLinecap="round" />
+                  <Line x1={mx + 4} y1={my - 4} x2={mx - 4} y2={my + 4}
+                    stroke="#ff2020" strokeWidth={1.5} strokeLinecap="round" />
+                </G>
+              );
+            })}
+
+            {/* Perforation markers */}
             {renderSmallSegs.map((seg, i) =>
-              seg.ruptured ? (
-                <Circle key={`rpt-${i}`} cx={renderSmallNodes[i]?.x ?? 0} cy={renderSmallNodes[i]?.y ?? 0}
-                  r={5} fill="#000000" stroke="#cc2020" strokeWidth={1} />
-              ) : seg.perforated ? (
+              seg.perforated && !seg.broken ? (
                 <Circle key={`prf-${i}`} cx={renderSmallNodes[i]?.x ?? 0} cy={renderSmallNodes[i]?.y ?? 0}
                   r={2.5} fill="#440000" stroke="#aa3030" strokeWidth={0.8} />
               ) : null
@@ -562,7 +744,7 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
               );
             })}
 
-            {/* Collision box debug — intestine nodes */}
+            {/* Collision box debug */}
             {state.showCollisionBoxes && renderSmallNodes.map((n, i) => (
               <Circle key={`cb-sm-${i}`} cx={n.x} cy={n.y} r={SMALL_RADIUS}
                 fill="none" stroke="rgba(0,255,255,0.4)" strokeWidth={0.8} />
@@ -572,12 +754,9 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
                 fill="none" stroke="rgba(0,200,255,0.35)" strokeWidth={0.8} />
             ))}
 
-            {/* Collision box debug — tool geometry */}
             {state.showCollisionBoxes && rodGeo && (() => {
               const samples = computeRodCollisionSamples(
-                rodGeo.g,
-                state.toolInserted,
-                state.toolAnchor,
+                rodGeo.g, state.toolInserted, state.toolAnchor,
               );
               return (
                 <G>
@@ -614,9 +793,25 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
           </G>
         )}
 
-        {/* ===== TOOLS LAYER (top of both views) ===== */}
+        {/* ===== SUSPENDED (HANGING) TOOLS LAYER ===== */}
+        {/* Tools that are active but not the current tool render at their last position */}
+        {isInternal && suspendedTools.map(([toolId, ts]) => {
+          if (!ts.pos) return null;
+          return (
+            <SuspendedToolOverlay
+              key={`suspended-${toolId}`}
+              toolId={toolId}
+              pos={ts.pos}
+              param1={ts.param1}
+              param2={ts.param2}
+              time={renderTime}
+            />
+          );
+        })}
 
-        {/* Rod / Vibrator: lever or free */}
+        {/* ===== TOOLS LAYER (active/current tool) ===== */}
+
+        {/* Rod / Vibrator */}
         {handlePos && (state.activeTool === TOOLS.METAL_ROD || state.activeTool === TOOLS.VIBRATOR) && (() => {
           if (!rodGeo) return null;
           const isVib = state.activeTool === TOOLS.VIBRATOR;
@@ -643,7 +838,7 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
           );
         })()}
 
-        {/* Needle: lever or free */}
+        {/* Needle */}
         {handlePos && state.activeTool === TOOLS.NEEDLE && (() => {
           if (!rodGeo) return null;
           const { g } = rodGeo;
@@ -686,7 +881,7 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
           </G>
         )}
 
-        {/* Enema tube — large intestine portion always blue */}
+        {/* Enema tube */}
         {state.activeTool === TOOLS.ENEMA && enemaPathLarge !== '' && (
           <G>
             <Path d={enemaPathLarge} stroke="rgba(80,140,220,0.62)" strokeWidth={6}
@@ -695,7 +890,6 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
               fill="none" strokeLinecap="round" />
           </G>
         )}
-        {/* Enema tube — small intestine portion orange-red (only when enemaInSmall) */}
         {state.activeTool === TOOLS.ENEMA && enemaPathSmall !== '' && (
           <G>
             <Path d={enemaPathSmall} stroke="rgba(210,110,70,0.72)" strokeWidth={4.5}
@@ -704,7 +898,6 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
               fill="none" strokeLinecap="round" />
           </G>
         )}
-        {/* Enema head nozzle */}
         {enemaVisible && enemaHead && (
           <G>
             <Circle cx={enemaHead.x} cy={enemaHead.y} r={12}
