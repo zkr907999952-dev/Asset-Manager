@@ -4,7 +4,7 @@ import {
   SMALL_RADIUS, LARGE_RADIUS,
   PHYSICS_ITERATIONS, DAMPING, MESENTERY_STIFFNESS, SEGMENT_STIFFNESS,
   PERISTALSIS_BASE_SPEED, PERISTALSIS_AMPLITUDE,
-  PRESSURE_DIFFUSION_RATE, PRESSURE_DECAY_RATE,
+  PRESSURE_DECAY_RATE,
   LARGE_RUPTURE_PRESSURE, EXPANSION_SCALE_DEFAULT,
 } from '../constants/gameConfig';
 
@@ -56,8 +56,9 @@ export interface PhysicsState {
   enemaInSmall: boolean;
   // Head index into smallNodes when in small intestine (N_SMALL-1 = junction end, toward 0)
   enemaSmallHeadIdx: number;
-  // How much intestine nodes expand when pressure rises (0=none, 1=moderate, 3=extreme)
   expansionScale: number;
+  pressureDiffusionRate: number;
+  toolStates: Record<string, { active: boolean; param1: number; param2: number }>;
 }
 
 function clamp(v: number, min: number, max: number) {
@@ -87,6 +88,42 @@ function clampToCavity(node: PhysicsNode, margin: number) {
     // Zero velocity so node doesn't tunnel through the wall on the next integration step
     node.px = node.x;
     node.py = node.y;
+  }
+}
+
+function applyElectricPhysics(state: PhysicsState, param1: number, param2: number) {
+  const voltage = param1 * 0.01;
+  const radius = 30 + param2 * 0.3;
+  for (const el of state.electrodes) {
+    for (let i = 0; i < N_SMALL; i++) {
+      const d = dist(state.smallNodes[i].x, state.smallNodes[i].y, el.x, el.y);
+      if (d < radius) {
+        const f = 1 - d / radius;
+        const seg = state.smallSegs[i];
+        if (seg && !seg.broken) {
+          seg.pain = clamp(seg.pain + voltage * 2.5 * f, 0, 100);
+          seg.sensitivity = clamp(seg.sensitivity + voltage * 1.5 * f, 0, 100);
+          seg.health = clamp(seg.health - voltage * 0.3 * f, 0, 100);
+        }
+        const spasm = voltage * 22 * Math.sin(state.time * 1.5 + i * 0.8);
+        state.smallNodes[i].x += spasm * 0.6 + (Math.random() - 0.5) * voltage * 10;
+        state.smallNodes[i].y += spasm + (Math.random() - 0.5) * voltage * 10;
+      }
+    }
+    for (let i = 0; i < state.largeNodes.length; i++) {
+      const d = dist(state.largeNodes[i].x, state.largeNodes[i].y, el.x, el.y);
+      if (d < radius) {
+        const f = 1 - d / radius;
+        const seg = state.largeSegs[i];
+        if (seg && !seg.broken) {
+          seg.pain = clamp(seg.pain + voltage * 2.0 * f, 0, 100);
+          seg.sensitivity = clamp(seg.sensitivity + voltage * 1.2 * f, 0, 100);
+        }
+        const spasm = voltage * 18 * Math.sin(state.time * 1.5 + i * 0.6);
+        state.largeNodes[i].x += spasm * 0.5 + (Math.random() - 0.5) * voltage * 8;
+        state.largeNodes[i].y += spasm + (Math.random() - 0.5) * voltage * 8;
+      }
+    }
   }
 }
 
@@ -345,16 +382,32 @@ export function stepPhysics(state: PhysicsState) {
     }
 
     if (state.toolType === '注射器' && state.toolActive) {
-      let closestSmall = -1, closestDist = 999;
+      const SYRINGE_RANGE = 55;
+      const rate = state.toolParam1 * 0.012;
+      const stimRate = state.toolParam2 * 0.006;
       for (let i = 0; i < N_SMALL; i++) {
         const d = dist(state.smallNodes[i].x, state.smallNodes[i].y, tp.x, tp.y);
-        if (d < closestDist) { closestDist = d; closestSmall = i; }
+        if (d < SYRINGE_RANGE) {
+          const f = 1 - d / SYRINGE_RANGE;
+          const seg = state.smallSegs[i];
+          if (seg && !seg.broken) {
+            seg.pressure = clamp(seg.pressure + rate * f, 0, 100);
+            seg.pain = clamp(seg.pain + stimRate * 0.5 * f, 0, 100);
+            seg.sensitivity = clamp(seg.sensitivity + stimRate * f, 0, 100);
+            seg.health = clamp(seg.health - rate * 0.015 * f, 0, 100);
+          }
+        }
       }
-      if (closestSmall >= 0 && closestDist < 30) {
-        const seg = state.smallSegs[closestSmall];
-        const rate = state.toolParam1 * 0.003;
-        seg.pressure = clamp(seg.pressure + rate, 0, 100);
-        seg.pain = clamp(seg.pain + 0.01, 0, 100);
+      for (let i = 0; i < N_LARGE; i++) {
+        const d = dist(state.largeNodes[i].x, state.largeNodes[i].y, tp.x, tp.y);
+        if (d < SYRINGE_RANGE * 0.7) {
+          const f = 1 - d / (SYRINGE_RANGE * 0.7);
+          const seg = state.largeSegs[i];
+          if (seg && !seg.broken) {
+            seg.pressure = clamp(seg.pressure + rate * f * 0.6, 0, LARGE_RUPTURE_PRESSURE);
+            seg.sensitivity = clamp(seg.sensitivity + stimRate * f * 0.5, 0, 100);
+          }
+        }
       }
     }
 
@@ -465,35 +518,60 @@ export function stepPhysics(state: PhysicsState) {
     }
 
     if (state.toolType === '电击器' && state.toolActive) {
-      const voltage = state.toolParam1 * 0.01;
-      const radius = 30 + state.toolParam2 * 0.3;
-      for (const el of state.electrodes) {
-        // Small intestine
-        for (let i = 0; i < N_SMALL; i++) {
-          const d = dist(state.smallNodes[i].x, state.smallNodes[i].y, el.x, el.y);
-          if (d < radius) {
-            const seg = state.smallSegs[i];
-            seg.pain = clamp(seg.pain + voltage * 0.5, 0, 100);
-            seg.sensitivity = clamp(seg.sensitivity + voltage * 0.3, 0, 100);
-            state.smallNodes[i].x += (Math.random() - 0.5) * voltage * 5;
-            state.smallNodes[i].y += (Math.random() - 0.5) * voltage * 5;
-          }
-        }
-        // Large intestine + abdominal wall (no nodes — wall shock is purely cosmetic in render)
-        for (let i = 0; i < state.largeNodes.length; i++) {
-          const d = dist(state.largeNodes[i].x, state.largeNodes[i].y, el.x, el.y);
-          if (d < radius) {
-            const seg = state.largeSegs[i];
-            if (seg) {
-              seg.pain = clamp(seg.pain + voltage * 0.4, 0, 100);
-              seg.sensitivity = clamp(seg.sensitivity + voltage * 0.25, 0, 100);
-            }
-            state.largeNodes[i].x += (Math.random() - 0.5) * voltage * 4;
-            state.largeNodes[i].y += (Math.random() - 0.5) * voltage * 4;
-          }
+      applyElectricPhysics(state, state.toolParam1, state.toolParam2);
+    }
+  }
+
+  // === SECONDARY TOOL PHYSICS: tools that persist independently ===
+  // Enema: keeps running even when not the active tool
+  const ENEMA_KEY = '灌肠器';
+  if (state.toolType !== ENEMA_KEY && state.toolStates[ENEMA_KEY]?.active) {
+    const ts = state.toolStates[ENEMA_KEY];
+    const flow = 0.1 + ts.param1 * 0.025;
+    const stim = ts.param2 * 0.005;
+    const headIdx = clamp(state.enemaHeadIdx, 0, state.largeNodes.length - 1);
+    if (!state.enemaInSmall) {
+      const N = state.largeSegs.length;
+      for (let i = 0; i < N; i++) {
+        const seg = state.largeSegs[i];
+        if (seg.broken) continue;
+        const d = Math.abs(i - headIdx);
+        const falloff = Math.max(0, 1 - d / 5);
+        if (falloff > 0) {
+          seg.pressure = clamp(seg.pressure + flow * falloff, 0, 100);
+          seg.sensitivity = clamp(seg.sensitivity + stim * falloff, 0, 100);
+          if (seg.pressure > 60) seg.pain = clamp(seg.pain + stim * 0.6, 0, 100);
         }
       }
+    } else {
+      for (let i = 0; i < state.largeSegs.length; i++) {
+        const seg = state.largeSegs[i];
+        if (!seg.broken) {
+          seg.pressure = clamp(seg.pressure + flow * 0.4, 0, 100);
+          seg.sensitivity = clamp(seg.sensitivity + stim * 0.3, 0, 100);
+        }
+      }
+      const smallHead = clamp(state.enemaSmallHeadIdx, 0, N_SMALL - 1);
+      for (let i = 0; i < state.smallSegs.length; i++) {
+        const seg = state.smallSegs[i];
+        if (seg.broken) continue;
+        const falloff = Math.max(0, 1 - Math.abs(i - smallHead) / 4);
+        if (falloff > 0) {
+          seg.pressure = clamp(seg.pressure + flow * 1.1 * falloff, 0, 100);
+          seg.sensitivity = clamp(seg.sensitivity + stim * 1.3 * falloff, 0, 100);
+          if (seg.pressure > 50) seg.pain = clamp(seg.pain + stim * 0.8 * falloff, 0, 100);
+        }
+      }
+      const periBoost = state.enemaInSmall ? 0.035 : 0.025;
+      state.peristalsisSpeed = Math.max(state.peristalsisSpeed, 1 + ts.param2 * periBoost);
     }
+  }
+
+  // Electric: keeps running even when not the active tool
+  const ELEC_KEY = '电击器';
+  if (state.toolType !== ELEC_KEY && state.toolStates[ELEC_KEY]?.active && state.electrodes.length > 0) {
+    const ts = state.toolStates[ELEC_KEY];
+    applyElectricPhysics(state, ts.param1, ts.param2);
   }
 
   // --- Perforation leakage: perforated segments slowly lose pressure but accumulate pain ---

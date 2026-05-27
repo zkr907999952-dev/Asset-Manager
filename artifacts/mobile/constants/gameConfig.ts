@@ -21,13 +21,11 @@ export const SEGMENT_STIFFNESS = 0.85;
 export const PERISTALSIS_BASE_SPEED = 0.4;
 export const PERISTALSIS_AMPLITUDE = 1.8;
 
-export const PRESSURE_DIFFUSION_RATE = 0.008;
+export const PRESSURE_DIFFUSION_RATE_DEFAULT = 0.004;
 export const PRESSURE_DECAY_RATE = 0.002;
 
-// Large intestine has larger capacity and is harder to rupture
 export const LARGE_RUPTURE_PRESSURE = 180;
 
-// Defaults for user-adjustable simulation parameters
 export const BREATH_AMPLITUDE_DEFAULT = 1.2;
 export const EXPANSION_SCALE_DEFAULT = 1.3;
 
@@ -45,10 +43,18 @@ export type ToolType = typeof TOOLS[keyof typeof TOOLS];
 
 export const TOOL_LIST: { id: ToolType; icon: string; desc: string }[] = [
   { id: TOOLS.METAL_ROD, icon: 'minus', desc: '搅动肠道' },
-  { id: TOOLS.GRAB, icon: 'hand-rock-o', desc: '抓握肠段' },
-  { id: TOOLS.VIBRATOR, icon: 'bolt', desc: '范围振动' },
-  { id: TOOLS.NEEDLE, icon: 'edit', desc: '穿刺刺入' },
-  { id: TOOLS.ELECTRIC, icon: 'flash', desc: '电击刺激' },
-  { id: TOOLS.SYRINGE, icon: 'tint', desc: '药剂注射' },
-  { id: TOOLS.ENEMA, icon: 'tachometer', desc: '灌肠注液' },
+  { id: TOOLS.GRAB, icon: 'anchor', desc: '抓握肠段' },
+  { id: TOOLS.VIBRATOR, icon: 'zap', desc: '范围振动' },
+  { id: TOOLS.NEEDLE, icon: 'edit-2', desc: '穿刺刺入' },
+  { id: TOOLS.ELECTRIC, icon: 'activity', desc: '电击刺激' },
+  { id: TOOLS.SYRINGE, icon: 'droplet', desc: '药剂注射' },
+  { id: TOOLS.ENEMA, icon: 'git-branch', desc: '灌肠注液' },
 ];
+
+export function createDefaultToolStates(): Record<string, { active: boolean; param1: number; param2: number }> {
+  const result: Record<string, { active: boolean; param1: number; param2: number }> = {};
+  for (const key of Object.values(TOOLS)) {
+    result[key] = { active: false, param1: 50, param2: 50 };
+  }
+  return result;
+}
