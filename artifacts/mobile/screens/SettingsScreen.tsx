@@ -77,7 +77,7 @@ export function SettingsScreen({ onMenuPress }: Props) {
   const {
     state,
     setDebugMode, setShowCollisionBoxes,
-    setPeriSpeed, setBreathAmplitude, setExpansionScale,
+    setPeriSpeed, setBreathAmplitude, setExpansionScale, setPressureDiffusionRate,
   } = useGame();
   const topPad = Platform.OS === 'web' ? 67 : insets.top;
   const bottomPad = Platform.OS === 'web' ? 34 : insets.bottom;
@@ -124,6 +124,15 @@ export function SettingsScreen({ onMenuPress }: Props) {
             min={0.0} max={4.0} step={0.1}
             onValueChange={setExpansionScale}
             trackColor={colors.hp}
+          />
+          <View style={[styles.divider, { backgroundColor: colors.border }]} />
+          <SliderRow
+            label="压力扩散速度"
+            value={state.pressureDiffusionRate}
+            displayValue={state.pressureDiffusionRate.toFixed(3)}
+            min={0.001} max={0.02} step={0.001}
+            onValueChange={setPressureDiffusionRate}
+            trackColor={colors.syringeColor ?? '#60c0c0'}
           />
         </View>
 

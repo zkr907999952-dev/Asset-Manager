@@ -1,11 +1,11 @@
 import React from 'react';
 import { View, Text, TouchableOpacity, ScrollView, StyleSheet, Platform } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import Slider from '@react-native-community/slider';
 import { Feather } from '@expo/vector-icons';
 import { useColors } from '@/hooks/useColors';
 import { useGame } from '@/contexts/GameContext';
-import { createInitialPhysicsState } from '@/engine/intestineInit';
+import { GameSlider } from '@/components/GameSlider';
+import { TOOLS } from '@/constants/gameConfig';
 
 interface Props {
   onMenuPress: () => void;
@@ -32,7 +32,7 @@ function SliderItem({ label, value, min, max, unit = '', color, onChange }: Slid
           {Number.isInteger(value) ? value : value.toFixed(1)}{unit}
         </Text>
       </View>
-      <Slider
+      <GameSlider
         style={styles.slider}
         minimumValue={min}
         maximumValue={max}
@@ -43,7 +43,7 @@ function SliderItem({ label, value, min, max, unit = '', color, onChange }: Slid
         maximumTrackTintColor={colors.secondary}
         thumbTintColor={c}
       />
-      <View style={[styles.sliderTrackLabel, {}]}>
+      <View style={styles.sliderTrackLabel}>
         <Text style={[styles.trackEnd, { color: colors.mutedForeground }]}>{min}</Text>
         <Text style={[styles.trackEnd, { color: colors.mutedForeground }]}>{max}</Text>
       </View>
@@ -54,20 +54,11 @@ function SliderItem({ label, value, min, max, unit = '', color, onChange }: Slid
 export function ConsoleScreen({ onMenuPress }: Props) {
   const colors = useColors();
   const insets = useSafeAreaInsets();
-  const { state, setPeriSpeed, physicsRef, syncFromPhysics } = useGame();
+  const { state, setPeriSpeed, physicsRef, syncFromPhysics, setToolState, resetPhysics, resetPositions } = useGame();
   const topPad = Platform.OS === 'web' ? 67 : insets.top;
   const bottomPad = Platform.OS === 'web' ? 34 : insets.bottom;
 
-  const resetPhysics = () => {
-    const fresh = createInitialPhysicsState();
-    const p = physicsRef.current;
-    p.smallNodes = fresh.smallNodes;
-    p.largeNodes = fresh.largeNodes;
-    p.smallSegs = fresh.smallSegs;
-    p.largeSegs = fresh.largeSegs;
-    p.electrodes = [];
-    syncFromPhysics();
-  };
+  const ts = state.toolStates;
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
@@ -78,10 +69,10 @@ export function ConsoleScreen({ onMenuPress }: Props) {
         <Text style={[styles.title, { color: colors.foreground }]}>控制台</Text>
         <TouchableOpacity
           style={[styles.resetBtn, { borderColor: colors.border }]}
-          onPress={resetPhysics}
+          onPress={resetPositions}
         >
           <Feather name="refresh-ccw" size={13} color={colors.mutedForeground} />
-          <Text style={[styles.resetText, { color: colors.mutedForeground }]}>重置</Text>
+          <Text style={[styles.resetText, { color: colors.mutedForeground }]}>复位</Text>
         </TouchableOpacity>
       </View>
 
@@ -106,62 +97,50 @@ export function ConsoleScreen({ onMenuPress }: Props) {
         <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
           <SliderItem
             label="金属棒长度"
-            value={state.toolParam1}
-            min={0}
-            max={100}
-            unit=" mm"
+            value={ts[TOOLS.METAL_ROD]?.param1 ?? 50}
+            min={0} max={100} unit=" mm"
             color={colors.toolColor}
-            onChange={() => {}}
+            onChange={v => setToolState(TOOLS.METAL_ROD, { param1: v })}
           />
           <View style={[styles.divider, { backgroundColor: colors.border }]} />
           <SliderItem
             label="振动器强度"
-            value={state.toolParam1}
-            min={0}
-            max={100}
-            unit="%"
+            value={ts[TOOLS.VIBRATOR]?.param1 ?? 50}
+            min={0} max={100} unit="%"
             color={colors.pleasure ?? '#b060c0'}
-            onChange={() => {}}
+            onChange={v => setToolState(TOOLS.VIBRATOR, { param1: v })}
           />
           <View style={[styles.divider, { backgroundColor: colors.border }]} />
           <SliderItem
             label="长针刺入深度"
-            value={state.toolParam2}
-            min={0}
-            max={100}
-            unit=" mm"
+            value={ts[TOOLS.NEEDLE]?.param2 ?? 50}
+            min={0} max={100} unit=" mm"
             color={colors.needleColor ?? '#aaaaaa'}
-            onChange={() => {}}
+            onChange={v => setToolState(TOOLS.NEEDLE, { param2: v })}
           />
           <View style={[styles.divider, { backgroundColor: colors.border }]} />
           <SliderItem
-            label="药剂注射剂量"
-            value={state.toolParam1}
-            min={0}
-            max={100}
-            unit=" mL"
+            label="注射速度"
+            value={ts[TOOLS.SYRINGE]?.param1 ?? 50}
+            min={0} max={100} unit=" mL/s"
             color={colors.syringeColor ?? '#60c0c0'}
-            onChange={() => {}}
+            onChange={v => setToolState(TOOLS.SYRINGE, { param1: v })}
           />
           <View style={[styles.divider, { backgroundColor: colors.border }]} />
           <SliderItem
-            label="灌肠流速"
-            value={state.toolParam1}
-            min={0}
-            max={100}
-            unit=" mL/s"
+            label="灌肠流量"
+            value={ts[TOOLS.ENEMA]?.param1 ?? 50}
+            min={0} max={200} unit=" mL/s"
             color={colors.enemaColor ?? '#4080ff'}
-            onChange={() => {}}
+            onChange={v => setToolState(TOOLS.ENEMA, { param1: v })}
           />
           <View style={[styles.divider, { backgroundColor: colors.border }]} />
           <SliderItem
             label="电击电压"
-            value={state.toolParam1}
-            min={0}
-            max={100}
-            unit=" V"
+            value={ts[TOOLS.ELECTRIC]?.param1 ?? 50}
+            min={0} max={100} unit=" V"
             color={colors.electricColor ?? '#ffff60'}
-            onChange={() => {}}
+            onChange={v => setToolState(TOOLS.ELECTRIC, { param1: v })}
           />
         </View>
 
@@ -179,6 +158,7 @@ export function ConsoleScreen({ onMenuPress }: Props) {
                 physicsRef.current.largeSegs.forEach(s => {
                   s.health = Math.min(100, s.health + 30);
                 });
+                syncFromPhysics();
               }}
             >
               <Text style={[styles.actionText, { color: colors.hp }]}>恢复肠道</Text>
@@ -189,6 +169,7 @@ export function ConsoleScreen({ onMenuPress }: Props) {
                 physicsRef.current.smallSegs.forEach(s => {
                   s.pain = 0; s.sensitivity = 0; s.pressure = 0;
                 });
+                syncFromPhysics();
               }}
             >
               <Text style={[styles.actionText, { color: colors.pleasure }]}>清除状态</Text>

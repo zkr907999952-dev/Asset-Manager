@@ -17,10 +17,9 @@ import { useGame } from '../contexts/GameContext';
 import { TOOLS } from '../constants/gameConfig';
 
 const NAVEL_X = CANVAS_W / 2;
-// Belly_external.png is 896×1280. Abdomen center ≈ 52% body height.
-// With the image zoomed in (rendered at 440×630 offset -50,-90), the navel lands at:
-// 1280 * 0.52 * (440/896) - 90 ≈ 328 - 90 = 238 → ~52% of canvas height
-const NAVEL_Y_EXTERNAL = CANVAS_H * 0.52;
+// Both views use the same Y so the navel always aligns between external and internal.
+// External image offset adjusted from -90 → -81 to place the navel at CAVITY_CY=248.
+const NAVEL_Y_EXTERNAL = CAVITY_CY;
 const NAVEL_Y_INTERNAL = CAVITY_CY;
 const NAVEL_RADIUS = 28;
 
@@ -340,7 +339,7 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
   // inhale = 0..1 (0 = full exhale, 1 = full inhale)
   const inhale = (breathVal + 1) / 2;
   // Belly image shifts up slightly on inhale, expands vertically — scaled by breathAmplitude
-  const breathImgOffsetY = -90 - inhale * 5 * breathAmp;
+  const breathImgOffsetY = -81 - inhale * 5 * breathAmp;
   const breathImgH = 630 + inhale * 12 * breathAmp;
   // Navel point shifts up with image
   const navelYBreath = NAVEL_Y_EXTERNAL - inhale * 5 * breathAmp;
@@ -352,28 +351,31 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
   const handlePos = state.toolPos;
   const renderTime = Date.now() / 33;
 
+  // Enema is visible when selected OR when its toolState is active (multi-tool coexistence)
+  const enemaVisible = state.activeTool === TOOLS.ENEMA || state.toolStates?.[TOOLS.ENEMA]?.active === true;
+  // Electric is independently active when toolState says so
+  const electricIndepActive = state.toolStates?.[TOOLS.ELECTRIC]?.active === true;
+
   // Enema tube: split into two paths so colors stay correct regardless of mode
   const enemaPathLarge = (() => {
-    if (state.activeTool !== TOOLS.ENEMA || renderLargeNodes.length === 0) return '';
+    if (!enemaVisible || renderLargeNodes.length === 0) return '';
     if (state.enemaInSmall) {
-      // Tube fills entire large intestine: anus (last) → cecum (0)
       return buildSmoothPath([...renderLargeNodes].reverse());
     }
     const headIdx = Math.max(0, Math.min(renderLargeNodes.length - 1, state.enemaHeadIdx));
     return buildSmoothPath(renderLargeNodes.slice(headIdx).reverse());
   })();
   const enemaPathSmall = (() => {
-    if (state.activeTool !== TOOLS.ENEMA || !state.enemaInSmall || renderSmallNodes.length === 0) return '';
+    if (!enemaVisible || !state.enemaInSmall || renderSmallNodes.length === 0) return '';
     const smallHeadIdx = Math.max(0, Math.min(renderSmallNodes.length - 1, state.enemaSmallHeadIdx));
-    // From terminal ileum (N_SMALL-1) toward head
     return buildSmoothPath([...renderSmallNodes.slice(smallHeadIdx)].reverse());
   })();
-  const enemaHead = state.activeTool === TOOLS.ENEMA
+  const enemaHead = enemaVisible
     ? (state.enemaInSmall && renderSmallNodes.length > 0
         ? renderSmallNodes[Math.max(0, Math.min(renderSmallNodes.length - 1, state.enemaSmallHeadIdx))]
         : renderLargeNodes[Math.max(0, Math.min(renderLargeNodes.length - 1, state.enemaHeadIdx))])
     : null;
-  const enemaHeadInSmall = state.activeTool === TOOLS.ENEMA && state.enemaInSmall;
+  const enemaHeadInSmall = enemaVisible && state.enemaInSmall;
 
   const ELEC_CTRL_X = 36;
   const ELEC_CTRL_Y = CANVAS_H - 38;
@@ -423,17 +425,23 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
         {/* ===== BACKGROUND LAYER ===== */}
         {isInternal ? (
           <G>
-            {/* Internal view: no spine bg — only the cavity outline */}
+            {/* Internal view: show the same belly image at low opacity so the two views align */}
+            <SvgImage
+              href={BELLY_EXTERNAL_IMG}
+              x={-50} y={breathImgOffsetY}
+              width={440} height={breathImgH}
+              preserveAspectRatio="xMidYMid slice"
+              opacity={0.18}
+            />
             <Ellipse cx={CAVITY_CX} cy={CAVITY_CY}
               rx={CAVITY_RX * bulge} ry={CAVITY_RY}
-              fill="#120404" stroke="#6a2020" strokeWidth={2} />
+              fill="rgba(18,4,4,0.78)" stroke="#6a2020" strokeWidth={2} />
           </G>
         ) : (
           <G>
             {/* External view: zoomed in on abdomen portion of the belly image.
-                belly_external.png is 896×1280. Rendered at 440×630 with -50,-90 offset
-                to crop to the mid-torso / abdomen area.
-                breathImgOffsetY and breathImgH animate the image up/expand on inhale. */}
+                belly_external.png is 896×1280. Rendered at 440×630 with -50,-81 offset
+                so the navel lands at CAVITY_CY=248, matching the internal view. */}
             <SvgImage
               href={BELLY_EXTERNAL_IMG}
               x={-50} y={breathImgOffsetY}
@@ -582,7 +590,7 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
                 </G>
               );
             })()}
-            {state.showCollisionBoxes && state.activeTool === TOOLS.ENEMA && enemaHead && (
+            {state.showCollisionBoxes && enemaVisible && enemaHead && (
               <Circle cx={enemaHead.x} cy={enemaHead.y} r={LARGE_RADIUS + 2}
                 fill="none" stroke="rgba(100,180,255,0.55)" strokeWidth={0.8} />
             )}
@@ -697,7 +705,7 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
           </G>
         )}
         {/* Enema head nozzle */}
-        {state.activeTool === TOOLS.ENEMA && enemaHead && (
+        {enemaVisible && enemaHead && (
           <G>
             <Circle cx={enemaHead.x} cy={enemaHead.y} r={12}
               fill={enemaHeadInSmall ? 'rgba(200,80,40,0.15)' : 'rgba(50,100,180,0.15)'}
@@ -711,7 +719,7 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
               <Circle cx={renderLargeNodes[0].x} cy={renderLargeNodes[0].y} r={9}
                 fill="none" stroke="rgba(255,200,100,0.6)" strokeWidth={1.5} strokeDasharray="3 2" />
             )}
-            {state.toolActive && (
+            {(state.toolActive || state.toolStates?.[TOOLS.ENEMA]?.active) && (
               <>
                 <Circle cx={enemaHead.x} cy={enemaHead.y} r={14}
                   fill="none"
@@ -725,10 +733,11 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
         )}
 
         {/* Electrodes + wires + controller */}
-        {(state.electrodes.length > 0 || state.activeTool === TOOLS.ELECTRIC) && (
+        {(state.electrodes.length > 0 || state.activeTool === TOOLS.ELECTRIC || electricIndepActive) && (
           <G>
             {state.electrodes.map((el, i) => {
-              const wireColor = state.toolActive ? '#ffee44' : '#888844';
+              const elecActive = state.toolActive || electricIndepActive;
+              const wireColor = elecActive ? '#ffee44' : '#888844';
               if (isInternal) {
                 return (
                   <G key={`wire-${i}`}>
@@ -746,28 +755,34 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
                   stroke={wireColor} strokeWidth={1} strokeOpacity={0.7} />
               );
             })}
-            {state.electrodes.map((el, i) => (
-              <G key={`el-${i}`}>
-                <Circle cx={el.x} cy={el.y} r={6} fill="#ffff00" fillOpacity={0.9}
-                  stroke="#ffaa00" strokeWidth={1} />
-                {state.toolActive && (
-                  <Circle cx={el.x} cy={el.y} r={30 + state.toolParam2 * 0.3}
-                    fill="rgba(255,255,0,0.06)" stroke="rgba(255,255,0,0.3)" strokeWidth={0.8} />
-                )}
-              </G>
-            ))}
-            {state.activeTool === TOOLS.ELECTRIC && (
+            {state.electrodes.map((el, i) => {
+              const elecActive2 = state.toolActive || electricIndepActive;
+              const elecParam2 = state.activeTool === TOOLS.ELECTRIC
+                ? state.toolParam2
+                : (state.toolStates?.[TOOLS.ELECTRIC]?.param2 ?? 50);
+              return (
+                <G key={`el-${i}`}>
+                  <Circle cx={el.x} cy={el.y} r={6} fill="#ffff00" fillOpacity={0.9}
+                    stroke="#ffaa00" strokeWidth={1} />
+                  {elecActive2 && (
+                    <Circle cx={el.x} cy={el.y} r={30 + elecParam2 * 0.3}
+                      fill="rgba(255,255,0,0.06)" stroke="rgba(255,255,0,0.3)" strokeWidth={0.8} />
+                  )}
+                </G>
+              );
+            })}
+            {(state.activeTool === TOOLS.ELECTRIC || electricIndepActive) && (
               <G>
                 <Rect x={ELEC_CTRL_X - 20} y={ELEC_CTRL_Y - 16}
                   width={40} height={32} rx={3}
                   fill="#2a2a2a" stroke="#666" strokeWidth={1.2} />
                 <Circle cx={ELEC_CTRL_X - 8} cy={ELEC_CTRL_Y}
-                  r={3} fill={state.toolActive ? '#ff4040' : '#664040'} />
+                  r={3} fill={(state.toolActive || electricIndepActive) ? '#ff4040' : '#664040'} />
                 <Circle cx={ELEC_CTRL_X + 8} cy={ELEC_CTRL_Y}
-                  r={3} fill={state.toolActive ? '#ffcc40' : '#665540'} />
+                  r={3} fill={(state.toolActive || electricIndepActive) ? '#ffcc40' : '#665540'} />
                 <Rect x={ELEC_CTRL_X - 16} y={ELEC_CTRL_Y + 7}
                   width={32} height={3}
-                  fill={state.toolActive ? '#ffee44' : '#444'} />
+                  fill={(state.toolActive || electricIndepActive) ? '#ffee44' : '#444'} />
               </G>
             )}
           </G>

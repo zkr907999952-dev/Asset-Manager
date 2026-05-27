@@ -19,7 +19,7 @@ interface Props {
 export function SimulationScreen({ onMenuPress }: Props) {
   const colors = useColors();
   const insets = useSafeAreaInsets();
-  const { state, physicsRef, syncFromPhysics, setViewMode, triggerDialogue, resetPhysics } = useGame();
+  const { state, physicsRef, syncFromPhysics, setViewMode, triggerDialogue, resetPositions } = useGame();
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const frameCount = useRef(0);
   const canvasLayout = useRef<{ x: number; y: number; width: number; height: number } | null>(null);
@@ -84,7 +84,6 @@ export function SimulationScreen({ onMenuPress }: Props) {
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
-      {/* Header */}
       <View style={[styles.header, { paddingTop: topPad, backgroundColor: colors.headerBg, borderBottomColor: colors.border }]}>
         <TouchableOpacity style={styles.menuBtn} onPress={onMenuPress}>
           <Feather name="menu" size={20} color={colors.foreground} />
@@ -92,7 +91,7 @@ export function SimulationScreen({ onMenuPress }: Props) {
         <Text style={[styles.title, { color: colors.foreground }]}>腹部交互</Text>
         <TouchableOpacity
           style={[styles.resetBtn, { borderColor: colors.border }]}
-          onPress={resetPhysics}
+          onPress={resetPositions}
         >
           <Feather name="refresh-cw" size={14} color={colors.mutedForeground} />
         </TouchableOpacity>
@@ -116,19 +115,15 @@ export function SimulationScreen({ onMenuPress }: Props) {
         </TouchableOpacity>
       </View>
 
-      {/* Main simulation canvas */}
       <View style={styles.canvasArea}>
         <SimulationCanvas
           canvasLayout={canvasLayout.current}
           onLayout={layout => { canvasLayout.current = layout; }}
         />
-        {/* Status bars overlay */}
         <StatusBars hp={state.hp} pleasure={state.pleasure} />
-        {/* Tool bar overlay */}
         <ToolBar />
       </View>
 
-      {/* Dialogue + tool controls */}
       <View style={[styles.bottomArea, { backgroundColor: colors.background }]}>
         <DialogueBox dialogue={state.currentDialogue} />
         <ToolControls />
@@ -146,15 +141,8 @@ const styles = StyleSheet.create({
     paddingBottom: 10,
     borderBottomWidth: 1,
   },
-  menuBtn: {
-    padding: 6,
-    marginRight: 8,
-  },
-  title: {
-    flex: 1,
-    fontSize: 15,
-    fontFamily: 'Inter_600SemiBold',
-  },
+  menuBtn: { padding: 6, marginRight: 8 },
+  title: { flex: 1, fontSize: 15, fontFamily: 'Inter_600SemiBold' },
   resetBtn: {
     padding: 6,
     marginRight: 6,
@@ -170,15 +158,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     gap: 4,
   },
-  viewToggleText: {
-    fontSize: 11,
-    fontFamily: 'Inter_600SemiBold',
-  },
-  canvasArea: {
-    flex: 1,
-    position: 'relative',
-  },
-  bottomArea: {
-    maxHeight: 200,
-  },
+  viewToggleText: { fontSize: 11, fontFamily: 'Inter_600SemiBold' },
+  canvasArea: { flex: 1, position: 'relative' },
+  bottomArea: { maxHeight: 200 },
 });

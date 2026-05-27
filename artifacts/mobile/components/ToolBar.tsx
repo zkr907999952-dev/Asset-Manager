@@ -41,9 +41,10 @@ export function ToolBar() {
     setExpanded(false);
   };
 
+  const anyToolRunning = Object.values(state.toolStates ?? {}).some(ts => ts.active);
+
   return (
     <View style={styles.wrapper} pointerEvents="box-none">
-      {/* Expanded tool list (slides in from right edge, sitting LEFT of tab) */}
       <Animated.View
         style={[
           styles.panel,
@@ -57,14 +58,16 @@ export function ToolBar() {
       >
         <Text style={[styles.panelTitle, { color: colors.mutedForeground }]}>工具选择</Text>
         {TOOL_LIST.map(tool => {
-          const active = state.activeTool === tool.id;
+          const isSelected = state.activeTool === tool.id;
+          const isRunning = state.toolStates?.[tool.id]?.active === true;
           return (
             <TouchableOpacity
               key={tool.id}
               style={[
                 styles.toolItem,
-                { borderColor: active ? colors.primary : colors.border },
-                active && { backgroundColor: `${colors.primary}22` },
+                { borderColor: isSelected ? colors.primary : isRunning ? `${colors.primary}66` : colors.border },
+                isSelected && { backgroundColor: `${colors.primary}22` },
+                isRunning && !isSelected && { backgroundColor: `${colors.primary}11` },
               ]}
               onPress={() => handleSelect(tool.id)}
               activeOpacity={0.75}
@@ -72,29 +75,35 @@ export function ToolBar() {
               <Feather
                 name={TOOL_ICONS[tool.id] as any || 'circle'}
                 size={14}
-                color={active ? colors.primary : colors.mutedForeground}
+                color={isSelected ? colors.primary : isRunning ? `${colors.primary}aa` : colors.mutedForeground}
               />
               <View style={styles.toolText}>
-                <Text style={[styles.toolName, { color: active ? colors.primary : colors.foreground }]}>
+                <Text style={[styles.toolName, {
+                  color: isSelected ? colors.primary : isRunning ? `${colors.primary}cc` : colors.foreground,
+                }]}>
                   {tool.id}
                 </Text>
                 <Text style={[styles.toolDesc, { color: colors.mutedForeground }]}>{tool.desc}</Text>
               </View>
-              {active && <View style={[styles.activeDot, { backgroundColor: colors.primary }]} />}
+              {isRunning && (
+                <View style={[styles.runningDot, { backgroundColor: colors.primary }]} />
+              )}
+              {isSelected && !isRunning && (
+                <View style={[styles.activeDot, { backgroundColor: colors.mutedForeground }]} />
+              )}
             </TouchableOpacity>
           );
         })}
       </Animated.View>
 
-      {/* Tab trigger — always flush against the right screen edge */}
       <TouchableOpacity
         style={[styles.tab, { backgroundColor: colors.card, borderColor: colors.border }]}
         onPress={() => setExpanded(v => !v)}
         activeOpacity={0.7}
       >
         <Feather name={expanded ? 'chevron-right' : 'tool'} size={16} color={colors.primary} />
-        {state.activeTool && (
-          <View style={[styles.tabDot, { backgroundColor: colors.primary }]} />
+        {(state.activeTool || anyToolRunning) && (
+          <View style={[styles.tabDot, { backgroundColor: anyToolRunning ? colors.primary : colors.mutedForeground }]} />
         )}
       </TouchableOpacity>
     </View>
@@ -163,14 +172,10 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   toolText: { flex: 1 },
-  toolName: {
-    fontSize: 12,
-    fontFamily: 'Inter_600SemiBold',
-  },
-  toolDesc: {
-    fontSize: 9,
-    fontFamily: 'Inter_400Regular',
-    marginTop: 1,
+  toolName: { fontSize: 12, fontFamily: 'Inter_600SemiBold' },
+  toolDesc: { fontSize: 9, fontFamily: 'Inter_400Regular', marginTop: 1 },
+  runningDot: {
+    width: 6, height: 6, borderRadius: 3,
   },
   activeDot: {
     width: 5, height: 5, borderRadius: 3,

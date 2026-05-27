@@ -1,3 +1,4 @@
 - [Intestine node cavity bounds](intestine-cavity-bounds.md) — large intestine nodes must be verified inside the cavity ellipse or segments render outside/above the ellipse.
 - [SVG gradient leak fix](svg-gradient-leak.md) — add a dark background Rect as first SVG child to prevent react-native-svg web gradient rendering artifacts.
 - [Game colors hook](game-colors-hook.md) — all game-specific color tokens (hp, pleasure, toolColor, etc.) live in colors.light; useColors() always returns that palette since there's no dark key.
+- [Multi-tool coexistence + PhysicsState new fields](multi-tool-arch.md) — toolStates/pressureDiffusionRate added to PhysicsState; intestineInit.ts must initialize all new fields or stepPhysics crashes with "cannot read undefined".

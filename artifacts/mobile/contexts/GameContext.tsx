@@ -2,9 +2,13 @@ import React, {
   createContext, useContext, useRef, useState, useCallback,
 } from 'react';
 import { createInitialPhysicsState } from '../engine/intestineInit';
-import type { PhysicsState, SegmentProps } from '../engine/physics';
+import type { PhysicsState } from '../engine/physics';
 import type { ToolType } from '../constants/gameConfig';
-import { TOOLS, N_LARGE, N_SMALL, CAVITY_CX, CAVITY_CY, BREATH_AMPLITUDE_DEFAULT, EXPANSION_SCALE_DEFAULT } from '../constants/gameConfig';
+import {
+  TOOLS, N_LARGE, N_SMALL, CAVITY_CX, CAVITY_CY,
+  BREATH_AMPLITUDE_DEFAULT, EXPANSION_SCALE_DEFAULT,
+  PRESSURE_DIFFUSION_RATE_DEFAULT,
+} from '../constants/gameConfig';
 import { getRandomDialogue, type DialogueTrigger } from '../constants/dialogues';
 
 export type ScreenName = 'character' | 'simulation' | 'console' | 'settings';
@@ -12,6 +16,12 @@ export type ScreenName = 'character' | 'simulation' | 'console' | 'settings';
 export interface RenderSegment {
   health: number; sensitivity: number; pain: number; pressure: number;
   ruptured: boolean; broken: boolean; perforated: boolean;
+}
+
+export interface ToolInstanceState {
+  active: boolean;
+  param1: number;
+  param2: number;
 }
 
 export interface GameUIState {
@@ -25,6 +35,8 @@ export interface GameUIState {
   toolActive: boolean;
   toolParam1: number;
   toolParam2: number;
+  toolStates: Record<string, ToolInstanceState>;
+  pressureDiffusionRate: number;
   viewMode: 'external' | 'internal';
   currentScreen: ScreenName;
   currentDialogue: string | null;
@@ -55,9 +67,11 @@ interface GameContextType {
   setToolActive: (active: boolean) => void;
   setToolParam1: (v: number) => void;
   setToolParam2: (v: number) => void;
+  setToolState: (toolId: string, patch: Partial<ToolInstanceState>) => void;
   setPeriSpeed: (v: number) => void;
   setBreathAmplitude: (v: number) => void;
   setExpansionScale: (v: number) => void;
+  setPressureDiffusionRate: (v: number) => void;
   setDebugMode: (v: boolean) => void;
   setShowCollisionBoxes: (v: boolean) => void;
   syncFromPhysics: () => void;
@@ -71,6 +85,7 @@ interface GameContextType {
   setEnemaInSmall: (v: boolean) => void;
   setEnemaSmallHeadIdx: (idx: number) => void;
   resetPhysics: () => void;
+  resetPositions: () => void;
 }
 
 const GameContext = createContext<GameContextType | null>(null);
@@ -83,6 +98,8 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     hp: 100, pleasure: 0, heartRate: 72,
     navelPierced: false, intestinalRuptures: 0, intestinalBreaks: 0,
     activeTool: null, toolActive: false, toolParam1: 50, toolParam2: 50,
+    toolStates: physicsRef.current.toolStates,
+    pressureDiffusionRate: physicsRef.current.pressureDiffusionRate,
     viewMode: 'internal', currentScreen: 'simulation',
     currentDialogue: null, peristalsisSpeed: 1.0,
     breathAmplitude: BREATH_AMPLITUDE_DEFAULT,
@@ -155,42 +172,109 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
 
   const setActiveTool = useCallback((tool: ToolType | null) => {
     physicsRef.current.toolType = tool;
-    physicsRef.current.toolActive = false;
     physicsRef.current.grabbedNode = null;
-    // Clear lever insertion when switching off lever tools
     physicsRef.current.toolAnchor = null;
     physicsRef.current.toolInserted = false;
-    // Initialize enema head when selecting enema
-    if (tool === TOOLS.ENEMA) {
-      physicsRef.current.enemaHeadIdx = Math.floor(N_LARGE / 2);
-      physicsRef.current.enemaInSmall = false;
-      physicsRef.current.enemaSmallHeadIdx = N_SMALL - 1;
+
+    if (tool) {
+      // Load per-tool persistent state when switching to this tool
+      const ts = physicsRef.current.toolStates[tool] ?? { active: false, param1: 50, param2: 50 };
+      physicsRef.current.toolActive = ts.active;
+      physicsRef.current.toolParam1 = ts.param1;
+      physicsRef.current.toolParam2 = ts.param2;
+      setState(prev => ({
+        ...prev,
+        activeTool: tool,
+        toolActive: ts.active,
+        toolParam1: ts.param1,
+        toolParam2: ts.param2,
+        toolAnchor: null,
+        toolInserted: false,
+        enemaHeadIdx: physicsRef.current.enemaHeadIdx,
+      }));
+    } else {
+      physicsRef.current.toolActive = false;
+      setState(prev => ({
+        ...prev,
+        activeTool: null,
+        toolActive: false,
+        toolAnchor: null,
+        toolInserted: false,
+      }));
     }
-    setState(prev => ({
-      ...prev,
-      activeTool: tool,
-      toolActive: false,
-      toolAnchor: null,
-      toolInserted: false,
-      enemaHeadIdx: physicsRef.current.enemaHeadIdx,
-      enemaInSmall: false,
-      enemaSmallHeadIdx: N_SMALL - 1,
-    }));
   }, []);
 
   const setToolActive = useCallback((active: boolean) => {
     physicsRef.current.toolActive = active;
-    setState(prev => ({ ...prev, toolActive: active }));
+    const toolId = physicsRef.current.toolType;
+    if (toolId && physicsRef.current.toolStates[toolId]) {
+      physicsRef.current.toolStates[toolId].active = active;
+    }
+    setState(prev => {
+      const newToolStates = { ...prev.toolStates };
+      if (prev.activeTool && newToolStates[prev.activeTool]) {
+        newToolStates[prev.activeTool] = { ...newToolStates[prev.activeTool], active };
+      }
+      return { ...prev, toolActive: active, toolStates: newToolStates };
+    });
   }, []);
 
   const setToolParam1 = useCallback((v: number) => {
     physicsRef.current.toolParam1 = v;
-    setState(prev => ({ ...prev, toolParam1: v }));
+    const toolId = physicsRef.current.toolType;
+    if (toolId && physicsRef.current.toolStates[toolId]) {
+      physicsRef.current.toolStates[toolId].param1 = v;
+    }
+    setState(prev => {
+      const newToolStates = { ...prev.toolStates };
+      if (prev.activeTool && newToolStates[prev.activeTool]) {
+        newToolStates[prev.activeTool] = { ...newToolStates[prev.activeTool], param1: v };
+      }
+      return { ...prev, toolParam1: v, toolStates: newToolStates };
+    });
   }, []);
 
   const setToolParam2 = useCallback((v: number) => {
     physicsRef.current.toolParam2 = v;
-    setState(prev => ({ ...prev, toolParam2: v }));
+    const toolId = physicsRef.current.toolType;
+    if (toolId && physicsRef.current.toolStates[toolId]) {
+      physicsRef.current.toolStates[toolId].param2 = v;
+    }
+    setState(prev => {
+      const newToolStates = { ...prev.toolStates };
+      if (prev.activeTool && newToolStates[prev.activeTool]) {
+        newToolStates[prev.activeTool] = { ...newToolStates[prev.activeTool], param2: v };
+      }
+      return { ...prev, toolParam2: v, toolStates: newToolStates };
+    });
+  }, []);
+
+  const setToolState = useCallback((toolId: string, patch: Partial<ToolInstanceState>) => {
+    if (physicsRef.current.toolStates[toolId]) {
+      physicsRef.current.toolStates[toolId] = { ...physicsRef.current.toolStates[toolId], ...patch };
+    }
+    setState(prev => {
+      const newToolStates = { ...prev.toolStates };
+      if (newToolStates[toolId]) {
+        newToolStates[toolId] = { ...newToolStates[toolId], ...patch };
+      }
+      const updates: Partial<GameUIState> = { toolStates: newToolStates };
+      if (prev.activeTool === toolId) {
+        if (patch.active !== undefined) {
+          updates.toolActive = patch.active;
+          physicsRef.current.toolActive = patch.active;
+        }
+        if (patch.param1 !== undefined) {
+          updates.toolParam1 = patch.param1;
+          physicsRef.current.toolParam1 = patch.param1;
+        }
+        if (patch.param2 !== undefined) {
+          updates.toolParam2 = patch.param2;
+          physicsRef.current.toolParam2 = patch.param2;
+        }
+      }
+      return { ...prev, ...updates };
+    });
   }, []);
 
   const setPeriSpeed = useCallback((v: number) => {
@@ -205,6 +289,11 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
   const setExpansionScale = useCallback((v: number) => {
     physicsRef.current.expansionScale = v;
     setState(prev => ({ ...prev, expansionScale: v }));
+  }, []);
+
+  const setPressureDiffusionRate = useCallback((v: number) => {
+    physicsRef.current.pressureDiffusionRate = v;
+    setState(prev => ({ ...prev, pressureDiffusionRate: v }));
   }, []);
 
   const setDebugMode = useCallback((v: boolean) => {
@@ -274,6 +363,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     setState(prev => ({ ...prev, enemaSmallHeadIdx: clamped }));
   }, []);
 
+  // Full reset — resets everything including tool states and HP
   const resetPhysics = useCallback(() => {
     const fresh = createInitialPhysicsState();
     physicsRef.current = fresh;
@@ -282,6 +372,8 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       hp: 100, pleasure: 0, heartRate: 72,
       navelPierced: false, intestinalRuptures: 0, intestinalBreaks: 0,
       activeTool: null, toolActive: false, toolParam1: 50, toolParam2: 50,
+      toolStates: fresh.toolStates,
+      pressureDiffusionRate: fresh.pressureDiffusionRate,
       currentDialogue: null, peristalsisSpeed: 1.0,
       breathAmplitude: BREATH_AMPLITUDE_DEFAULT,
       expansionScale: EXPANSION_SCALE_DEFAULT,
@@ -297,16 +389,37 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     }));
   }, []);
 
+  // Positions-only reset — resets node coordinates and segment physics, keeps everything else
+  const resetPositions = useCallback(() => {
+    const fresh = createInitialPhysicsState();
+    const p = physicsRef.current;
+    p.smallNodes = fresh.smallNodes;
+    p.largeNodes = fresh.largeNodes;
+    p.smallSegs = fresh.smallSegs;
+    p.largeSegs = fresh.largeSegs;
+    p.time = 0;
+    // Preserve: toolStates, toolType, toolActive, toolParam1/2, navelPierced, electrodes, settings
+    setState(prev => ({
+      ...prev,
+      renderSmallNodes: fresh.smallNodes.map(n => ({ x: n.x, y: n.y })),
+      renderLargeNodes: fresh.largeNodes.map(n => ({ x: n.x, y: n.y })),
+      renderSmallSegs: fresh.smallSegs.map(s => ({ ...s })),
+      renderLargeSegs: fresh.largeSegs.map(s => ({ ...s })),
+      intestinalRuptures: 0,
+      intestinalBreaks: 0,
+    }));
+  }, []);
+
   return (
     <GameContext.Provider value={{
       state, physicsRef,
       setScreen, setViewMode, setActiveTool, setToolActive,
-      setToolParam1, setToolParam2, setPeriSpeed,
-      setBreathAmplitude, setExpansionScale,
+      setToolParam1, setToolParam2, setToolState, setPeriSpeed,
+      setBreathAmplitude, setExpansionScale, setPressureDiffusionRate,
       setDebugMode, setShowCollisionBoxes,
       syncFromPhysics, triggerDialogue, addElectrode, clearElectrodes,
       insertViaNavel, retractTool, setNavelPierced, setEnemaHeadIdx,
-      setEnemaInSmall, setEnemaSmallHeadIdx, resetPhysics,
+      setEnemaInSmall, setEnemaSmallHeadIdx, resetPhysics, resetPositions,
     }}>
       {children}
     </GameContext.Provider>
