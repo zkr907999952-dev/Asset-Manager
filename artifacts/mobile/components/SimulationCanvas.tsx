@@ -355,7 +355,26 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
       const pos = tpc(locationX, locationY);
 
       if (s.activeTool === TOOLS.ENEMA) {
-        // Update animation target as user drags
+        // Drag physically pulls nearby intestine nodes (original drag mode)
+        const prevPos = physicsRef.current.toolPos;
+        if (prevPos) {
+          const dragDx = pos.x - prevPos.x;
+          const dragDy = pos.y - prevPos.y;
+          const pullRadius = 50;
+          const targetNodes = s.enemaInSmall
+            ? physicsRef.current.smallNodes
+            : physicsRef.current.largeNodes;
+          targetNodes.forEach(n => {
+            if (n.pinned) return;
+            const d = Math.hypot(n.x - pos.x, n.y - pos.y);
+            if (d < pullRadius && d > 0.1) {
+              const f = (1 - d / pullRadius) * 0.28;
+              n.x += dragDx * f;
+              n.y += dragDy * f;
+            }
+          });
+        }
+        // Set animation target (smooth head movement with speed cap via 300ms interval)
         const { setEnemaTarget: setTgt } = hrRef.current;
         if (s.enemaInSmall) {
           const cecum = physicsRef.current.largeNodes[0];
@@ -414,10 +433,8 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
   const breathVal = useBreathAnimation(state.heartRate);
   const breathAmp = state.breathAmplitude;
   const inhale = (breathVal + 1) / 2;
-  // Image enlarged to 500×715 (14% up-scale from 440×630), x=-80 centers it (canvas center=170).
-  // y=-189 places the character's navel at canvas y=248 (CAVITY_CY): navel_fraction=0.609,
-  // 0.609*715=435, 435-187=248. The breathImg shifts upward on inhale in sync with navelYBreath.
-  const breathImgOffsetY = -189 - inhale * 5 * breathAmp;
+  // Image: x=-80 centers 500px img on 340px canvas. Adjusted y downward per user feedback.
+  const breathImgOffsetY = -170 - inhale * 5 * breathAmp;
   const breathImgH = 715 + inhale * 14 * breathAmp;
   const navelYBreath = NAVEL_Y_EXTERNAL - inhale * 5 * breathAmp;
   const breathOverlayScale = 1 + inhale * 0.025 * breathAmp;
@@ -428,13 +445,25 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
   const enemaVisible = state.activeTool === TOOLS.ENEMA || state.toolStates?.[TOOLS.ENEMA]?.active === true;
   const electricIndepActive = state.toolStates?.[TOOLS.ELECTRIC]?.active === true;
 
+  // Tube path: from head position outward toward anus (entry point)
+  // This represents the physical tube that has been inserted
   const enemaPathLarge = (() => {
     if (!enemaVisible || renderLargeNodes.length === 0) return '';
-    if (state.enemaInSmall) {
-      return buildSmoothPath([...renderLargeNodes].reverse());
-    }
     const headIdx = Math.max(0, Math.min(renderLargeNodes.length - 1, state.enemaHeadIdx));
-    return buildSmoothPath(renderLargeNodes.slice(headIdx).reverse());
+    // slice from head to anus end (higher indices = toward anus)
+    return buildSmoothPath(renderLargeNodes.slice(headIdx));
+  })();
+  // Fluid fill path: fluid emanates FROM the head toward cecum (index 0)
+  // Only visible when enema is actively injecting (toolActive)
+  const enemaFillPath = (() => {
+    if (!enemaVisible || renderLargeNodes.length === 0) return '';
+    if (state.enemaInSmall) return '';
+    const isActive = state.toolActive || state.toolStates?.[TOOLS.ENEMA]?.active === true;
+    if (!isActive) return '';
+    const headIdx = Math.max(0, Math.min(renderLargeNodes.length - 1, state.enemaHeadIdx));
+    if (headIdx <= 1) return '';
+    // Fill from cecum (0) to head — fluid accumulating ahead of the tip
+    return buildSmoothPath(renderLargeNodes.slice(0, headIdx + 1));
   })();
   const enemaPathSmall = (() => {
     if (!enemaVisible || !state.enemaInSmall || renderSmallNodes.length === 0) return '';
@@ -583,6 +612,26 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
                 </G>
               );
             })}
+
+            {/* Ileocecal junction — visible tube connecting terminal ileum to cecum */}
+            {renderSmallNodes.length > 0 && renderLargeNodes.length > 0 && (() => {
+              const ileum = renderSmallNodes[renderSmallNodes.length - 1];
+              const cecum = renderLargeNodes[0];
+              const seg0 = renderSmallSegs[renderSmallSegs.length - 1];
+              const col = segmentColor(
+                seg0?.health ?? 100, seg0?.pain ?? 0, seg0?.pressure ?? 0,
+                seg0?.ruptured ?? false, seg0?.broken ?? false, seg0?.perforated ?? false, false,
+              );
+              const junctionW = (SMALL_RADIUS + LARGE_RADIUS) * 0.75;
+              return (
+                <G key="ileocecal">
+                  <Line x1={ileum.x} y1={ileum.y} x2={cecum.x} y2={cecum.y}
+                    stroke={col} strokeWidth={junctionW} strokeLinecap="round" />
+                  <Line x1={ileum.x} y1={ileum.y} x2={cecum.x} y2={cecum.y}
+                    stroke="rgba(255,210,185,0.18)" strokeWidth={junctionW * 0.5} strokeLinecap="round" />
+                </G>
+              );
+            })()}
 
             {/* Large intestine cecum end-cap */}
             {renderLargeNodes.length > 0 && (() => {
@@ -871,12 +920,21 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
           </G>
         )}
 
-        {/* Enema tube */}
+        {/* Enema tube (inserted section from head to anus) */}
         {state.activeTool === TOOLS.ENEMA && enemaPathLarge !== '' && (
           <G>
-            <Path d={enemaPathLarge} stroke="rgba(80,140,220,0.62)" strokeWidth={6}
+            <Path d={enemaPathLarge} stroke="rgba(60,110,200,0.55)" strokeWidth={5}
               fill="none" strokeLinecap="round" />
-            <Path d={enemaPathLarge} stroke="rgba(180,220,255,0.5)" strokeWidth={2.5}
+            <Path d={enemaPathLarge} stroke="rgba(160,210,255,0.45)" strokeWidth={2}
+              fill="none" strokeLinecap="round" />
+          </G>
+        )}
+        {/* Enema fluid fill (fluid accumulating ahead of head toward cecum) */}
+        {state.activeTool === TOOLS.ENEMA && enemaFillPath !== '' && (
+          <G>
+            <Path d={enemaFillPath} stroke="rgba(100,200,255,0.55)" strokeWidth={7}
+              fill="none" strokeLinecap="round" />
+            <Path d={enemaFillPath} stroke="rgba(200,240,255,0.4)" strokeWidth={3}
               fill="none" strokeLinecap="round" />
           </G>
         )}
@@ -919,7 +977,7 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
         {(state.electrodes.length > 0 || state.activeTool === TOOLS.ELECTRIC || electricIndepActive) && (
           <G>
             {state.electrodes.map((el, i) => {
-              const elecActive = state.toolActive || electricIndepActive;
+              const elecActive = (state.activeTool === TOOLS.ELECTRIC && state.toolActive) || electricIndepActive;
               const wireColor = elecActive ? '#ffee44' : '#888844';
               if (isInternal) {
                 return (
@@ -932,14 +990,17 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
                   </G>
                 );
               }
+              // External view: only show one navel-to-controller wire (not per-electrode)
+              if (i !== 0) return null;
               return (
-                <Line key={`wire-${i}`} x1={el.x} y1={el.y}
+                <Line key="wire-ext-navel"
+                  x1={NAVEL_X} y1={NAVEL_Y_EXTERNAL}
                   x2={ELEC_CTRL_X} y2={ELEC_CTRL_Y}
-                  stroke={wireColor} strokeWidth={1} strokeOpacity={0.7} />
+                  stroke={wireColor} strokeWidth={1.2} strokeOpacity={0.75} />
               );
             })}
             {state.electrodes.map((el, i) => {
-              const elecActive2 = state.toolActive || electricIndepActive;
+              const elecActive2 = (state.activeTool === TOOLS.ELECTRIC && state.toolActive) || electricIndepActive;
               const elecParam2 = state.activeTool === TOOLS.ELECTRIC
                 ? state.toolParam2
                 : (state.toolStates?.[TOOLS.ELECTRIC]?.param2 ?? 50);
@@ -960,12 +1021,12 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
                   width={40} height={32} rx={3}
                   fill="#2a2a2a" stroke="#666" strokeWidth={1.2} />
                 <Circle cx={ELEC_CTRL_X - 8} cy={ELEC_CTRL_Y}
-                  r={3} fill={(state.toolActive || electricIndepActive) ? '#ff4040' : '#664040'} />
+                  r={3} fill={((state.activeTool === TOOLS.ELECTRIC && state.toolActive) || electricIndepActive) ? '#ff4040' : '#664040'} />
                 <Circle cx={ELEC_CTRL_X + 8} cy={ELEC_CTRL_Y}
-                  r={3} fill={(state.toolActive || electricIndepActive) ? '#ffcc40' : '#665540'} />
+                  r={3} fill={((state.activeTool === TOOLS.ELECTRIC && state.toolActive) || electricIndepActive) ? '#ffcc40' : '#665540'} />
                 <Rect x={ELEC_CTRL_X - 16} y={ELEC_CTRL_Y + 7}
                   width={32} height={3}
-                  fill={(state.toolActive || electricIndepActive) ? '#ffee44' : '#444'} />
+                  fill={((state.activeTool === TOOLS.ELECTRIC && state.toolActive) || electricIndepActive) ? '#ffee44' : '#444'} />
               </G>
             )}
           </G>

@@ -27,14 +27,13 @@ export function ToolControls() {
   if (!params) return null;
 
   return (
-    <View style={[styles.container, { backgroundColor: colors.card, borderTopColor: colors.border }]}>
-      {/* Tool name + toggle */}
+    <View style={[styles.container, { borderTopColor: `${colors.border}66` }]}>
       <View style={styles.header}>
         <Text style={[styles.toolName, { color: colors.primary }]}>{activeTool}</Text>
         <View style={styles.headerRight}>
           {activeTool === TOOLS.ELECTRIC && (
             <TouchableOpacity
-              style={[styles.clearBtn, { borderColor: colors.border }]}
+              style={[styles.clearBtn, { borderColor: `${colors.border}88` }]}
               onPress={clearElectrodes}
             >
               <Feather name="trash-2" size={12} color={colors.mutedForeground} />
@@ -44,8 +43,8 @@ export function ToolControls() {
           <TouchableOpacity
             style={[
               styles.toggleBtn,
-              { backgroundColor: toolActive ? colors.primary : colors.secondary,
-                borderColor: toolActive ? colors.primary : colors.border },
+              { backgroundColor: toolActive ? `${colors.primary}cc` : `${colors.secondary}cc`,
+                borderColor: toolActive ? `${colors.primary}88` : `${colors.border}66` },
             ]}
             onPress={() => setToolActive(!toolActive)}
             activeOpacity={0.8}
@@ -56,7 +55,7 @@ export function ToolControls() {
             </Text>
           </TouchableOpacity>
           <TouchableOpacity
-            style={[styles.closeBtn, { borderColor: colors.border }]}
+            style={[styles.closeBtn, { borderColor: `${colors.border}66` }]}
             onPress={() => setActiveTool(null)}
           >
             <Feather name="x" size={14} color={colors.mutedForeground} />
@@ -64,7 +63,6 @@ export function ToolControls() {
         </View>
       </View>
 
-      {/* Sliders */}
       <View style={styles.sliders}>
         <View style={styles.sliderRow}>
           <Text style={[styles.sliderLabel, { color: colors.mutedForeground }]}>
@@ -106,6 +104,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 10,
     borderTopWidth: 1,
+    backgroundColor: 'rgba(10, 3, 3, 0.85)',
   },
   header: {
     flexDirection: 'row',

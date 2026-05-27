@@ -9,23 +9,31 @@ interface Props {
 export function DialogueBox({ dialogue }: Props) {
   const colors = useColors();
   const opacity = useRef(new Animated.Value(0)).current;
+  const translateY = useRef(new Animated.Value(8)).current;
   const visible = useRef(false);
 
   useEffect(() => {
     if (dialogue) {
       visible.current = true;
-      Animated.timing(opacity, { toValue: 1, duration: 200, useNativeDriver: true }).start();
+      Animated.parallel([
+        Animated.timing(opacity, { toValue: 1, duration: 200, useNativeDriver: true }),
+        Animated.timing(translateY, { toValue: 0, duration: 200, useNativeDriver: true }),
+      ]).start();
     } else {
-      Animated.timing(opacity, { toValue: 0, duration: 400, useNativeDriver: true }).start(
-        () => { visible.current = false; }
-      );
+      Animated.parallel([
+        Animated.timing(opacity, { toValue: 0, duration: 350, useNativeDriver: true }),
+        Animated.timing(translateY, { toValue: 6, duration: 350, useNativeDriver: true }),
+      ]).start(() => { visible.current = false; });
     }
   }, [dialogue]);
 
   if (!dialogue && !visible.current) return null;
 
   return (
-    <Animated.View style={[styles.container, { opacity, borderColor: colors.border, backgroundColor: `${colors.card}ee` }]}>
+    <Animated.View style={[
+      styles.container,
+      { opacity, transform: [{ translateY }], borderColor: `${colors.border}aa` },
+    ]}>
       <View style={[styles.indicator, { backgroundColor: colors.primary }]} />
       <Text style={[styles.text, { color: colors.foreground }]}>{dialogue}</Text>
     </Animated.View>
@@ -37,16 +45,17 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'flex-start',
     paddingHorizontal: 14,
-    paddingVertical: 10,
+    paddingVertical: 9,
     borderTopWidth: 1,
-    minHeight: 44,
+    minHeight: 40,
     gap: 10,
+    backgroundColor: 'rgba(8, 2, 2, 0.78)',
   },
   indicator: {
     width: 3,
     height: '100%' as any,
     borderRadius: 2,
-    minHeight: 24,
+    minHeight: 22,
     marginTop: 2,
   },
   text: {

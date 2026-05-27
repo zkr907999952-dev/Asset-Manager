@@ -48,26 +48,28 @@ export function StatusBars({ hp, pleasure }: Props) {
 const styles = StyleSheet.create({
   wrapper: {
     position: 'absolute',
-    right: 38,
+    right: 8,
     top: 54,
-    width: 14,
-    gap: 10,
+    width: 32,
+    gap: 8,
     alignItems: 'center',
     zIndex: 3,
+    overflow: 'visible',
   },
   barContainer: {
     alignItems: 'center',
     gap: 3,
+    overflow: 'visible',
   },
   barLabel: {
-    fontSize: 8,
+    fontSize: 9,
     fontFamily: 'Inter_700Bold',
     letterSpacing: 0.5,
-    writingDirection: 'ltr',
+    textAlign: 'center',
   },
   barTrack: {
     width: 10,
-    height: 110,
+    height: 100,
     borderRadius: 5,
     overflow: 'hidden',
     justifyContent: 'flex-end',
@@ -78,8 +80,9 @@ const styles = StyleSheet.create({
     minHeight: 2,
   },
   barValue: {
-    fontSize: 7,
+    fontSize: 8,
     fontFamily: 'Inter_600SemiBold',
+    textAlign: 'center',
   },
   separator: { width: 8, height: 1 },
 });

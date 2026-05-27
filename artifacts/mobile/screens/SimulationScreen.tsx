@@ -115,6 +115,7 @@ export function SimulationScreen({ onMenuPress }: Props) {
         </TouchableOpacity>
       </View>
 
+      {/* Canvas fills all remaining space — UI overlays float on top */}
       <View style={styles.canvasArea}>
         <SimulationCanvas
           canvasLayout={canvasLayout.current}
@@ -122,11 +123,12 @@ export function SimulationScreen({ onMenuPress }: Props) {
         />
         <StatusBars hp={state.hp} pleasure={state.pleasure} />
         <ToolBar />
-      </View>
 
-      <View style={[styles.bottomArea, { backgroundColor: colors.background }]}>
-        <DialogueBox dialogue={state.currentDialogue} />
-        <ToolControls />
+        {/* Floating bottom overlay: dialogue + tool controls */}
+        <View style={styles.bottomOverlay} pointerEvents="box-none">
+          <DialogueBox dialogue={state.currentDialogue} />
+          <ToolControls />
+        </View>
       </View>
     </View>
   );
@@ -159,6 +161,15 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   viewToggleText: { fontSize: 11, fontFamily: 'Inter_600SemiBold' },
-  canvasArea: { flex: 1, position: 'relative' },
-  bottomArea: { maxHeight: 200 },
+  canvasArea: {
+    flex: 1,
+    position: 'relative',
+  },
+  bottomOverlay: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    zIndex: 10,
+  },
 });
