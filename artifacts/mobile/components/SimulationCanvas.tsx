@@ -21,13 +21,12 @@ const NAVEL_Y_EXTERNAL = CAVITY_CY;
 const NAVEL_Y_INTERNAL = CAVITY_CY;
 const NAVEL_RADIUS = 28;
 
-function segmentColor(health: number, pain: number, pressure: number, ruptured: boolean, broken: boolean, perforated: boolean, isLarge: boolean): string {
+function segmentColor(health: number, pain: number, pressure: number, ruptured: boolean, broken: boolean, perforated: boolean, isLarge: boolean, transplantBase?: { r: number; g: number; b: number }): string {
   if (broken) return '#bb0808';
   if (ruptured) return '#d42020';
-  // Anime art-style palette: warm salmon-pink for small, terracotta for large
-  const baseR = isLarge ? 210 : 245;
-  const baseG = isLarge ? 118 : 168;
-  const baseB = isLarge ? 92 : 150;
+  const baseR = transplantBase ? transplantBase.r : (isLarge ? 210 : 245);
+  const baseG = transplantBase ? transplantBase.g : (isLarge ? 118 : 168);
+  const baseB = transplantBase ? transplantBase.b : (isLarge ? 92 : 150);
   const healthFactor = health / 100;
   const painFactor = pain / 100;
   const pressFactor = Math.min(1, pressure / 80);
@@ -207,6 +206,7 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
     state, physicsRef, triggerDialogue, addElectrode,
     insertViaNavel, retractTool, setNavelPierced, setEnemaHeadIdx,
     setEnemaInSmall, setEnemaSmallHeadIdx, setEnemaTarget,
+    toggleMesenteryNode,
   } = useGame();
   const lastDialogueTime = useRef(0);
   const isDragging = useRef(false);
@@ -237,6 +237,7 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
     insertViaNavel,
     setNavelPierced,
     triggerDialogue,
+    toggleMesenteryNode,
   });
   hrRef.current.state = state;
   hrRef.current.toPhysicsCoords = toPhysicsCoords;
@@ -248,6 +249,7 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
   hrRef.current.insertViaNavel = insertViaNavel;
   hrRef.current.setNavelPierced = setNavelPierced;
   hrRef.current.triggerDialogue = triggerDialogue;
+  hrRef.current.toggleMesenteryNode = toggleMesenteryNode;
 
   const findNearestLargeNodeIdx = (pos: { x: number; y: number }) => {
     let best = -1, bestD = 9999;
@@ -272,10 +274,23 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
     onMoveShouldSetPanResponder: () => true,
     onPanResponderGrant: (evt) => {
       const { state: s, toPhysicsCoords: tpc, addElectrode: ae, setEnemaHeadIdx: sehi,
-              insertViaNavel: ivn, setNavelPierced: snp, triggerDialogue: td } = hrRef.current;
+              insertViaNavel: ivn, setNavelPierced: snp, triggerDialogue: td,
+              toggleMesenteryNode: tmn } = hrRef.current;
       isDragging.current = true;
       const { locationX, locationY } = evt.nativeEvent;
       const pos = tpc(locationX, locationY);
+
+      // Mesentery selection mode: tapping near large nodes toggles selection
+      if (s.mesenterySelectionMode) {
+        const nodes = physicsRef.current.largeNodes;
+        for (let i = 0; i < nodes.length; i++) {
+          if (!nodes[i].pinned && Math.hypot(nodes[i].x - pos.x, nodes[i].y - pos.y) < 28) {
+            tmn(i);
+          }
+        }
+        return;
+      }
+
       const isInternal = s.viewMode === 'internal';
       const navelY = isInternal ? NAVEL_Y_INTERNAL : NAVEL_Y_EXTERNAL;
       const distToNavel = Math.hypot(pos.x - NAVEL_X, pos.y - navelY);
@@ -423,6 +438,9 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
   const {
     renderSmallNodes, renderLargeNodes, renderSmallSegs, renderLargeSegs,
     periScaleSmall, periScaleLarge,
+    repairMarks, sutureMarks, largeRepairMarks, largeSutureMarks,
+    smallTransplantColor, largeTransplantColor,
+    mesenterySelectionMode, mesenterySelectedNodes,
   } = state;
   const isInternal = state.viewMode === 'internal';
 
@@ -608,7 +626,7 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
               if (!d) return null;
               const lPeriScale = (periScaleLarge?.[i] ?? 1);
               const w = LARGE_RADIUS * lPeriScale * 2 + (seg.pressure / LARGE_RUPTURE_PRESSURE) * LARGE_RADIUS * expansionScale;
-              const col = segmentColor(seg.health, seg.pain, seg.pressure, seg.ruptured, seg.broken, seg.perforated, true);
+              const col = segmentColor(seg.health, seg.pain, seg.pressure, seg.ruptured, seg.broken, seg.perforated, true, largeTransplantColor ?? undefined);
               return (
                 <G key={`lg-${i}`}>
                   <Path d={d} stroke={col} strokeWidth={w} fill="none" strokeLinecap="round" strokeLinejoin="round" />
@@ -677,7 +695,23 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
               );
             })}
 
-            {/* ===== SMALL INTESTINE — smooth bezier segments ===== */}
+            {/* ===== SMALL INTESTINE — outline casing pass (drawn first, behind fill) ===== */}
+            {renderSmallSegs.map((seg, i) => {
+              if (i >= renderSmallNodes.length - 1) return null;
+              if (seg.broken) return null;
+              const d = buildSmoothSegPath(renderSmallNodes, i);
+              if (!d) return null;
+              const sPeriScale = (periScaleSmall?.[i] ?? 1);
+              const w = SMALL_RADIUS * sPeriScale * 2 + (seg.pressure / 100) * SMALL_RADIUS * expansionScale;
+              return (
+                <Path key={`sm-out-${i}`} d={d}
+                  stroke="rgba(175, 100, 80, 0.55)"
+                  strokeWidth={w + 3.5}
+                  fill="none" strokeLinecap="round" strokeLinejoin="round" />
+              );
+            })}
+
+            {/* ===== SMALL INTESTINE — fill segments ===== */}
             {renderSmallSegs.map((seg, i) => {
               if (i >= renderSmallNodes.length - 1) return null;
               if (seg.broken) return null; // visual gap at break
@@ -685,7 +719,7 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
               if (!d) return null;
               const sPeriScale = (periScaleSmall?.[i] ?? 1);
               const w = SMALL_RADIUS * sPeriScale * 2 + (seg.pressure / 100) * SMALL_RADIUS * expansionScale;
-              const col = segmentColor(seg.health, seg.pain, seg.pressure, seg.ruptured, seg.broken, seg.perforated, false);
+              const col = segmentColor(seg.health, seg.pain, seg.pressure, seg.ruptured, seg.broken, seg.perforated, false, smallTransplantColor ?? undefined);
               return (
                 <G key={`sm-${i}`}>
                   <Path d={d} stroke={col} strokeWidth={w} fill="none" strokeLinecap="round" strokeLinejoin="round" />
@@ -772,6 +806,86 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
                   r={2.5} fill="#440000" stroke="#aa3030" strokeWidth={0.8} />
               ) : null
             )}
+
+            {/* ===== REPAIR MARKS — + cross at healed perforation sites ===== */}
+            {(repairMarks ?? []).map(i => {
+              const n = renderSmallNodes[i];
+              if (!n) return null;
+              return (
+                <G key={`rep-${i}`}>
+                  <Line x1={n.x - 4} y1={n.y} x2={n.x + 4} y2={n.y} stroke="rgba(220,230,180,0.85)" strokeWidth={1.5} strokeLinecap="round" />
+                  <Line x1={n.x} y1={n.y - 4} x2={n.x} y2={n.y + 4} stroke="rgba(220,230,180,0.85)" strokeWidth={1.5} strokeLinecap="round" />
+                  <Circle cx={n.x} cy={n.y} r={5.5} fill="none" stroke="rgba(200,215,150,0.45)" strokeWidth={1} />
+                </G>
+              );
+            })}
+            {(largeRepairMarks ?? []).map(i => {
+              const n = renderLargeNodes[i];
+              if (!n) return null;
+              return (
+                <G key={`lrep-${i}`}>
+                  <Line x1={n.x - 5} y1={n.y} x2={n.x + 5} y2={n.y} stroke="rgba(220,230,180,0.85)" strokeWidth={2} strokeLinecap="round" />
+                  <Line x1={n.x} y1={n.y - 5} x2={n.x} y2={n.y + 5} stroke="rgba(220,230,180,0.85)" strokeWidth={2} strokeLinecap="round" />
+                  <Circle cx={n.x} cy={n.y} r={7} fill="none" stroke="rgba(200,215,150,0.4)" strokeWidth={1.2} />
+                </G>
+              );
+            })}
+
+            {/* ===== SUTURE MARKS — stitch dashes at healed break sites ===== */}
+            {(sutureMarks ?? []).map(i => {
+              const nodeA = renderSmallNodes[i];
+              const nodeB = renderSmallNodes[i + 1];
+              if (!nodeA || !nodeB) return null;
+              const mx = (nodeA.x + nodeB.x) / 2;
+              const my = (nodeA.y + nodeB.y) / 2;
+              const ang = Math.atan2(nodeB.y - nodeA.y, nodeB.x - nodeA.x);
+              const nx = Math.sin(ang) * 5, ny = -Math.cos(ang) * 5;
+              return (
+                <G key={`sut-${i}`}>
+                  {[-6, -2, 2, 6].map(offset => (
+                    <Line key={offset}
+                      x1={mx + Math.cos(ang) * offset - nx * 0.6} y1={my + Math.sin(ang) * offset - ny * 0.6}
+                      x2={mx + Math.cos(ang) * offset + nx * 0.6} y2={my + Math.sin(ang) * offset + ny * 0.6}
+                      stroke="rgba(220,200,160,0.8)" strokeWidth={1.2} strokeLinecap="round" />
+                  ))}
+                  <Line x1={mx - Math.cos(ang) * 7} y1={my - Math.sin(ang) * 7}
+                    x2={mx + Math.cos(ang) * 7} y2={my + Math.sin(ang) * 7}
+                    stroke="rgba(220,200,160,0.35)" strokeWidth={0.8} strokeLinecap="round" />
+                </G>
+              );
+            })}
+            {(largeSutureMarks ?? []).map(i => {
+              const nodeA = renderLargeNodes[i];
+              const nodeB = renderLargeNodes[i + 1];
+              if (!nodeA || !nodeB) return null;
+              const mx = (nodeA.x + nodeB.x) / 2;
+              const my = (nodeA.y + nodeB.y) / 2;
+              const ang = Math.atan2(nodeB.y - nodeA.y, nodeB.x - nodeA.x);
+              const nx = Math.sin(ang) * 6, ny = -Math.cos(ang) * 6;
+              return (
+                <G key={`lsut-${i}`}>
+                  {[-7, -2, 3, 8].map(offset => (
+                    <Line key={offset}
+                      x1={mx + Math.cos(ang) * offset - nx * 0.7} y1={my + Math.sin(ang) * offset - ny * 0.7}
+                      x2={mx + Math.cos(ang) * offset + nx * 0.7} y2={my + Math.sin(ang) * offset + ny * 0.7}
+                      stroke="rgba(220,200,160,0.8)" strokeWidth={1.5} strokeLinecap="round" />
+                  ))}
+                </G>
+              );
+            })}
+
+            {/* ===== MESENTERY SELECTION HIGHLIGHT ===== */}
+            {mesenterySelectionMode && renderLargeNodes.map((n, i) => {
+              const isSelected = (mesenterySelectedNodes ?? []).includes(i);
+              if (!physicsRef.current.largeNodes[i] || physicsRef.current.largeNodes[i].pinned) return null;
+              return (
+                <Circle key={`msel-${i}`} cx={n.x} cy={n.y}
+                  r={LARGE_RADIUS + 5}
+                  fill={isSelected ? 'rgba(255,180,40,0.20)' : 'rgba(100,180,255,0.10)'}
+                  stroke={isSelected ? 'rgba(255,180,40,0.75)' : 'rgba(100,180,255,0.35)'}
+                  strokeWidth={isSelected ? 1.5 : 0.8} />
+              );
+            })}
 
             {/* Debug overlays */}
             {state.debugMode && renderSmallSegs.map((seg, i) => {

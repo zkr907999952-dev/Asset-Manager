@@ -1,12 +1,16 @@
 import React, { useRef, useEffect } from 'react';
-import { View, Text, TouchableOpacity, Animated, StyleSheet } from 'react-native';
+import { View, Text, TouchableOpacity, Animated, StyleSheet, ScrollView } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { useColors } from '@/hooks/useColors';
 import { useGame } from '@/contexts/GameContext';
 import { TOOL_LIST, type ToolType } from '../constants/gameConfig';
+import { CommandPanel } from './CommandPanel';
+import { SurgeryPanel } from './SurgeryPanel';
 
-const TOOLBAR_WIDTH = 180;
-const TAB_WIDTH = 28;
+const PANEL_WIDTH = 200;
+const TAB_WIDTH = 32;
+
+type TabId = 'tools' | 'commands' | 'surgery';
 
 const TOOL_ICONS: Record<string, string> = {
   '金属棒': 'minus',
@@ -18,94 +22,150 @@ const TOOL_ICONS: Record<string, string> = {
   '灌肠器': 'git-branch',
 };
 
-export function ToolBar() {
+const TABS: { id: TabId; icon: string; label: string }[] = [
+  { id: 'tools', icon: 'tool', label: '工具' },
+  { id: 'commands', icon: 'command', label: '命令' },
+  { id: 'surgery', icon: 'scissors', label: '手术' },
+];
+
+function ToolsContent({ onClose }: { onClose: () => void }) {
   const colors = useColors();
   const { state, setActiveTool } = useGame();
-  const [expanded, setExpanded] = React.useState(false);
-  const translateX = useRef(new Animated.Value(TOOLBAR_WIDTH + TAB_WIDTH)).current;
-
-  useEffect(() => {
-    Animated.spring(translateX, {
-      toValue: expanded ? 0 : TOOLBAR_WIDTH + TAB_WIDTH,
-      useNativeDriver: true,
-      tension: 90, friction: 16,
-    }).start();
-  }, [expanded]);
 
   const handleSelect = (tool: ToolType) => {
-    if (state.activeTool === tool) {
-      setActiveTool(null);
-    } else {
-      setActiveTool(tool);
-    }
-    setExpanded(false);
+    setActiveTool(state.activeTool === tool ? null : tool);
+    onClose();
   };
 
+  return (
+    <View>
+      <Text style={[styles.panelTitle, { color: colors.mutedForeground }]}>工具选择</Text>
+      {TOOL_LIST.map(tool => {
+        const isSelected = state.activeTool === tool.id;
+        const isRunning = state.toolStates?.[tool.id]?.active === true;
+        return (
+          <TouchableOpacity
+            key={tool.id}
+            style={[
+              styles.toolItem,
+              { borderColor: isSelected ? colors.primary : isRunning ? `${colors.primary}66` : colors.border },
+              isSelected && { backgroundColor: `${colors.primary}22` },
+              isRunning && !isSelected && { backgroundColor: `${colors.primary}11` },
+            ]}
+            onPress={() => handleSelect(tool.id)}
+            activeOpacity={0.75}
+          >
+            <Feather
+              name={TOOL_ICONS[tool.id] as any || 'circle'}
+              size={14}
+              color={isSelected ? colors.primary : isRunning ? `${colors.primary}aa` : colors.mutedForeground}
+            />
+            <View style={styles.toolText}>
+              <Text style={[styles.toolName, {
+                color: isSelected ? colors.primary : isRunning ? `${colors.primary}cc` : colors.foreground,
+              }]}>
+                {tool.id}
+              </Text>
+              <Text style={[styles.toolDesc, { color: colors.mutedForeground }]}>{tool.desc}</Text>
+            </View>
+            {isRunning && <View style={[styles.runningDot, { backgroundColor: colors.primary }]} />}
+            {isSelected && !isRunning && <View style={[styles.activeDot, { backgroundColor: colors.mutedForeground }]} />}
+          </TouchableOpacity>
+        );
+      })}
+    </View>
+  );
+}
+
+export function ToolBar() {
+  const colors = useColors();
+  const { state } = useGame();
+  const [openTab, setOpenTab] = React.useState<TabId | null>(null);
+
+  const toolsX = useRef(new Animated.Value(PANEL_WIDTH + TAB_WIDTH)).current;
+  const commandsX = useRef(new Animated.Value(PANEL_WIDTH + TAB_WIDTH)).current;
+  const surgeryX = useRef(new Animated.Value(PANEL_WIDTH + TAB_WIDTH)).current;
+  const animMap: Record<TabId, Animated.Value> = { tools: toolsX, commands: commandsX, surgery: surgeryX };
+
+  useEffect(() => {
+    const target = PANEL_WIDTH + TAB_WIDTH;
+    TABS.forEach(tab => {
+      Animated.spring(animMap[tab.id], {
+        toValue: openTab === tab.id ? 0 : target,
+        useNativeDriver: true,
+        tension: 90, friction: 16,
+      }).start();
+    });
+  }, [openTab]);
+
+  const toggle = (tab: TabId) => setOpenTab(prev => prev === tab ? null : tab);
+
   const anyToolRunning = Object.values(state.toolStates ?? {}).some(ts => ts.active);
+  const inSelMode = state.mesenterySelectionMode;
 
   return (
     <View style={styles.wrapper} pointerEvents="box-none">
+      {/* Tools panel */}
       <Animated.View
-        style={[
-          styles.panel,
-          {
-            transform: [{ translateX }],
-            backgroundColor: colors.card,
-            borderColor: colors.border,
-          },
-        ]}
-        pointerEvents={expanded ? 'auto' : 'none'}
+        style={[styles.panel, { top: 0, transform: [{ translateX: toolsX }], backgroundColor: colors.card, borderColor: colors.border }]}
+        pointerEvents={openTab === 'tools' ? 'auto' : 'none'}
       >
-        <Text style={[styles.panelTitle, { color: colors.mutedForeground }]}>工具选择</Text>
-        {TOOL_LIST.map(tool => {
-          const isSelected = state.activeTool === tool.id;
-          const isRunning = state.toolStates?.[tool.id]?.active === true;
-          return (
-            <TouchableOpacity
-              key={tool.id}
-              style={[
-                styles.toolItem,
-                { borderColor: isSelected ? colors.primary : isRunning ? `${colors.primary}66` : colors.border },
-                isSelected && { backgroundColor: `${colors.primary}22` },
-                isRunning && !isSelected && { backgroundColor: `${colors.primary}11` },
-              ]}
-              onPress={() => handleSelect(tool.id)}
-              activeOpacity={0.75}
-            >
-              <Feather
-                name={TOOL_ICONS[tool.id] as any || 'circle'}
-                size={14}
-                color={isSelected ? colors.primary : isRunning ? `${colors.primary}aa` : colors.mutedForeground}
-              />
-              <View style={styles.toolText}>
-                <Text style={[styles.toolName, {
-                  color: isSelected ? colors.primary : isRunning ? `${colors.primary}cc` : colors.foreground,
-                }]}>
-                  {tool.id}
-                </Text>
-                <Text style={[styles.toolDesc, { color: colors.mutedForeground }]}>{tool.desc}</Text>
-              </View>
-              {isRunning && (
-                <View style={[styles.runningDot, { backgroundColor: colors.primary }]} />
-              )}
-              {isSelected && !isRunning && (
-                <View style={[styles.activeDot, { backgroundColor: colors.mutedForeground }]} />
-              )}
-            </TouchableOpacity>
-          );
-        })}
+        <ToolsContent onClose={() => setOpenTab(null)} />
       </Animated.View>
 
-      <TouchableOpacity
-        style={[styles.tab, { backgroundColor: colors.card, borderColor: colors.border }]}
-        onPress={() => setExpanded(v => !v)}
-        activeOpacity={0.7}
+      {/* Commands panel */}
+      <Animated.View
+        style={[styles.panel, { top: 0, transform: [{ translateX: commandsX }], backgroundColor: colors.card, borderColor: colors.border }]}
+        pointerEvents={openTab === 'commands' ? 'auto' : 'none'}
       >
-        <Feather name={expanded ? 'chevron-right' : 'tool'} size={16} color={colors.primary} />
-        {(state.activeTool || anyToolRunning) && (
-          <View style={[styles.tabDot, { backgroundColor: anyToolRunning ? colors.primary : colors.mutedForeground }]} />
-        )}
-      </TouchableOpacity>
+        <CommandPanel />
+      </Animated.View>
+
+      {/* Surgery panel */}
+      <Animated.View
+        style={[styles.panel, { top: 0, transform: [{ translateX: surgeryX }], backgroundColor: colors.card, borderColor: colors.border }]}
+        pointerEvents={openTab === 'surgery' ? 'auto' : 'none'}
+      >
+        <SurgeryPanel />
+      </Animated.View>
+
+      {/* 3 tab buttons stacked vertically */}
+      {TABS.map((tab, i) => {
+        const isOpen = openTab === tab.id;
+        const hasDot = tab.id === 'tools' && (state.activeTool || anyToolRunning);
+        const hasSel = tab.id === 'surgery' && inSelMode;
+        const dotColor = tab.id === 'tools'
+          ? (anyToolRunning ? colors.primary : colors.mutedForeground)
+          : hasSel ? '#e05050' : colors.primary;
+
+        return (
+          <TouchableOpacity
+            key={tab.id}
+            style={[
+              styles.tab,
+              {
+                top: i * 70,
+                backgroundColor: isOpen ? `${colors.primary}22` : colors.card,
+                borderColor: isOpen ? colors.primary : colors.border,
+              },
+            ]}
+            onPress={() => toggle(tab.id)}
+            activeOpacity={0.7}
+          >
+            <Feather
+              name={isOpen ? 'chevron-right' : (tab.icon as any)}
+              size={15}
+              color={isOpen ? colors.primary : colors.mutedForeground}
+            />
+            <Text style={[styles.tabLabel, { color: isOpen ? colors.primary : colors.mutedForeground }]}>
+              {tab.label}
+            </Text>
+            {(hasDot || hasSel) && (
+              <View style={[styles.tabDot, { backgroundColor: dotColor }]} />
+            )}
+          </TouchableOpacity>
+        );
+      })}
     </View>
   );
 }
@@ -114,32 +174,37 @@ const styles = StyleSheet.create({
   wrapper: {
     position: 'absolute',
     right: 0,
-    top: 80,
+    top: 70,
     zIndex: 5,
   },
   tab: {
     position: 'absolute',
     right: 0,
-    top: 10,
     width: TAB_WIDTH,
-    paddingVertical: 14,
+    paddingVertical: 10,
+    paddingHorizontal: 0,
     alignItems: 'center',
     borderTopLeftRadius: 8,
     borderBottomLeftRadius: 8,
     borderWidth: 1,
     borderRightWidth: 0,
     zIndex: 2,
+    gap: 3,
+  },
+  tabLabel: {
+    fontSize: 9,
+    fontFamily: 'Inter_600SemiBold',
+    writingDirection: 'ltr',
   },
   tabDot: {
     width: 5, height: 5,
     borderRadius: 3,
-    marginTop: 4,
+    marginTop: 1,
   },
   panel: {
     position: 'absolute',
     right: TAB_WIDTH,
-    top: 0,
-    width: TOOLBAR_WIDTH,
+    width: PANEL_WIDTH,
     borderTopLeftRadius: 10,
     borderBottomLeftRadius: 10,
     borderWidth: 1,
@@ -174,10 +239,6 @@ const styles = StyleSheet.create({
   toolText: { flex: 1 },
   toolName: { fontSize: 12, fontFamily: 'Inter_600SemiBold' },
   toolDesc: { fontSize: 9, fontFamily: 'Inter_400Regular', marginTop: 1 },
-  runningDot: {
-    width: 6, height: 6, borderRadius: 3,
-  },
-  activeDot: {
-    width: 5, height: 5, borderRadius: 3,
-  },
+  runningDot: { width: 6, height: 6, borderRadius: 3 },
+  activeDot: { width: 5, height: 5, borderRadius: 3 },
 });

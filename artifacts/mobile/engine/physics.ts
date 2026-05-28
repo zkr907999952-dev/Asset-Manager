@@ -61,6 +61,17 @@ export interface PhysicsState {
   expansionScale: number;
   pressureDiffusionRate: number;
   toolStates: Record<string, { active: boolean; param1: number; param2: number; pos?: { x: number; y: number } | null }>;
+  relaxFrames: number;
+  laxativeFrames: number;
+  hpBonus: number;
+  transfusionFrames: number;
+  repairMarks: number[];
+  sutureMarks: number[];
+  largeRepairMarks: number[];
+  largeSutureMarks: number[];
+  mesenteryDisabled: number[];
+  smallTransplantColor: { r: number; g: number; b: number } | null;
+  largeTransplantColor: { r: number; g: number; b: number } | null;
 }
 
 function clamp(v: number, min: number, max: number) {
@@ -189,6 +200,26 @@ export function stepPhysics(state: PhysicsState) {
     (state as any).periScaleLarge = new Array(N_LARGE).fill(1);
   if (state.peristalsisWaveAmplitude === undefined) (state as any).peristalsisWaveAmplitude = PERISTALSIS_WAVE_AMPLITUDE_DEFAULT;
   if (state.peristalsisWaveSpeed === undefined) (state as any).peristalsisWaveSpeed = PERISTALSIS_WAVE_SPEED_DEFAULT;
+  if (state.relaxFrames === undefined) (state as any).relaxFrames = 0;
+  if (state.laxativeFrames === undefined) (state as any).laxativeFrames = 0;
+  if (state.hpBonus === undefined) (state as any).hpBonus = 0;
+  if (state.transfusionFrames === undefined) (state as any).transfusionFrames = 0;
+  if (!state.repairMarks) (state as any).repairMarks = [];
+  if (!state.sutureMarks) (state as any).sutureMarks = [];
+  if (!state.largeRepairMarks) (state as any).largeRepairMarks = [];
+  if (!state.largeSutureMarks) (state as any).largeSutureMarks = [];
+  if (!state.mesenteryDisabled) (state as any).mesenteryDisabled = [];
+  if (state.smallTransplantColor === undefined) (state as any).smallTransplantColor = null;
+  if (state.largeTransplantColor === undefined) (state as any).largeTransplantColor = null;
+
+  const relaxMultiplier = state.relaxFrames > 0 ? 0.15 : 1.0;
+  if (state.relaxFrames > 0) state.relaxFrames--;
+  const laxativeActive = state.laxativeFrames > 0;
+  if (laxativeActive) state.laxativeFrames--;
+  if (state.transfusionFrames > 0) {
+    state.transfusionFrames--;
+    state.hpBonus = Math.min(100, state.hpBonus + 0.05);
+  }
 
   state.time += 1;
   const t = state.time;
@@ -200,7 +231,7 @@ export function stepPhysics(state: PhysicsState) {
   // Large intestine: 3 peaks
   // Amplitude boosted by pain (irritation → hypermotility) and sensitivity
   // Amplitude reduced by high pressure (distension limits further expansion)
-  const waveAmp = state.peristalsisWaveAmplitude;
+  const waveAmp = state.peristalsisWaveAmplitude * (laxativeActive ? 1.8 : 1.0);
   const waveSpeed = state.peristalsisWaveSpeed;
   for (let i = 0; i < N_SMALL; i++) {
     const seg = state.smallSegs[Math.min(i, state.smallSegs.length - 1)];
@@ -237,8 +268,8 @@ export function stepPhysics(state: PhysicsState) {
       const deadZone = 5.0;
       if (disp > deadZone) {
         const factor = (disp - deadZone) / disp;
-        n.x += dx * MESENTERY_STIFFNESS * factor;
-        n.y += dy * MESENTERY_STIFFNESS * factor;
+        n.x += dx * MESENTERY_STIFFNESS * relaxMultiplier * factor;
+        n.y += dy * MESENTERY_STIFFNESS * relaxMultiplier * factor;
       }
       softCavityPush(n, margin);
     }
@@ -253,10 +284,12 @@ export function stepPhysics(state: PhysicsState) {
       n.x += vx;
       n.y += vy;
       // Per-node mesentery with dead zone for large intestine
-      const { stiffness, deadZone } = largeNodeMesentery(idx);
+      const mesDis = (state.mesenteryDisabled ?? []).includes(idx);
+      const { stiffness: rawStiff, deadZone } = mesDis ? { stiffness: 0, deadZone: 999 } : largeNodeMesentery(idx);
+      const stiffness = rawStiff * relaxMultiplier;
       const dx = n.rx - n.x, dy = n.ry - n.y;
       const disp = Math.sqrt(dx * dx + dy * dy);
-      if (disp > deadZone) {
+      if (!mesDis && disp > deadZone) {
         const factor = deadZone > 0 ? (disp - deadZone) / disp : 1;
         n.x += dx * stiffness * factor;
         n.y += dy * stiffness * factor;

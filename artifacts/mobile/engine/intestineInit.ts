@@ -33,7 +33,7 @@ function scalePos(x: number, y: number): [number, number] {
 // Jejunum (rows 0–4, upper zone): wider loops, larger radius, more motility
 // Ileum (rows 5–9, lower zone): tighter loops, approaching cecum
 // Cavity: cx=170, cy=248, rx=148, ry=175
-function buildSmallIntestineNodes(): PhysicsNode[] {
+export function buildSmallIntestineNodes(): PhysicsNode[] {
   const nodes: PhysicsNode[] = [];
 
   // [0] Stomach/duodenum junction — top-center, pinned
@@ -88,7 +88,7 @@ function buildSmallIntestineNodes(): PhysicsNode[] {
 //   sacral flexure (curving backward/left) and perineal flexure (curving forward/right)
 // Anus [31] is pinned.
 // All positions verified inside cavity ellipse: (x-170)²/148² + (y-248)²/175² ≤ 1
-function buildLargeIntestineNodes(): PhysicsNode[] {
+export function buildLargeIntestineNodes(): PhysicsNode[] {
   const nodes: PhysicsNode[] = [];
 
   // [0] Cecum — lower-left, UNPINNED. Strong mesentery spring handles rebound.
@@ -201,5 +201,16 @@ export function createInitialPhysicsState(): PhysicsState {
     expansionScale: EXPANSION_SCALE_DEFAULT,
     pressureDiffusionRate: PRESSURE_DIFFUSION_RATE_DEFAULT,
     toolStates: createDefaultToolStates(),
+    relaxFrames: 0,
+    laxativeFrames: 0,
+    hpBonus: 0,
+    transfusionFrames: 0,
+    repairMarks: [],
+    sutureMarks: [],
+    largeRepairMarks: [],
+    largeSutureMarks: [],
+    mesenteryDisabled: [],
+    smallTransplantColor: null,
+    largeTransplantColor: null,
   };
 }
