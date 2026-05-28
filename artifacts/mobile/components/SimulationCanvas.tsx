@@ -360,17 +360,20 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
         return;
       }
       if (s.activeTool === TOOLS.SILICONE_ROD || s.activeTool === TOOLS.ANAL_BEADS) {
-        const { setEnemaTarget: setTgt } = hrRef.current;
+        const { setEnemaHeadIdx: setHIdx, setEnemaInSmall: setInSmall, setEnemaSmallHeadIdx: setSIdx } = hrRef.current;
         const { idx, dist: d } = findNearestLargeNodeIdx(pos);
         if (idx >= 0 && d < 65) {
-          setTgt({ largeIdx: idx });
+          setHIdx(idx);
+          if (s.enemaInSmall) setInSmall(false);
         }
         if (idx <= 2 && d < 65) {
           const { idx: sIdx, dist: sDist } = findNearestSmallNodeIdx(pos);
           if (sIdx >= 0 && sDist < 60) {
-            setTgt({ inSmall: true, smallIdx: sIdx });
+            if (!s.enemaInSmall) setInSmall(true);
+            setSIdx(sIdx);
           }
         }
+        physicsRef.current.toolPos = pos;
         return;
       }
       if (s.activeTool === TOOLS.ENEMA) {
@@ -407,15 +410,17 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
       const pos = tpc(locationX, locationY);
 
       if (s.activeTool === TOOLS.SILICONE_ROD || s.activeTool === TOOLS.ANAL_BEADS) {
-        const { setEnemaTarget: setTgt } = hrRef.current;
+        const { setEnemaHeadIdx: setHIdx, setEnemaInSmall: setInSmall, setEnemaSmallHeadIdx: setSIdx } = hrRef.current;
         const { idx, dist: d } = findNearestLargeNodeIdx(pos);
         if (idx >= 0 && d < 65) {
-          setTgt({ largeIdx: idx });
+          setHIdx(idx);
+          if (s.enemaInSmall) setInSmall(false);
         }
         if (idx <= 2 && d < 65) {
           const { idx: sIdx, dist: sDist } = findNearestSmallNodeIdx(pos);
           if (sIdx >= 0 && sDist < 60) {
-            setTgt({ inSmall: true, smallIdx: sIdx });
+            if (!s.enemaInSmall) setInSmall(true);
+            setSIdx(sIdx);
           }
         }
         physicsRef.current.toolPos = pos;

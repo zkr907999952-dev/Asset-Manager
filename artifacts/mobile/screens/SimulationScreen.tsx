@@ -164,32 +164,26 @@ export function SimulationScreen({ onMenuPress }: Props) {
         </TouchableOpacity>
       </View>
 
-      {/* Status bars + ECG stacked vertically, transparent background */}
-      <View style={styles.statusArea}>
-        <View style={styles.barsRow}>
-          <StatusBars
-            hp={state.hp}
-            pleasure={state.pleasure}
-            embedded
-          />
-        </View>
-        <View style={styles.ecgRow} pointerEvents="none">
-          <HeartRateMonitor
-            heartRate={state.heartRate}
-            comaState={state.comaState}
-            width={240}
-            height={38}
-            transparent
-            showLabel
-          />
-        </View>
-      </View>
-
       <View style={styles.canvasArea}>
         <SimulationCanvas
           canvasLayout={canvasLayout.current}
           onLayout={layout => { canvasLayout.current = layout; }}
         />
+
+        {/* Status bars + ECG — transparent absolute overlay at top of canvas */}
+        <View style={styles.statusArea} pointerEvents="none">
+          <StatusBars hp={state.hp} pleasure={state.pleasure} embedded />
+          <View style={styles.ecgRow}>
+            <HeartRateMonitor
+              heartRate={state.heartRate}
+              comaState={state.comaState}
+              width={240}
+              height={38}
+              transparent
+              showLabel
+            />
+          </View>
+        </View>
 
         {/* Character status — bottom right */}
         <View style={styles.statusOverlay} pointerEvents="none">
@@ -244,15 +238,16 @@ const styles = StyleSheet.create({
   },
   viewToggleText: { fontSize: 11, fontFamily: 'Inter_600SemiBold' },
   statusArea: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
     paddingHorizontal: 10,
     paddingTop: 6,
     paddingBottom: 4,
     backgroundColor: 'transparent',
+    zIndex: 3,
     gap: 2,
-  },
-  barsRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
   },
   ecgRow: {
     alignItems: 'flex-start',
