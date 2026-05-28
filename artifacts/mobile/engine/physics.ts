@@ -136,13 +136,13 @@ function applyElectricPhysics(state: PhysicsState, param1: number, param2: numbe
         const f = 1 - d / radius;
         const seg = state.smallSegs[i];
         if (seg && !seg.broken) {
-          seg.pain = clamp(seg.pain + voltage * 2.5 * f, 0, 100);
-          seg.sensitivity = clamp(seg.sensitivity + voltage * 1.5 * f, 0, 100);
-          seg.health = clamp(seg.health - voltage * 0.3 * f, 0, 100);
+          seg.pain = clamp(seg.pain + voltage * 6.0 * f, 0, 100);
+          seg.sensitivity = clamp(seg.sensitivity + voltage * 4.0 * f, 0, 100);
+          seg.health = clamp(seg.health - voltage * 0.6 * f, 0, 100);
         }
-        const spasm = voltage * 22 * Math.sin(state.time * 1.5 + i * 0.8);
-        state.smallNodes[i].x += spasm * 0.6 + (Math.random() - 0.5) * voltage * 10;
-        state.smallNodes[i].y += spasm + (Math.random() - 0.5) * voltage * 10;
+        const spasm = voltage * 42 * Math.sin(state.time * 1.5 + i * 0.8);
+        state.smallNodes[i].x += spasm * 0.7 + (Math.random() - 0.5) * voltage * 18;
+        state.smallNodes[i].y += spasm + (Math.random() - 0.5) * voltage * 18;
       }
     }
     for (let i = 0; i < state.largeNodes.length; i++) {
@@ -151,31 +151,31 @@ function applyElectricPhysics(state: PhysicsState, param1: number, param2: numbe
         const f = 1 - d / radius;
         const seg = state.largeSegs[i];
         if (seg && !seg.broken) {
-          seg.pain = clamp(seg.pain + voltage * 2.0 * f, 0, 100);
-          seg.sensitivity = clamp(seg.sensitivity + voltage * 1.2 * f, 0, 100);
+          seg.pain = clamp(seg.pain + voltage * 4.5 * f, 0, 100);
+          seg.sensitivity = clamp(seg.sensitivity + voltage * 3.0 * f, 0, 100);
         }
-        const spasm = voltage * 18 * Math.sin(state.time * 1.5 + i * 0.6);
-        state.largeNodes[i].x += spasm * 0.5 + (Math.random() - 0.5) * voltage * 8;
-        state.largeNodes[i].y += spasm + (Math.random() - 0.5) * voltage * 8;
+        const spasm = voltage * 34 * Math.sin(state.time * 1.5 + i * 0.6);
+        state.largeNodes[i].x += spasm * 0.6 + (Math.random() - 0.5) * voltage * 14;
+        state.largeNodes[i].y += spasm + (Math.random() - 0.5) * voltage * 14;
       }
     }
   }
 }
 
-// Per-node mesentery stiffness + dead zone for large intestine
-// Bend/flexure indices: 0(cecum,pinned), 9(hepatic flex), 15(splenic flex), 22-24(sigmoid), 26-29(rectum/anus)
+// Per-node mesentery stiffness + dead zone for large intestine (N_LARGE=32)
+// Indices: 0(cecum,unpinned), 9(hepatic flex), 15(splenic flex), 23-26(sigmoid), 27-30(rectum bends), 31(anus,pinned)
 function largeNodeMesentery(idx: number): { stiffness: number; deadZone: number } {
-  // Rectum + anus region: very high stiffness, zero dead zone
-  if (idx >= 25) return { stiffness: 0.42, deadZone: 0 };
-  // Sigmoid curve: high stiffness, tiny dead zone
-  if (idx >= 22 && idx <= 25) return { stiffness: 0.18, deadZone: 1.0 };
-  // Splenic flexure neighborhood
-  if (idx >= 14 && idx <= 16) return { stiffness: 0.20, deadZone: 1.5 };
-  // Hepatic flexure neighborhood
-  if (idx >= 8 && idx <= 10) return { stiffness: 0.20, deadZone: 1.5 };
-  // Cecum region
-  if (idx <= 2) return { stiffness: 0.14, deadZone: 2.0 };
-  // All other large intestine nodes
+  // Cecum (unpinned): very strong spring so it rebounds after being dragged
+  if (idx === 0) return { stiffness: 0.38, deadZone: 0 };
+  // Rectum bends + approach to anus: maximum stiffness, zero dead zone
+  if (idx >= 27) return { stiffness: 0.45, deadZone: 0 };
+  // Sigmoid colon: high stiffness, small dead zone
+  if (idx >= 22 && idx <= 26) return { stiffness: 0.15, deadZone: 1.0 };
+  // Splenic (right) flexure neighborhood
+  if (idx >= 14 && idx <= 16) return { stiffness: 0.22, deadZone: 1.5 };
+  // Hepatic (left) flexure neighborhood
+  if (idx >= 8 && idx <= 10) return { stiffness: 0.22, deadZone: 1.5 };
+  // All other large intestine nodes (ascending, transverse, descending)
   return { stiffness: 0.038, deadZone: 4.5 };
 }
 
@@ -183,8 +183,10 @@ export function stepPhysics(state: PhysicsState) {
   // Guard: ensure new fields exist on legacy state objects
   if (!state.toolStates) (state as any).toolStates = {};
   if (state.pressureDiffusionRate === undefined) (state as any).pressureDiffusionRate = 0.004;
-  if (!state.periScaleSmall) (state as any).periScaleSmall = new Array(N_SMALL).fill(1);
-  if (!state.periScaleLarge) (state as any).periScaleLarge = new Array(N_LARGE).fill(1);
+  if (!state.periScaleSmall || state.periScaleSmall.length !== N_SMALL)
+    (state as any).periScaleSmall = new Array(N_SMALL).fill(1);
+  if (!state.periScaleLarge || state.periScaleLarge.length !== N_LARGE)
+    (state as any).periScaleLarge = new Array(N_LARGE).fill(1);
   if (state.peristalsisWaveAmplitude === undefined) (state as any).peristalsisWaveAmplitude = PERISTALSIS_WAVE_AMPLITUDE_DEFAULT;
   if (state.peristalsisWaveSpeed === undefined) (state as any).peristalsisWaveSpeed = PERISTALSIS_WAVE_SPEED_DEFAULT;
 
@@ -194,22 +196,29 @@ export function stepPhysics(state: PhysicsState) {
   const periSpeed = state.peristalsisSpeed * PERISTALSIS_BASE_SPEED;
 
   // --- Compute per-node peristalsis wave expansion scale ---
-  // Traveling wave: 3 peaks along small intestine, 2 along large intestine
-  // Amplitude is reduced by local pressure (high pressure = less room to expand)
+  // Small intestine: 7 peaks (dense, reflecting high motility of jejunum/ileum)
+  // Large intestine: 3 peaks
+  // Amplitude boosted by pain (irritation → hypermotility) and sensitivity
+  // Amplitude reduced by high pressure (distension limits further expansion)
   const waveAmp = state.peristalsisWaveAmplitude;
   const waveSpeed = state.peristalsisWaveSpeed;
   for (let i = 0; i < N_SMALL; i++) {
     const seg = state.smallSegs[Math.min(i, state.smallSegs.length - 1)];
     const pressureRatio = seg ? clamp(seg.pressure / 100, 0, 1) : 0;
-    const effectiveAmp = waveAmp * Math.max(0, 1 - pressureRatio * 0.88);
-    const phase = (i / N_SMALL) * Math.PI * 6 - t * periSpeed * waveSpeed * 0.055;
+    const painBoost = seg ? clamp(seg.pain / 100, 0, 1) * 0.8 : 0;
+    const sensBoost = seg ? clamp(seg.sensitivity / 100, 0, 1) * 0.5 : 0;
+    const stimMultiplier = 1 + painBoost + sensBoost;
+    const effectiveAmp = waveAmp * stimMultiplier * Math.max(0, 1 - pressureRatio * 0.85);
+    const phase = (i / N_SMALL) * Math.PI * 14 - t * periSpeed * waveSpeed * 0.055;
     state.periScaleSmall[i] = 1 + effectiveAmp * Math.max(0, Math.sin(phase));
   }
   for (let i = 0; i < N_LARGE; i++) {
     const seg = state.largeSegs[Math.min(i, state.largeSegs.length - 1)];
     const pressureRatio = seg ? clamp(seg.pressure / LARGE_RUPTURE_PRESSURE, 0, 1) : 0;
-    const effectiveAmp = waveAmp * 0.85 * Math.max(0, 1 - pressureRatio * 0.88);
-    const phase = (i / N_LARGE) * Math.PI * 4 - t * periSpeed * waveSpeed * 0.038;
+    const painBoost = seg ? clamp(seg.pain / 100, 0, 1) * 0.5 : 0;
+    const stimMultiplier = 1 + painBoost;
+    const effectiveAmp = waveAmp * 0.8 * stimMultiplier * Math.max(0, 1 - pressureRatio * 0.85);
+    const phase = (i / N_LARGE) * Math.PI * 6 - t * periSpeed * waveSpeed * 0.038;
     state.periScaleLarge[i] = 1 + effectiveAmp * Math.max(0, Math.sin(phase));
   }
 

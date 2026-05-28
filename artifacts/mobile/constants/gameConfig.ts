@@ -5,10 +5,10 @@ export const CAVITY_CY = 248;
 export const CAVITY_RX = 148;
 export const CAVITY_RY = 175;
 
-export const N_SMALL = 38;
-export const N_LARGE = 30;
-export const SMALL_SEG_LENGTH = 26;
-export const LARGE_SEG_LENGTH = 24;
+export const N_SMALL = 56;
+export const N_LARGE = 32;
+export const SMALL_SEG_LENGTH = 20;
+export const LARGE_SEG_LENGTH = 22;
 export const SMALL_RADIUS = 11;
 export const LARGE_RADIUS = 15;
 
@@ -20,7 +20,7 @@ export const SEGMENT_STIFFNESS = 0.85;
 
 export const PERISTALSIS_BASE_SPEED = 0.4;
 export const PERISTALSIS_AMPLITUDE = 1.8;
-export const PERISTALSIS_WAVE_AMPLITUDE_DEFAULT = 0.22;
+export const PERISTALSIS_WAVE_AMPLITUDE_DEFAULT = 0.38;
 export const PERISTALSIS_WAVE_SPEED_DEFAULT = 1.0;
 
 export const PRESSURE_DIFFUSION_RATE_DEFAULT = 0.004;

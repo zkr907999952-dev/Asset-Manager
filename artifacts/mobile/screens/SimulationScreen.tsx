@@ -59,6 +59,18 @@ export function SimulationScreen({ onMenuPress }: Props) {
     if (explosions > 0) tryTrigger('explosion', () => triggerDialogue('explosion'), 3000);
     const breaks = segs.filter(s => s.broken).length;
     if (breaks > 0) tryTrigger('break', () => triggerDialogue('intestine_break'), 3000);
+
+    // Electric stimulation: layered dialogue based on voltage level
+    const elecActive = (p.toolType === '电击器' && p.toolActive && p.electrodes.length > 0)
+      || (p.toolStates['电击器']?.active && p.electrodes.length > 0);
+    if (elecActive) {
+      const ts = p.toolStates['电击器'];
+      const voltage = (p.toolType === '电击器' && p.toolActive) ? p.toolParam1 : (ts?.param1 ?? 50);
+      if (voltage > 75) tryTrigger('elec_crit', () => triggerDialogue('electric_critical'), 2000);
+      else if (voltage > 50) tryTrigger('elec_high', () => triggerDialogue('electric_high'), 2500);
+      else if (voltage > 25) tryTrigger('elec_med', () => triggerDialogue('electric_medium'), 3000);
+      else tryTrigger('elec_low', () => triggerDialogue('electric_low'), 4000);
+    }
   }, [triggerDialogue]);
 
   useEffect(() => {

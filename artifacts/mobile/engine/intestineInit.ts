@@ -14,7 +14,6 @@ function makeSeg(): SegmentProps {
 }
 
 // Scale factor applied to all initial node positions from cavity center.
-// Makes the intestines fill the cavity more naturally.
 const INIT_SCALE = 1.1;
 function scalePos(x: number, y: number): [number, number] {
   return [
@@ -23,125 +22,154 @@ function scalePos(x: number, y: number): [number, number] {
   ];
 }
 
-// Small intestine: starts at stomach/duodenum junction (top-center, pinned),
-// coils in 7 serpentine rows through the center of the cavity,
-// ends at terminal ileum near the cecum (lower-left).
+// Small intestine: 56 nodes
+// [0]         — Stomach/duodenum junction (pinned, top-center)
+// [1]         — Duodenal bridge (R transition)
+// [2–51]      — 10 serpentine rows × 5 nodes, denser jejunum/ileum coiling
+//               Even rows (0,2,4,6,8) R→L; Odd rows (1,3,5,7,9) L→R
+//               y spacing 18px, x range 110–228
+// [52–55]     — Terminal ileum curving down-left toward cecum
+//
+// Jejunum (rows 0–4, upper zone): wider loops, larger radius, more motility
+// Ileum (rows 5–9, lower zone): tighter loops, approaching cecum
 // Cavity: cx=170, cy=248, rx=148, ry=175
-// Row x-range: 116–220 (well inside large intestine frame)
-// Row y-range: 158–314, spacing 26px
 function buildSmallIntestineNodes(): PhysicsNode[] {
   const nodes: PhysicsNode[] = [];
 
-  // [0] Stomach / duodenum junction — top-center, pinned
+  // [0] Stomach/duodenum junction — top-center, pinned
   {
     const [x, y] = scalePos(170, 130);
     nodes.push(makeNode(x, y, true));
   }
 
-  // [1] Transition: bridge from stomach to first row start (upper-right)
+  // [1] Duodenal bridge — curves right to reach row 0 start
   {
-    const [x, y] = scalePos(194, 148);
+    const [x, y] = scalePos(210, 148);
     nodes.push(makeNode(x, y));
   }
 
-  // 7 serpentine rows, x: 116↔220, y: 158→314, step 26px
-  // Even rows (0,2,4,6) go Right→Left; odd rows (1,3,5) go Left→Right
-  const xL = 116, xM1 = 142, xC = 168, xM2 = 194, xR = 220;
-  const rowXRight = [xR, xM2, xC, xM1, xL];
-  const rowXLeft  = [xL, xM1, xC, xM2, xR];
+  // [2–51] 10 serpentine rows through the abdominal center
+  // x-positions: xL=110, xM1=138, xC=166, xM2=194, xR=222
+  // y-positions: row i → y = 155 + i * 18
+  const xL = 110, xM1 = 138, xC = 166, xM2 = 194, xR = 222;
+  const rowXRight = [xR, xM2, xC, xM1, xL]; // even rows R→L
+  const rowXLeft  = [xL, xM1, xC, xM2, xR]; // odd rows L→R
 
-  for (let row = 0; row < 7; row++) {
-    const y = 158 + row * 26;
+  for (let row = 0; row < 10; row++) {
+    const y = 155 + row * 18;
     const xs = (row % 2 === 0) ? rowXRight : rowXLeft;
     for (const x of xs) {
       const [sx, sy] = scalePos(x, y);
       nodes.push(makeNode(sx, sy));
     }
   }
-  // Indices [2..36]: 35 nodes across 7 rows
+  // Indices [2..51]: 50 nodes across 10 rows
 
-  // [37] Terminal ileum — approaches cecum from slightly above-right
-  {
-    const [x, y] = scalePos(108, 332);
-    nodes.push(makeNode(x, y));
-  }
-
-  return nodes; // 38 nodes total (N_SMALL = 38)
-}
-
-// Large intestine: starts at cecum (lower-left, pinned),
-// goes CLOCKWISE around the small intestine:
-//   cecum (lower-left) → ascending (left side going UP) →
-//   left flexure (top-left) → transverse (top, L→R) →
-//   right flexure (top-right) → descending (right side going DOWN) →
-//   sigmoid S-curve → anus (bottom-center, pinned)
-// All nodes verified inside cavity ellipse: (x-170)²/118² + (y-240)²/148² ≤ 1
-function buildLargeIntestineNodes(): PhysicsNode[] {
-  const nodes: PhysicsNode[] = [];
-
-  // [0] Cecum — lower left, pinned. Ileocecal spring connects here to smallNodes[N_SMALL-1].
-  {
-    const [x, y] = scalePos(100, 340);
-    nodes.push(makeNode(x, y, true));
-  }
-
-  // Ascending colon: left side going up (indices 1–8)
-  const ascDesc: [number, number][] = [
-    [ 96, 316], [ 90, 292], [ 86, 268], [ 84, 244],
-    [ 83, 220], [ 83, 196], [ 84, 172], [ 88, 148],
+  // [52–55] Terminal ileum — turns left-down from row 9 end (xR, y=317) to approach cecum
+  // Row 9 is odd → L→R → ends at xR=222, y=317
+  const terminalIleum: [number, number][] = [
+    [196, 322], // curve starts going left
+    [162, 328], // continues left
+    [128, 336], // approaching cecum zone
+    [106, 346], // near cecum at (100, 340)
   ];
-  for (const [x, y] of ascDesc) {
+  for (const [x, y] of terminalIleum) {
     const [sx, sy] = scalePos(x, y);
     nodes.push(makeNode(sx, sy));
   }
 
-  // [9] Left (hepatic) flexure — top-left corner
+  return nodes; // 56 nodes total (N_SMALL = 56)
+}
+
+// Large intestine: 32 nodes
+// Runs CLOCKWISE around the small intestine perimeter.
+// Cecum [0] is UNPINNED — uses strong mesentery spring to spring back after drag.
+// Rectum section (nodes 27–30) has two anatomical bends:
+//   sacral flexure (curving backward/left) and perineal flexure (curving forward/right)
+// Anus [31] is pinned.
+// All positions verified inside cavity ellipse: (x-170)²/148² + (y-248)²/175² ≤ 1
+function buildLargeIntestineNodes(): PhysicsNode[] {
+  const nodes: PhysicsNode[] = [];
+
+  // [0] Cecum — lower-left, UNPINNED. Strong mesentery spring handles rebound.
   {
-    const [x, y] = scalePos(92, 132);
+    const [x, y] = scalePos(100, 340);
+    nodes.push(makeNode(x, y, false));
+  }
+
+  // [1–8] Ascending colon: left side going up
+  const ascending: [number, number][] = [
+    [ 96, 316], [ 90, 292], [ 86, 268], [ 84, 244],
+    [ 83, 220], [ 83, 196], [ 84, 172], [ 88, 148],
+  ];
+  for (const [x, y] of ascending) {
+    const [sx, sy] = scalePos(x, y);
+    nodes.push(makeNode(sx, sy));
+  }
+
+  // [9] Hepatic (left) flexure — top-left corner
+  {
+    const [x, y] = scalePos(92, 130);
     nodes.push(makeNode(x, y));
   }
 
-  // Transverse colon: top, slight downward sag at center (indices 10–14)
+  // [10–14] Transverse colon: top, slight downward sag at center
   const transverse: [number, number][] = [
-    [116, 128], [140, 124], [170, 122], [200, 124], [226, 128],
+    [116, 126], [140, 122], [170, 120], [200, 122], [228, 126],
   ];
   for (const [x, y] of transverse) {
     const [sx, sy] = scalePos(x, y);
     nodes.push(makeNode(sx, sy));
   }
 
-  // [15] Right (splenic) flexure — top-right corner
+  // [15] Splenic (right) flexure — top-right corner
   {
-    const [x, y] = scalePos(246, 134);
+    const [x, y] = scalePos(250, 132);
     nodes.push(makeNode(x, y));
   }
 
-  // Descending colon: right side going down (indices 16–22)
+  // [16–22] Descending colon: right side going down
   const descending: [number, number][] = [
-    [254, 158], [258, 184], [260, 210], [260, 236],
-    [258, 262], [254, 288], [248, 312],
+    [258, 156], [262, 182], [264, 208], [264, 234],
+    [262, 260], [258, 286], [252, 312],
   ];
   for (const [x, y] of descending) {
     const [sx, sy] = scalePos(x, y);
     nodes.push(makeNode(sx, sy));
   }
 
-  // Sigmoid colon: S-curve from lower-right toward bottom-center (indices 23–28)
+  // [23–26] Sigmoid colon: S-curve from lower-right toward bottom-center
   const sigmoid: [number, number][] = [
-    [250, 334], [242, 352], [224, 362], [204, 368], [185, 372], [172, 376],
+    [244, 330], [226, 346], [206, 356], [184, 358],
   ];
   for (const [x, y] of sigmoid) {
     const [sx, sy] = scalePos(x, y);
     nodes.push(makeNode(sx, sy));
   }
 
-  // [29] Anus — bottom-center, pinned
+  // [27–30] Rectum: two anatomical bends (sacral + perineal flexure)
+  // [27] Rectum entry from sigmoid
+  // [28] Sacral flexure — curves backward (left/up)
+  // [29] Sacral apex — deepest backward point
+  // [30] Perineal flexure — curves forward-down before anus
+  const rectum: [number, number][] = [
+    [168, 356], // entry
+    [150, 348], // sacral flexure (backward)
+    [144, 362], // sacral apex
+    [154, 376], // perineal flexure (forward)
+  ];
+  for (const [x, y] of rectum) {
+    const [sx, sy] = scalePos(x, y);
+    nodes.push(makeNode(sx, sy));
+  }
+
+  // [31] Anus — bottom-center, pinned
   {
-    const [x, y] = scalePos(170, 382);
+    const [x, y] = scalePos(170, 386);
     nodes.push(makeNode(x, y, true));
   }
 
-  return nodes; // 30 nodes total (N_LARGE = 30)
+  return nodes; // 32 nodes total (N_LARGE = 32)
 }
 
 export function createInitialPhysicsState(): PhysicsState {
