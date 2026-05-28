@@ -11,9 +11,10 @@ interface CmdBtnProps {
   onPress: () => void;
   cooldownSec?: number;
   disabled?: boolean;
+  accentColor?: string;
 }
 
-function CmdButton({ label, subLabel, icon, onPress, cooldownSec = 0, disabled }: CmdBtnProps) {
+function CmdButton({ label, subLabel, icon, onPress, cooldownSec = 0, disabled, accentColor }: CmdBtnProps) {
   const colors = useColors();
   const [remaining, setRemaining] = useState(0);
 
@@ -32,17 +33,16 @@ function CmdButton({ label, subLabel, icon, onPress, cooldownSec = 0, disabled }
   }, [remaining > 0]);
 
   const isDisabled = disabled || remaining > 0;
+  const borderColor = isDisabled ? colors.border : (accentColor ?? colors.primary);
+  const bgColor = isDisabled ? 'transparent' : `${accentColor ?? colors.primary}18`;
 
   return (
     <TouchableOpacity
-      style={[styles.btn, {
-        borderColor: isDisabled ? colors.border : colors.primary,
-        backgroundColor: isDisabled ? 'transparent' : `${colors.primary}18`,
-      }]}
+      style={[styles.btn, { borderColor, backgroundColor: bgColor }]}
       onPress={handlePress}
       activeOpacity={0.7}
     >
-      <Feather name={icon as any} size={13} color={isDisabled ? colors.mutedForeground : colors.primary} />
+      <Feather name={icon as any} size={13} color={isDisabled ? colors.mutedForeground : (accentColor ?? colors.primary)} />
       <View style={styles.btnText}>
         <Text style={[styles.btnLabel, { color: isDisabled ? colors.mutedForeground : colors.foreground }]}>
           {remaining > 0 ? `${label} (${remaining}s)` : label}
@@ -55,7 +55,7 @@ function CmdButton({ label, subLabel, icon, onPress, cooldownSec = 0, disabled }
 
 export function CommandPanel() {
   const colors = useColors();
-  const { relaxAbdomen, takeLaxative } = useGame();
+  const { relaxAbdomen, takeLaxative, takeStimulant, takeSedative, state } = useGame();
 
   return (
     <View>
@@ -75,6 +75,42 @@ export function CommandPanel() {
         onPress={takeLaxative}
         cooldownSec={30}
       />
+
+      <View style={[styles.divider, { backgroundColor: colors.border }]} />
+      <Text style={[styles.subTitle, { color: colors.mutedForeground }]}>药剂</Text>
+
+      <CmdButton
+        icon="zap"
+        label="服用兴奋剂"
+        subLabel="心率↑ 呼吸↑ 蠕动↑  过量触发心跳过速昏迷"
+        onPress={takeStimulant}
+        accentColor="#ffaa00"
+        disabled={state.comaState === 'tachycardia'}
+      />
+      <CmdButton
+        icon="moon"
+        label="服用麻醉镇静剂"
+        subLabel="心率↓ 疼痛↓ 呼吸↓  过量触发心跳过缓昏迷"
+        onPress={takeSedative}
+        accentColor="#6688ff"
+        disabled={state.comaState === 'bradycardia'}
+      />
+
+      {state.comaState !== 'none' && (
+        <View style={[styles.comaAlert, { borderColor: state.comaState === 'tachycardia' ? '#ff3333' : '#4466ff' }]}>
+          <Feather
+            name="alert-triangle"
+            size={11}
+            color={state.comaState === 'tachycardia' ? '#ff3333' : '#4466ff'}
+          />
+          <Text style={[styles.comaText, { color: state.comaState === 'tachycardia' ? '#ff3333' : '#4466ff' }]}>
+            {state.comaState === 'tachycardia'
+              ? '心跳过速昏迷  可服用镇静剂解除'
+              : '心跳过缓昏迷  可服用兴奋剂解除'}
+          </Text>
+        </View>
+      )}
+
       <CmdButton
         icon="alert-circle"
         label="服用寄生虫卵"
@@ -95,6 +131,18 @@ const styles = StyleSheet.create({
     paddingHorizontal: 4,
     marginBottom: 6,
   },
+  subTitle: {
+    fontSize: 9,
+    fontFamily: 'Inter_600SemiBold',
+    letterSpacing: 1,
+    textTransform: 'uppercase',
+    paddingHorizontal: 4,
+    marginBottom: 4,
+  },
+  divider: {
+    height: 1,
+    marginVertical: 8,
+  },
   btn: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -108,4 +156,21 @@ const styles = StyleSheet.create({
   btnText: { flex: 1 },
   btnLabel: { fontSize: 12, fontFamily: 'Inter_600SemiBold' },
   btnSub: { fontSize: 9, fontFamily: 'Inter_400Regular', marginTop: 1 },
+  comaAlert: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+    borderRadius: 5,
+    borderWidth: 1,
+    marginBottom: 4,
+    backgroundColor: 'rgba(0,0,0,0.3)',
+  },
+  comaText: {
+    fontSize: 9,
+    fontFamily: 'Inter_600SemiBold',
+    flex: 1,
+    flexWrap: 'wrap',
+  },
 });

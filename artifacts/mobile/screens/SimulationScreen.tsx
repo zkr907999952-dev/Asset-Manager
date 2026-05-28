@@ -9,6 +9,8 @@ import { ToolBar } from '@/components/ToolBar';
 import { ToolControls } from '@/components/ToolControls';
 import { StatusBars } from '@/components/StatusBars';
 import { DialogueBox } from '@/components/DialogueBox';
+import { HeartRateMonitor } from '@/components/HeartRateMonitor';
+import { CharacterStatusBadges } from '@/components/CharacterStatusBadges';
 import { stepPhysics } from '@/engine/physics';
 import { PHYSICS_FPS } from '@/constants/gameConfig';
 
@@ -19,11 +21,17 @@ interface Props {
 export function SimulationScreen({ onMenuPress }: Props) {
   const colors = useColors();
   const insets = useSafeAreaInsets();
-  const { state, physicsRef, syncFromPhysics, setViewMode, triggerDialogue, resetPositions } = useGame();
+  const {
+    state, physicsRef, syncFromPhysics, setViewMode,
+    triggerDialogue, resetPositions, clearComaByShock,
+  } = useGame();
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const frameCount = useRef(0);
   const canvasLayout = useRef<{ x: number; y: number; width: number; height: number } | null>(null);
   const lastDialogueTrigger = useRef<Record<string, number>>({});
+
+  const avgPain = state.renderSmallSegs.length > 0
+    ? state.renderSmallSegs.reduce((a, s) => a + s.pain, 0) / state.renderSmallSegs.length : 0;
 
   const checkDialogueTriggers = useCallback(() => {
     const p = physicsRef.current;
@@ -32,7 +40,7 @@ export function SimulationScreen({ onMenuPress }: Props) {
     const cooldown = 5000;
 
     const avgPressure = segs.reduce((a, s) => a + s.pressure, 0) / segs.length;
-    const avgPain = segs.reduce((a, s) => a + s.pain, 0) / segs.length;
+    const avgPainVal = segs.reduce((a, s) => a + s.pain, 0) / segs.length;
     const avgSens = segs.reduce((a, s) => a + s.sensitivity, 0) / segs.length;
 
     const tryTrigger = (key: string, fn: () => void, cd = cooldown) => {
@@ -43,13 +51,24 @@ export function SimulationScreen({ onMenuPress }: Props) {
       }
     };
 
+    // Check pain/electric clearing coma
+    const elecActive = (p.toolType === '电击器' && p.toolActive && p.electrodes.length > 0)
+      || (p.toolStates['电击器']?.active && p.electrodes.length > 0);
+    const voltage = p.toolType === '电击器' && p.toolActive ? p.toolParam1 : (p.toolStates['电击器']?.param1 ?? 0);
+    if (state.comaState !== 'none') {
+      if (avgPainVal > 65 || (elecActive && voltage > 55)) {
+        tryTrigger('coma_shock_clear', () => clearComaByShock(), 8000);
+      }
+      return;
+    }
+
     if (avgPressure > 80) tryTrigger('crit_pressure', () => triggerDialogue('critical_pressure'), 4000);
     else if (avgPressure > 55) tryTrigger('high_pressure', () => triggerDialogue('high_pressure'), 5000);
     else if (avgPressure > 30) tryTrigger('med_pressure', () => triggerDialogue('medium_pressure'), 7000);
     else if (avgPressure > 10) tryTrigger('low_pressure', () => triggerDialogue('low_pressure'), 9000);
 
-    if (avgPain > 60) tryTrigger('high_pain', () => triggerDialogue('pain_high'), 4500);
-    else if (avgPain > 25) tryTrigger('low_pain', () => triggerDialogue('pain_low'), 6000);
+    if (avgPainVal > 60) tryTrigger('high_pain', () => triggerDialogue('pain_high'), 4500);
+    else if (avgPainVal > 25) tryTrigger('low_pain', () => triggerDialogue('pain_low'), 6000);
 
     if (avgSens > 70) tryTrigger('high_sens', () => triggerDialogue('pleasure_high'), 4000);
     else if (avgSens > 40) tryTrigger('med_sens', () => triggerDialogue('pleasure_medium'), 6000);
@@ -60,14 +79,10 @@ export function SimulationScreen({ onMenuPress }: Props) {
     const breaks = segs.filter(s => s.broken).length;
     if (breaks > 0) tryTrigger('break', () => triggerDialogue('intestine_break'), 3000);
 
-    // Electric stimulation: layered dialogue based on voltage + intestine type
-    const elecActive = (p.toolType === '电击器' && p.toolActive && p.electrodes.length > 0)
-      || (p.toolStates['电击器']?.active && p.electrodes.length > 0);
     if (elecActive) {
       const ts = p.toolStates['电击器'];
-      const voltage = (p.toolType === '电击器' && p.toolActive) ? p.toolParam1 : (ts?.param1 ?? 50);
+      const vol = (p.toolType === '电击器' && p.toolActive) ? p.toolParam1 : (ts?.param1 ?? 50);
       const radius = 30 + (p.toolParam2 ?? 50) * 0.3;
-      // Determine which intestine the electrodes are primarily hitting
       let smallHits = 0, largeHits = 0;
       for (const el of p.electrodes) {
         for (const n of p.smallNodes) {
@@ -80,13 +95,13 @@ export function SimulationScreen({ onMenuPress }: Props) {
       const prefix: 'electric_small' | 'electric_large' | 'electric' = smallHits >= largeHits
         ? (smallHits > 0 ? 'electric_small' : 'electric')
         : (largeHits > 0 ? 'electric_large' : 'electric');
-      if (voltage > 75) {
+      if (vol > 75) {
         const key = prefix === 'electric' ? 'electric_critical' : `${prefix}_critical` as const;
         tryTrigger('elec_crit', () => triggerDialogue(key), 2000);
-      } else if (voltage > 50) {
+      } else if (vol > 50) {
         const key = prefix === 'electric' ? 'electric_high' : `${prefix}_high` as const;
         tryTrigger('elec_high', () => triggerDialogue(key), 2500);
-      } else if (voltage > 25) {
+      } else if (vol > 25) {
         const key = prefix === 'electric' ? 'electric_medium' : `${prefix}_medium` as const;
         tryTrigger('elec_med', () => triggerDialogue(key), 3000);
       } else {
@@ -94,12 +109,12 @@ export function SimulationScreen({ onMenuPress }: Props) {
         tryTrigger('elec_low', () => triggerDialogue(key), 4000);
       }
     }
-  }, [triggerDialogue]);
+  }, [triggerDialogue, state.comaState, clearComaByShock]);
 
   useEffect(() => {
     intervalRef.current = setInterval(() => {
       const p = physicsRef.current;
-      p.peristalsisBase = state.peristalsisSpeed;
+      p.peristalsisBase = state.peristalsisSpeed + state.peristalsisModifier;
       stepPhysics(p);
       frameCount.current++;
       if (frameCount.current % 2 === 0) {
@@ -113,7 +128,7 @@ export function SimulationScreen({ onMenuPress }: Props) {
     return () => {
       if (intervalRef.current) clearInterval(intervalRef.current);
     };
-  }, [state.peristalsisSpeed]);
+  }, [state.peristalsisSpeed, state.peristalsisModifier]);
 
   const topPad = Platform.OS === 'web' ? 67 : insets.top;
 
@@ -150,7 +165,6 @@ export function SimulationScreen({ onMenuPress }: Props) {
         </TouchableOpacity>
       </View>
 
-      {/* Canvas fills all remaining space — UI overlays float on top */}
       <View style={styles.canvasArea}>
         <SimulationCanvas
           canvasLayout={canvasLayout.current}
@@ -159,9 +173,35 @@ export function SimulationScreen({ onMenuPress }: Props) {
         <StatusBars hp={state.hp} pleasure={state.pleasure}
           smallTransplantCount={state.smallTransplantCount}
           largeTransplantCount={state.largeTransplantCount} />
+
+        {/* ECG overlay — chest area (top center) */}
+        <View style={styles.ecgOverlay} pointerEvents="none">
+          <HeartRateMonitor
+            heartRate={state.heartRate}
+            comaState={state.comaState}
+            width={148}
+            height={46}
+            transparent
+            showLabel
+          />
+        </View>
+
+        {/* Character status — bottom right */}
+        <View style={styles.statusOverlay} pointerEvents="none">
+          <CharacterStatusBadges
+            comaState={state.comaState}
+            heartRate={state.heartRate}
+            hp={state.hp}
+            ruptures={state.intestinalRuptures}
+            breaks={state.intestinalBreaks}
+            heartRateModifier={state.heartRateModifier}
+            avgPain={avgPain}
+            compact
+          />
+        </View>
+
         <ToolBar />
 
-        {/* Floating bottom overlay: dialogue + tool controls */}
         <View style={styles.bottomOverlay} pointerEvents="box-none">
           <DialogueBox dialogue={state.currentDialogue} />
           <ToolControls />
@@ -201,6 +241,20 @@ const styles = StyleSheet.create({
   canvasArea: {
     flex: 1,
     position: 'relative',
+  },
+  ecgOverlay: {
+    position: 'absolute',
+    top: 8,
+    left: 0,
+    right: 0,
+    alignItems: 'center',
+    zIndex: 4,
+  },
+  statusOverlay: {
+    position: 'absolute',
+    bottom: 120,
+    right: 8,
+    zIndex: 4,
   },
   bottomOverlay: {
     position: 'absolute',

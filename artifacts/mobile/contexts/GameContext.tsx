@@ -11,6 +11,7 @@ import {
   PERISTALSIS_WAVE_AMPLITUDE_DEFAULT, PERISTALSIS_WAVE_SPEED_DEFAULT,
 } from '../constants/gameConfig';
 import { getRandomDialogue, type DialogueTrigger } from '../constants/dialogues';
+import type { ComaState } from '../components/HeartRateMonitor';
 
 export type ScreenName = 'character' | 'simulation' | 'console' | 'settings';
 
@@ -76,6 +77,10 @@ export interface GameUIState {
   smallMesenterySelectedNodes: number[];
   smallTransplantCount: number;
   largeTransplantCount: number;
+  // Drug / coma system
+  comaState: ComaState;
+  heartRateModifier: number;
+  peristalsisModifier: number;
 }
 
 interface GameContextType {
@@ -111,6 +116,9 @@ interface GameContextType {
   resetPositions: () => void;
   relaxAbdomen: () => void;
   takeLaxative: () => void;
+  takeStimulant: () => void;
+  takeSedative: () => void;
+  clearComaByShock: () => void;
   performFirstAid: () => void;
   startTransfusion: () => void;
   repairIntestine: () => void;
@@ -125,7 +133,6 @@ interface GameContextType {
   toggleMesenteryNode: (idx: number, isSmall?: boolean) => void;
 }
 
-// Default tool position: slightly above cavity center, so tools activate in a meaningful spot
 const DEFAULT_TOOL_POS = { x: CAVITY_CX, y: CAVITY_CY - 40 };
 
 const GameContext = createContext<GameContextType | null>(null);
@@ -133,13 +140,23 @@ const GameContext = createContext<GameContextType | null>(null);
 export function GameProvider({ children }: { children: React.ReactNode }) {
   const physicsRef = useRef<PhysicsState>(createInitialPhysicsState());
   const dialogueTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const comaStateRef = useRef<ComaState>('none');
 
-  // Enema animation: tracks target independently from the animated current position
+  // Drug system state (ref for timestamp logs, modifier values mirrored to UI state)
+  const drugRef = useRef({
+    heartRateModifier: 0,
+    breathModifier: 0,
+    peristalsisModifier: 0,
+    painModifier: 0,
+    stimulantLog: [] as number[],
+    sedativeLog: [] as number[],
+  });
+
   const enemaAnimRef = useRef({
-    targetLargeIdx: N_LARGE - 1,   // start retracted (at anus)
+    targetLargeIdx: N_LARGE - 1,
     targetSmallIdx: N_SMALL - 1,
     targetInSmall: false,
-    lastDialogueLargeDepth: -99,   // triggers dialogue every 2 segments
+    lastDialogueLargeDepth: -99,
     lastDialogueSmallDepth: -99,
     dialogueFnRef: null as null | ((t: DialogueTrigger) => void),
   });
@@ -184,14 +201,20 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     smallMesenterySelectedNodes: [],
     smallTransplantCount: 0,
     largeTransplantCount: 0,
+    comaState: 'none',
+    heartRateModifier: 0,
+    peristalsisModifier: 0,
   });
 
   const syncFromPhysics = useCallback(() => {
     const p = physicsRef.current;
     const smallSegs = p.smallSegs;
     const largeSegs = p.largeSegs;
+    const drug = drugRef.current;
+    const coma = comaStateRef.current;
 
-    const totalPain = smallSegs.reduce((a, s) => a + s.pain, 0) / smallSegs.length;
+    const rawPain = smallSegs.reduce((a, s) => a + s.pain, 0) / smallSegs.length;
+    const totalPain = Math.max(0, rawPain + drug.painModifier);
     const totalSens = smallSegs.reduce((a, s) => a + s.sensitivity, 0) / smallSegs.length;
     const totalPressure = smallSegs.reduce((a, s) => a + s.pressure, 0) / smallSegs.length;
     const ruptures = [...smallSegs, ...largeSegs].filter(s => s.ruptured).length;
@@ -199,7 +222,16 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
 
     const hp = Math.min(100, Math.max(0, 100 - totalPain * 0.7 - breaks * 5 + (p.hpBonus ?? 0)));
     const pleasure = Math.min(100, totalSens * 0.6 + (totalPressure > 40 ? (totalPressure - 40) * 0.5 : 0));
-    const heartRate = Math.round(72 + totalPain * 0.8 + pleasure * 0.4);
+
+    let heartRate: number;
+    if (coma === 'tachycardia') {
+      heartRate = 175 + Math.floor(Math.random() * 20);
+    } else if (coma === 'bradycardia') {
+      heartRate = 25 + Math.floor(Math.random() * 10);
+    } else {
+      heartRate = Math.round(72 + rawPain * 0.8 + pleasure * 0.4 + drug.heartRateModifier);
+      heartRate = Math.max(20, Math.min(240, heartRate));
+    }
 
     setState(prev => ({
       ...prev,
@@ -225,6 +257,24 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const triggerDialogue = useCallback((trigger: DialogueTrigger) => {
+    const isComa = comaStateRef.current !== 'none';
+    const isComaDialogue =
+      trigger === 'overdose_tachycardia' ||
+      trigger === 'overdose_bradycardia' ||
+      trigger === 'coma_disturbed';
+
+    if (isComa && !isComaDialogue) {
+      if (Math.random() < 0.12) {
+        const text = getRandomDialogue('coma_disturbed');
+        if (dialogueTimerRef.current) clearTimeout(dialogueTimerRef.current);
+        setState(prev => ({ ...prev, currentDialogue: text }));
+        dialogueTimerRef.current = setTimeout(() => {
+          setState(prev => ({ ...prev, currentDialogue: null }));
+        }, 2000);
+      }
+      return;
+    }
+
     const text = getRandomDialogue(trigger);
     if (dialogueTimerRef.current) clearTimeout(dialogueTimerRef.current);
     setState(prev => ({ ...prev, currentDialogue: text }));
@@ -233,19 +283,16 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     }, 3500);
   }, []);
 
-  // Keep a ref to triggerDialogue so the animation interval has stable access
   const triggerDialogueRef = useRef(triggerDialogue);
   triggerDialogueRef.current = triggerDialogue;
   enemaAnimRef.current.dialogueFnRef = triggerDialogue;
 
-  // Enema insertion/retraction animation — 1 segment per 300ms, dialogue every 2 segments
   useEffect(() => {
     const STEP_MS = 300;
     const timer = setInterval(() => {
       const anim = enemaAnimRef.current;
       const p = physicsRef.current;
 
-      // Only animate if enema tool is active (current or secondary)
       const enemaToolState = p.toolStates['灌肠器'];
       const enemaActive = p.toolType === '灌肠器' || enemaToolState?.active === true;
       if (!enemaActive) return;
@@ -256,21 +303,17 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       const curInSmall = p.enemaInSmall;
 
       if (!curInSmall && !anim.targetInSmall) {
-        // Both in large — animate toward target
         if (curLarge === anim.targetLargeIdx) return;
-        const dir = anim.targetLargeIdx < curLarge ? -1 : 1; // -1=insert deeper, +1=retract
+        const dir = anim.targetLargeIdx < curLarge ? -1 : 1;
         const newIdx = Math.max(0, Math.min(N_LARGE - 1, curLarge + dir));
-
-        // Depth: 0=entry (anus), N_LARGE-1=deepest (cecum)
-        // Large idx 29=anus(entry), 0=cecum(deepest) → depth = N_LARGE-1 - newIdx
         const depth = N_LARGE - 1 - newIdx;
         if (Math.abs(depth - anim.lastDialogueLargeDepth) >= 2) {
           anim.lastDialogueLargeDepth = depth;
-          if (dir === -1) { // inserting
+          if (dir === -1) {
             if (depth <= 8) td('enema_large_shallow');
             else if (depth <= 20) td('enema_large_medium');
             else td('enema_large_deep');
-          } else { // retracting
+          } else {
             td('enema_retract');
           }
         }
@@ -278,7 +321,6 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         setState(prev => ({ ...prev, enemaHeadIdx: newIdx }));
 
       } else if (!curInSmall && anim.targetInSmall) {
-        // Transition: must reach cecum (idx 0) first, then enter small
         if (curLarge > 0) {
           const newIdx = curLarge - 1;
           const depth = N_LARGE - 1 - newIdx;
@@ -289,7 +331,6 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
           p.enemaHeadIdx = newIdx;
           setState(prev => ({ ...prev, enemaHeadIdx: newIdx }));
         } else {
-          // Now cross into small intestine
           p.enemaInSmall = true;
           p.enemaSmallHeadIdx = N_SMALL - 1;
           anim.lastDialogueSmallDepth = -99;
@@ -298,7 +339,6 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         }
 
       } else if (curInSmall && !anim.targetInSmall) {
-        // Retract from small back to large
         if (curSmall < N_SMALL - 1) {
           const newIdx = curSmall + 1;
           const depth = N_SMALL - 1 - newIdx;
@@ -309,21 +349,18 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
           p.enemaSmallHeadIdx = newIdx;
           setState(prev => ({ ...prev, enemaSmallHeadIdx: newIdx }));
         } else {
-          // Exit small intestine
           p.enemaInSmall = false;
           p.enemaSmallHeadIdx = N_SMALL - 1;
-          p.enemaHeadIdx = 0; // at cecum junction
+          p.enemaHeadIdx = 0;
           anim.lastDialogueSmallDepth = -99;
           setState(prev => ({ ...prev, enemaInSmall: false, enemaSmallHeadIdx: N_SMALL - 1, enemaHeadIdx: 0 }));
         }
 
       } else if (curInSmall && anim.targetInSmall) {
-        // Animate inside small intestine
         if (curSmall === anim.targetSmallIdx) return;
-        const dir = anim.targetSmallIdx < curSmall ? -1 : 1; // -1=deeper, +1=retract
+        const dir = anim.targetSmallIdx < curSmall ? -1 : 1;
         const newIdx = Math.max(0, Math.min(N_SMALL - 1, curSmall + dir));
-
-        const depth = N_SMALL - 1 - newIdx; // 0=entry(terminal ileum), N_SMALL-1=deepest
+        const depth = N_SMALL - 1 - newIdx;
         if (Math.abs(depth - anim.lastDialogueSmallDepth) >= 2) {
           anim.lastDialogueSmallDepth = depth;
           if (dir === -1) {
@@ -351,28 +388,22 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
 
   const setActiveTool = useCallback((tool: ToolType | null) => {
     const p = physicsRef.current;
-
-    // Save current tool's last position before switching
     const prevTool = p.toolType;
     if (prevTool && p.toolStates[prevTool]) {
       p.toolStates[prevTool].pos = p.toolPos ? { ...p.toolPos } : null;
     }
-
     p.toolType = tool;
     p.grabbedNode = null;
     p.toolAnchor = null;
     p.toolInserted = false;
-
     if (tool) {
       const ts = p.toolStates[tool] ?? { active: false, param1: 50, param2: 50 };
       p.toolActive = ts.active;
       p.toolParam1 = ts.param1;
       p.toolParam2 = ts.param2;
-      // Restore last position for this tool if it had one
       if (ts.pos) {
         p.toolPos = { ...ts.pos };
       } else if (ts.active && !p.toolPos) {
-        // Tool was active but has no stored pos — give it a default
         p.toolPos = { ...DEFAULT_TOOL_POS };
       }
       setState(prev => ({
@@ -401,12 +432,9 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
   const setToolActive = useCallback((active: boolean) => {
     const p = physicsRef.current;
     p.toolActive = active;
-
-    // If activating with no position set, give a default position
     if (active && !p.toolPos) {
       p.toolPos = { ...DEFAULT_TOOL_POS };
     }
-
     const toolId = p.toolType;
     if (toolId && p.toolStates[toolId]) {
       p.toolStates[toolId].active = active;
@@ -467,7 +495,6 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     if (p.toolStates[toolId]) {
       p.toolStates[toolId] = { ...p.toolStates[toolId], ...patch };
     }
-    // If activating via setToolState and no pos yet, set default
     if (patch.active === true && !p.toolStates[toolId]?.pos && !p.toolPos) {
       if (p.toolStates[toolId]) p.toolStates[toolId].pos = { ...DEFAULT_TOOL_POS };
       if (p.toolType === toolId) p.toolPos = { ...DEFAULT_TOOL_POS };
@@ -596,7 +623,6 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     setState(prev => ({ ...prev, enemaSmallHeadIdx: clamped }));
   }, []);
 
-  // Set the target for enema animation — the head will smoothly animate toward this
   const setEnemaTarget = useCallback((params: { largeIdx?: number; smallIdx?: number; inSmall?: boolean }) => {
     const anim = enemaAnimRef.current;
     if (params.largeIdx !== undefined) {
@@ -610,9 +636,116 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
+  const takeStimulant = useCallback(() => {
+    const now = Date.now();
+    const drug = drugRef.current;
+    const recent = drug.stimulantLog.filter(t => now - t < 20000);
+    recent.push(now);
+    drug.stimulantLog = recent;
+
+    const curesBradycardia = comaStateRef.current === 'bradycardia';
+    const overdose = recent.length > 10 && !curesBradycardia;
+
+    drug.heartRateModifier = Math.min(150, drug.heartRateModifier + 15);
+    drug.breathModifier = Math.min(2.5, drug.breathModifier + 0.2);
+    drug.peristalsisModifier = Math.min(3.0, drug.peristalsisModifier + 0.1);
+
+    const newBreath = Math.min(3.0, BREATH_AMPLITUDE_DEFAULT + drug.breathModifier);
+
+    if (overdose) {
+      comaStateRef.current = 'tachycardia';
+      setState(prev => ({
+        ...prev,
+        comaState: 'tachycardia',
+        heartRateModifier: drug.heartRateModifier,
+        peristalsisModifier: drug.peristalsisModifier,
+        breathAmplitude: newBreath,
+      }));
+      triggerDialogueRef.current('overdose_tachycardia');
+    } else if (curesBradycardia) {
+      comaStateRef.current = 'none';
+      setState(prev => ({
+        ...prev,
+        comaState: 'none',
+        heartRateModifier: drug.heartRateModifier,
+        peristalsisModifier: drug.peristalsisModifier,
+        breathAmplitude: newBreath,
+      }));
+      triggerDialogueRef.current('cmd_stimulant');
+    } else {
+      setState(prev => ({
+        ...prev,
+        heartRateModifier: drug.heartRateModifier,
+        peristalsisModifier: drug.peristalsisModifier,
+        breathAmplitude: newBreath,
+      }));
+      triggerDialogueRef.current('cmd_stimulant');
+    }
+  }, []);
+
+  const takeSedative = useCallback(() => {
+    const now = Date.now();
+    const drug = drugRef.current;
+    const recent = drug.sedativeLog.filter(t => now - t < 20000);
+    recent.push(now);
+    drug.sedativeLog = recent;
+
+    const curesTachycardia = comaStateRef.current === 'tachycardia';
+    const overdose = recent.length > 10 && !curesTachycardia;
+
+    drug.heartRateModifier = Math.max(-120, drug.heartRateModifier - 12);
+    drug.breathModifier = Math.max(-1.0, drug.breathModifier - 0.15);
+    drug.painModifier = Math.max(-50, drug.painModifier - 5);
+
+    const newBreath = Math.max(0.2, BREATH_AMPLITUDE_DEFAULT + drug.breathModifier);
+
+    if (overdose) {
+      comaStateRef.current = 'bradycardia';
+      setState(prev => ({
+        ...prev,
+        comaState: 'bradycardia',
+        heartRateModifier: drug.heartRateModifier,
+        breathAmplitude: newBreath,
+      }));
+      triggerDialogueRef.current('overdose_bradycardia');
+    } else if (curesTachycardia) {
+      comaStateRef.current = 'none';
+      setState(prev => ({
+        ...prev,
+        comaState: 'none',
+        heartRateModifier: drug.heartRateModifier,
+        breathAmplitude: newBreath,
+      }));
+      triggerDialogueRef.current('cmd_sedative');
+    } else {
+      setState(prev => ({
+        ...prev,
+        heartRateModifier: drug.heartRateModifier,
+        breathAmplitude: newBreath,
+      }));
+      triggerDialogueRef.current('cmd_sedative');
+    }
+  }, []);
+
+  const clearComaByShock = useCallback(() => {
+    if (comaStateRef.current === 'none') return;
+    comaStateRef.current = 'none';
+    setState(prev => ({ ...prev, comaState: 'none' }));
+    triggerDialogueRef.current('surg_firstaid');
+  }, []);
+
   const resetPhysics = useCallback(() => {
     const fresh = createInitialPhysicsState();
     physicsRef.current = fresh;
+    comaStateRef.current = 'none';
+    drugRef.current = {
+      heartRateModifier: 0,
+      breathModifier: 0,
+      peristalsisModifier: 0,
+      painModifier: 0,
+      stimulantLog: [],
+      sedativeLog: [],
+    };
     setState(prev => ({
       ...prev,
       hp: 100, pleasure: 0, heartRate: 72,
@@ -636,6 +769,9 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       enemaHeadIdx: fresh.enemaHeadIdx,
       enemaInSmall: false,
       enemaSmallHeadIdx: fresh.enemaSmallHeadIdx,
+      comaState: 'none',
+      heartRateModifier: 0,
+      peristalsisModifier: 0,
     }));
   }, []);
 
@@ -676,6 +812,10 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     if (curHp < 5) {
       p.hpBonus = Math.min(100, (p.hpBonus ?? 0) + 25);
       setState(prev => ({ ...prev, hpBonus: p.hpBonus }));
+    }
+    if (comaStateRef.current !== 'none') {
+      comaStateRef.current = 'none';
+      setState(prev => ({ ...prev, comaState: 'none' }));
     }
     triggerDialogueRef.current('surg_firstaid');
   }, []);
@@ -727,7 +867,6 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         seg.health = Math.max(seg.health, 35);
         seg.pain = Math.min(seg.pain, 20);
         seg.pressure = 0;
-        // Snap nodes back toward each other so spring reconnects
         const nA = p.smallNodes[i], nB = p.smallNodes[i + 1];
         if (nA && nB) {
           const dx = nB.x - nA.x, dy = nB.y - nA.y;
@@ -933,7 +1072,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       insertViaNavel, retractTool, setNavelPierced, setEnemaHeadIdx,
       setEnemaInSmall, setEnemaSmallHeadIdx, setEnemaTarget,
       resetPhysics, resetPositions,
-      relaxAbdomen, takeLaxative,
+      relaxAbdomen, takeLaxative, takeStimulant, takeSedative, clearComaByShock,
       performFirstAid, startTransfusion,
       repairIntestine, sutureIntestine, performNavelSurgery,
       transplantSmallIntestine, transplantLargeIntestine, transplantAllIntestines,

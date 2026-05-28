@@ -1,7 +1,9 @@
 import React from 'react';
-import { View, Text, StyleSheet, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, useWindowDimensions } from 'react-native';
 import { useColors } from '@/hooks/useColors';
 import { useGame } from '@/contexts/GameContext';
+import { HeartRateMonitor } from './HeartRateMonitor';
+import { CharacterStatusBadges } from './CharacterStatusBadges';
 
 interface StatRowProps {
   label: string;
@@ -43,6 +45,7 @@ function BarRow({ label, value, color, bgColor }: BarRowProps) {
 export function AttributePanel() {
   const colors = useColors();
   const { state } = useGame();
+  const { width } = useWindowDimensions();
 
   const ruptures = state.intestinalRuptures;
   const breaks = state.intestinalBreaks;
@@ -53,17 +56,45 @@ export function AttributePanel() {
   const avgPain = state.renderSmallSegs.length > 0
     ? state.renderSmallSegs.reduce((a, s) => a + s.pain, 0) / state.renderSmallSegs.length : 0;
 
+  const panelWidth = Math.max(140, width * 0.54 - 32);
+  const ecgWidth = Math.min(panelWidth, 220);
+
   return (
     <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
       <Text style={[styles.sectionTitle, { color: colors.primary }]}>生命体征</Text>
       <BarRow label="生命值" value={state.hp} color={colors.hp} bgColor={colors.hpBg} />
       <BarRow label="快感值" value={state.pleasure} color={colors.pleasure} bgColor={colors.pleasureBg} />
 
+      {/* ECG Heart Rate Monitor */}
+      <View style={styles.ecgContainer}>
+        <HeartRateMonitor
+          heartRate={state.heartRate}
+          comaState={state.comaState}
+          width={ecgWidth}
+          height={54}
+          transparent={false}
+          showLabel
+        />
+      </View>
+
+      <View style={[styles.divider, { backgroundColor: colors.border }]} />
+
+      {/* Character Status */}
+      <CharacterStatusBadges
+        comaState={state.comaState}
+        heartRate={state.heartRate}
+        hp={state.hp}
+        ruptures={ruptures}
+        breaks={breaks}
+        heartRateModifier={state.heartRateModifier}
+        avgPain={avgPain}
+      />
+
       <View style={[styles.divider, { backgroundColor: colors.border }]} />
       <Text style={[styles.sectionTitle, { color: colors.primary }]}>身体状态</Text>
 
       <StatRow label="心率" value={`${state.heartRate} bpm`}
-        color={state.heartRate > 120 ? colors.hp : colors.foreground} />
+        color={state.heartRate > 130 ? colors.hp : state.heartRate < 50 ? '#4488ff' : colors.foreground} />
       <StatRow label="肚脐状态"
         value={state.navelPierced ? '已穿孔' : '正常'}
         color={state.navelPierced ? colors.primary : colors.mutedForeground} />
@@ -110,6 +141,12 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   divider: { height: 1, marginVertical: 12 },
+  ecgContainer: {
+    marginTop: 8,
+    marginBottom: 4,
+    borderRadius: 4,
+    overflow: 'hidden',
+  },
   row: {
     flexDirection: 'row',
     justifyContent: 'space-between',
