@@ -79,6 +79,7 @@ export function SettingsScreen({ onMenuPress }: Props) {
     setDebugMode, setShowCollisionBoxes,
     setPeriSpeed, setPeriWaveAmplitude, setPeriWaveSpeed,
     setBreathAmplitude, setExpansionScale, setPressureDiffusionRate,
+    setDrugDuration,
   } = useGame();
   const topPad = Platform.OS === 'web' ? 67 : insets.top;
   const bottomPad = Platform.OS === 'web' ? 34 : insets.bottom;
@@ -152,6 +153,19 @@ export function SettingsScreen({ onMenuPress }: Props) {
             min={0.001} max={0.02} step={0.001}
             onValueChange={setPressureDiffusionRate}
             trackColor={colors.syringeColor ?? '#60c0c0'}
+          />
+        </View>
+
+        {/* Drug system */}
+        <Text style={[styles.sectionTitle, { color: colors.primary }]}>药剂系统</Text>
+        <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
+          <SliderRow
+            label="药效持续时间"
+            value={state.drugDurationSec}
+            displayValue={`${Math.round(state.drugDurationSec)}秒`}
+            min={30} max={300} step={10}
+            onValueChange={setDrugDuration}
+            trackColor="#ffaa00"
           />
         </View>
 

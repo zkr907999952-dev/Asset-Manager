@@ -1,5 +1,5 @@
-import React from 'react';
-import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import React, { useState, useRef } from 'react';
+import { View, Text, TouchableOpacity, Animated, StyleSheet } from 'react-native';
 import { GameSlider } from './GameSlider';
 import { Feather } from '@expo/vector-icons';
 import { useColors } from '@/hooks/useColors';
@@ -20,11 +20,51 @@ export function ToolControls() {
   const colors = useColors();
   const { state, setToolActive, setToolParam1, setToolParam2, setActiveTool, clearElectrodes } = useGame();
   const { activeTool, toolActive, toolParam1, toolParam2 } = state;
+  const [collapsed, setCollapsed] = useState(false);
+  const animH = useRef(new Animated.Value(1)).current;
 
   if (!activeTool) return null;
-
   const params = TOOL_PARAMS[activeTool];
   if (!params) return null;
+
+  const handleCollapse = () => {
+    Animated.timing(animH, {
+      toValue: collapsed ? 1 : 0,
+      duration: 200,
+      useNativeDriver: false,
+    }).start();
+    setCollapsed(c => !c);
+  };
+
+  if (collapsed) {
+    return (
+      <TouchableOpacity
+        style={[styles.collapsedTab, {
+          backgroundColor: 'rgba(10,3,3,0.90)',
+          borderColor: `${colors.border}88`,
+          borderTopColor: toolActive ? `${colors.primary}88` : `${colors.border}88`,
+        }]}
+        onPress={handleCollapse}
+        activeOpacity={0.85}
+      >
+        <View style={styles.collapsedLeft}>
+          <View style={[styles.collapsedDot, { backgroundColor: toolActive ? colors.primary : colors.mutedForeground }]} />
+          <Text style={[styles.collapsedName, { color: toolActive ? colors.primary : colors.foreground }]}>
+            {activeTool}
+          </Text>
+          <Text style={[styles.collapsedStatus, { color: colors.mutedForeground }]}>
+            {toolActive ? '运行中' : '已暂停'}
+          </Text>
+        </View>
+        <View style={styles.collapsedRight}>
+          <Text style={[styles.collapsedParams, { color: colors.mutedForeground }]}>
+            {params.p1Label} {Math.round(toolParam1)}  {params.p2Label} {Math.round(toolParam2)}
+          </Text>
+          <Feather name="chevron-up" size={14} color={colors.mutedForeground} />
+        </View>
+      </TouchableOpacity>
+    );
+  }
 
   return (
     <View style={[styles.container, { borderTopColor: `${colors.border}66` }]}>
@@ -55,7 +95,14 @@ export function ToolControls() {
             </Text>
           </TouchableOpacity>
           <TouchableOpacity
-            style={[styles.closeBtn, { borderColor: `${colors.border}66` }]}
+            style={[styles.iconBtn, { borderColor: `${colors.border}66` }]}
+            onPress={handleCollapse}
+            activeOpacity={0.7}
+          >
+            <Feather name="chevron-down" size={14} color={colors.mutedForeground} />
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.iconBtn, { borderColor: `${colors.border}66` }]}
             onPress={() => setActiveTool(null)}
           >
             <Feather name="x" size={14} color={colors.mutedForeground} />
@@ -147,7 +194,7 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontFamily: 'Inter_400Regular',
   },
-  closeBtn: {
+  iconBtn: {
     padding: 5,
     borderRadius: 6,
     borderWidth: 1,
@@ -156,6 +203,46 @@ const styles = StyleSheet.create({
   sliderRow: { gap: 2 },
   sliderLabel: {
     fontSize: 11,
+    fontFamily: 'Inter_400Regular',
+  },
+  collapsedTab: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderTopWidth: 2,
+    borderLeftWidth: 1,
+    borderRightWidth: 1,
+    borderBottomWidth: 0,
+    borderTopLeftRadius: 8,
+    borderTopRightRadius: 8,
+  },
+  collapsedLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  collapsedDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 4,
+  },
+  collapsedName: {
+    fontSize: 13,
+    fontFamily: 'Inter_700Bold',
+  },
+  collapsedStatus: {
+    fontSize: 10,
+    fontFamily: 'Inter_400Regular',
+  },
+  collapsedRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  collapsedParams: {
+    fontSize: 10,
     fontFamily: 'Inter_400Regular',
   },
 });

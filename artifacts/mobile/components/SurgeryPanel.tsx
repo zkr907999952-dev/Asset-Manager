@@ -57,7 +57,11 @@ export function SurgeryPanel() {
   const selCount = state.mesenterySelectedNodes?.length ?? 0;
 
   return (
-    <ScrollView showsVerticalScrollIndicator={false} style={styles.scroll}>
+    <ScrollView
+      showsVerticalScrollIndicator={false}
+      style={styles.scroll}
+      nestedScrollEnabled
+    >
       <Text style={[styles.title, { color: colors.mutedForeground }]}>手术操作</Text>
 
       <Text style={[styles.section, { color: colors.mutedForeground }]}>紧急处理</Text>
@@ -101,7 +105,7 @@ export function SurgeryPanel() {
 }
 
 const styles = StyleSheet.create({
-  scroll: { maxHeight: 480 },
+  scroll: { flex: 1 },
   title: {
     fontSize: 10,
     fontFamily: 'Inter_600SemiBold',

@@ -6,6 +6,7 @@ import { CharacterScreen } from '@/screens/CharacterScreen';
 import { SimulationScreen } from '@/screens/SimulationScreen';
 import { ConsoleScreen } from '@/screens/ConsoleScreen';
 import { SettingsScreen } from '@/screens/SettingsScreen';
+import { HelpScreen } from '@/screens/HelpScreen';
 import { useColors } from '@/hooks/useColors';
 
 export default function App() {
@@ -19,6 +20,7 @@ export default function App() {
       case 'character': return <CharacterScreen {...props} />;
       case 'console': return <ConsoleScreen {...props} />;
       case 'settings': return <SettingsScreen {...props} />;
+      case 'help': return <HelpScreen {...props} />;
       default: return <SimulationScreen {...props} />;
     }
   };

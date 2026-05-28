@@ -1,5 +1,5 @@
 import React, { useRef, useEffect } from 'react';
-import { View, Text, Animated, StyleSheet } from 'react-native';
+import { View, Text, Animated, StyleSheet, ViewStyle } from 'react-native';
 import { useColors } from '@/hooks/useColors';
 
 interface Props {
@@ -7,6 +7,7 @@ interface Props {
   pleasure: number;
   smallTransplantCount?: number;
   largeTransplantCount?: number;
+  embedded?: boolean;
 }
 
 function HorizBar({ value, color, bgColor, label }: {
@@ -36,11 +37,16 @@ function HorizBar({ value, color, bgColor, label }: {
   );
 }
 
-export function StatusBars({ hp, pleasure, smallTransplantCount, largeTransplantCount }: Props) {
+export function StatusBars({ hp, pleasure, smallTransplantCount, largeTransplantCount, embedded = false }: Props) {
   const colors = useColors();
   const showTransplant = (smallTransplantCount ?? 0) > 0 || (largeTransplantCount ?? 0) > 0;
+
+  const wrapperStyle: ViewStyle = embedded
+    ? styles.wrapperEmbedded
+    : styles.wrapperOverlay;
+
   return (
-    <View style={styles.wrapper}>
+    <View style={wrapperStyle}>
       <HorizBar value={hp} color={colors.hp} bgColor={colors.hpBg} label="HP" />
       <HorizBar value={pleasure} color={colors.pleasure} bgColor={colors.pleasureBg} label="快" />
       {showTransplant && (
@@ -62,13 +68,17 @@ export function StatusBars({ hp, pleasure, smallTransplantCount, largeTransplant
 }
 
 const styles = StyleSheet.create({
-  wrapper: {
+  wrapperOverlay: {
     position: 'absolute',
     left: 6,
-    top: 8,
-    width: 128,
-    gap: 5,
+    right: 8,
+    top: 4,
+    gap: 4,
     zIndex: 3,
+  },
+  wrapperEmbedded: {
+    flex: 1,
+    gap: 4,
   },
   barRow: {
     flexDirection: 'row',

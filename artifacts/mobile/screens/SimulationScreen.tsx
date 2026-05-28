@@ -165,26 +165,34 @@ export function SimulationScreen({ onMenuPress }: Props) {
         </TouchableOpacity>
       </View>
 
+      {/* Top info bar: HP/Pleasure bars + ECG monitor */}
+      <View style={[styles.topInfoBar, { backgroundColor: colors.headerBg, borderBottomColor: colors.border }]}>
+        <View style={styles.topInfoBars}>
+          <StatusBars
+            hp={state.hp}
+            pleasure={state.pleasure}
+            smallTransplantCount={state.smallTransplantCount}
+            largeTransplantCount={state.largeTransplantCount}
+            embedded
+          />
+        </View>
+        <View style={styles.topInfoEcg} pointerEvents="none">
+          <HeartRateMonitor
+            heartRate={state.heartRate}
+            comaState={state.comaState}
+            width={160}
+            height={42}
+            transparent
+            showLabel
+          />
+        </View>
+      </View>
+
       <View style={styles.canvasArea}>
         <SimulationCanvas
           canvasLayout={canvasLayout.current}
           onLayout={layout => { canvasLayout.current = layout; }}
         />
-        <StatusBars hp={state.hp} pleasure={state.pleasure}
-          smallTransplantCount={state.smallTransplantCount}
-          largeTransplantCount={state.largeTransplantCount} />
-
-        {/* ECG overlay — chest area (top center) */}
-        <View style={styles.ecgOverlay} pointerEvents="none">
-          <HeartRateMonitor
-            heartRate={state.heartRate}
-            comaState={state.comaState}
-            width={148}
-            height={46}
-            transparent
-            showLabel
-          />
-        </View>
 
         {/* Character status — bottom right */}
         <View style={styles.statusOverlay} pointerEvents="none">
@@ -238,17 +246,24 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   viewToggleText: { fontSize: 11, fontFamily: 'Inter_600SemiBold' },
+  topInfoBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderBottomWidth: 1,
+    gap: 8,
+  },
+  topInfoBars: {
+    flex: 1,
+    justifyContent: 'center',
+  },
+  topInfoEcg: {
+    alignItems: 'flex-end',
+  },
   canvasArea: {
     flex: 1,
     position: 'relative',
-  },
-  ecgOverlay: {
-    position: 'absolute',
-    top: 8,
-    left: 0,
-    right: 0,
-    alignItems: 'center',
-    zIndex: 4,
   },
   statusOverlay: {
     position: 'absolute',

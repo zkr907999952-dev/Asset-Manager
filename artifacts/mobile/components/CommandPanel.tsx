@@ -12,9 +12,10 @@ interface CmdBtnProps {
   cooldownSec?: number;
   disabled?: boolean;
   accentColor?: string;
+  drugTimeLeft?: number;
 }
 
-function CmdButton({ label, subLabel, icon, onPress, cooldownSec = 0, disabled, accentColor }: CmdBtnProps) {
+function CmdButton({ label, subLabel, icon, onPress, cooldownSec = 0, disabled, accentColor, drugTimeLeft }: CmdBtnProps) {
   const colors = useColors();
   const [remaining, setRemaining] = useState(0);
 
@@ -35,6 +36,7 @@ function CmdButton({ label, subLabel, icon, onPress, cooldownSec = 0, disabled, 
   const isDisabled = disabled || remaining > 0;
   const borderColor = isDisabled ? colors.border : (accentColor ?? colors.primary);
   const bgColor = isDisabled ? 'transparent' : `${accentColor ?? colors.primary}18`;
+  const hasDrugTimer = typeof drugTimeLeft === 'number' && drugTimeLeft > 0;
 
   return (
     <TouchableOpacity
@@ -49,6 +51,13 @@ function CmdButton({ label, subLabel, icon, onPress, cooldownSec = 0, disabled, 
         </Text>
         <Text style={[styles.btnSub, { color: colors.mutedForeground }]}>{subLabel}</Text>
       </View>
+      {hasDrugTimer && (
+        <View style={[styles.timerBadge, { borderColor: `${accentColor ?? colors.primary}66`, backgroundColor: `${accentColor ?? colors.primary}22` }]}>
+          <Text style={[styles.timerText, { color: accentColor ?? colors.primary }]}>
+            {drugTimeLeft}s
+          </Text>
+        </View>
+      )}
     </TouchableOpacity>
   );
 }
@@ -86,6 +95,7 @@ export function CommandPanel() {
         onPress={takeStimulant}
         accentColor="#ffaa00"
         disabled={state.comaState === 'tachycardia'}
+        drugTimeLeft={state.stimulantTimeLeft}
       />
       <CmdButton
         icon="moon"
@@ -94,6 +104,7 @@ export function CommandPanel() {
         onPress={takeSedative}
         accentColor="#6688ff"
         disabled={state.comaState === 'bradycardia'}
+        drugTimeLeft={state.sedativeTimeLeft}
       />
 
       {state.comaState !== 'none' && (
@@ -156,6 +167,18 @@ const styles = StyleSheet.create({
   btnText: { flex: 1 },
   btnLabel: { fontSize: 12, fontFamily: 'Inter_600SemiBold' },
   btnSub: { fontSize: 9, fontFamily: 'Inter_400Regular', marginTop: 1 },
+  timerBadge: {
+    paddingHorizontal: 6,
+    paddingVertical: 3,
+    borderRadius: 4,
+    borderWidth: 1,
+    minWidth: 34,
+    alignItems: 'center',
+  },
+  timerText: {
+    fontSize: 10,
+    fontFamily: 'Inter_700Bold',
+  },
   comaAlert: {
     flexDirection: 'row',
     alignItems: 'center',

@@ -14,6 +14,7 @@ const SCREENS: { id: ScreenName; label: string; subtitle: string }[] = [
   { id: 'simulation', label: '腹部交互', subtitle: '物理仿真主界面' },
   { id: 'console', label: '控制台', subtitle: '调整仿真参数' },
   { id: 'settings', label: '设置', subtitle: '游戏选项与调试' },
+  { id: 'help', label: '帮助', subtitle: '游戏系统手册' },
 ];
 
 interface Props {

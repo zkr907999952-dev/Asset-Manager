@@ -13,7 +13,7 @@ import {
 import { getRandomDialogue, type DialogueTrigger } from '../constants/dialogues';
 import type { ComaState } from '../components/HeartRateMonitor';
 
-export type ScreenName = 'character' | 'simulation' | 'console' | 'settings';
+export type ScreenName = 'character' | 'simulation' | 'console' | 'settings' | 'help';
 
 export interface RenderSegment {
   health: number; sensitivity: number; pain: number; pressure: number;
@@ -81,6 +81,9 @@ export interface GameUIState {
   comaState: ComaState;
   heartRateModifier: number;
   peristalsisModifier: number;
+  drugDurationSec: number;
+  stimulantTimeLeft: number;
+  sedativeTimeLeft: number;
 }
 
 interface GameContextType {
@@ -119,6 +122,7 @@ interface GameContextType {
   takeStimulant: () => void;
   takeSedative: () => void;
   clearComaByShock: () => void;
+  setDrugDuration: (v: number) => void;
   performFirstAid: () => void;
   startTransfusion: () => void;
   repairIntestine: () => void;
@@ -144,12 +148,21 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
 
   // Drug system state (ref for timestamp logs, modifier values mirrored to UI state)
   const drugRef = useRef({
+    stimHRMod: 0,
+    stimBreathMod: 0,
+    stimPeriMod: 0,
+    sedHRMod: 0,
+    sedBreathMod: 0,
+    sedPainMod: 0,
     heartRateModifier: 0,
     breathModifier: 0,
     peristalsisModifier: 0,
     painModifier: 0,
     stimulantLog: [] as number[],
     sedativeLog: [] as number[],
+    stimulantExpiry: 0,
+    sedativeExpiry: 0,
+    durationSec: 120,
   });
 
   const enemaAnimRef = useRef({
@@ -204,6 +217,9 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     comaState: 'none',
     heartRateModifier: 0,
     peristalsisModifier: 0,
+    drugDurationSec: 120,
+    stimulantTimeLeft: 0,
+    sedativeTimeLeft: 0,
   });
 
   const syncFromPhysics = useCallback(() => {
@@ -212,6 +228,29 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     const largeSegs = p.largeSegs;
     const drug = drugRef.current;
     const coma = comaStateRef.current;
+    const now = Date.now();
+
+    // Drug expiry checks — zero out individual drug modifiers when timer ends
+    if (drug.stimulantExpiry > 0 && now > drug.stimulantExpiry) {
+      drug.stimHRMod = 0;
+      drug.stimBreathMod = 0;
+      drug.stimPeriMod = 0;
+      drug.stimulantExpiry = 0;
+      drug.heartRateModifier = drug.stimHRMod + drug.sedHRMod;
+      drug.breathModifier = drug.stimBreathMod + drug.sedBreathMod;
+      drug.peristalsisModifier = drug.stimPeriMod;
+    }
+    if (drug.sedativeExpiry > 0 && now > drug.sedativeExpiry) {
+      drug.sedHRMod = 0;
+      drug.sedBreathMod = 0;
+      drug.sedPainMod = 0;
+      drug.sedativeExpiry = 0;
+      drug.heartRateModifier = drug.stimHRMod + drug.sedHRMod;
+      drug.breathModifier = drug.stimBreathMod + drug.sedBreathMod;
+      drug.painModifier = drug.sedPainMod;
+    }
+    const stimTL = drug.stimulantExpiry > 0 ? Math.max(0, Math.ceil((drug.stimulantExpiry - now) / 1000)) : 0;
+    const sedTL = drug.sedativeExpiry > 0 ? Math.max(0, Math.ceil((drug.sedativeExpiry - now) / 1000)) : 0;
 
     const rawPain = smallSegs.reduce((a, s) => a + s.pain, 0) / smallSegs.length;
     const totalPain = Math.max(0, rawPain + drug.painModifier);
@@ -253,6 +292,10 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       enemaSmallHeadIdx: p.enemaSmallHeadIdx,
       electrodes: [...p.electrodes],
       hpBonus: p.hpBonus ?? 0,
+      heartRateModifier: drug.heartRateModifier,
+      peristalsisModifier: drug.peristalsisModifier,
+      stimulantTimeLeft: stimTL,
+      sedativeTimeLeft: sedTL,
     }));
   }, []);
 
@@ -646,11 +689,16 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     const curesBradycardia = comaStateRef.current === 'bradycardia';
     const overdose = recent.length > 10 && !curesBradycardia;
 
-    drug.heartRateModifier = Math.min(150, drug.heartRateModifier + 15);
-    drug.breathModifier = Math.min(2.5, drug.breathModifier + 0.2);
-    drug.peristalsisModifier = Math.min(3.0, drug.peristalsisModifier + 0.1);
+    drug.stimHRMod = Math.min(150, drug.stimHRMod + 15);
+    drug.stimBreathMod = Math.min(2.5, drug.stimBreathMod + 0.2);
+    drug.stimPeriMod = Math.min(3.0, drug.stimPeriMod + 0.1);
+    drug.stimulantExpiry = now + drug.durationSec * 1000;
+    drug.heartRateModifier = drug.stimHRMod + drug.sedHRMod;
+    drug.breathModifier = drug.stimBreathMod + drug.sedBreathMod;
+    drug.peristalsisModifier = drug.stimPeriMod;
 
     const newBreath = Math.min(3.0, BREATH_AMPLITUDE_DEFAULT + drug.breathModifier);
+    const stimTL = Math.ceil(drug.durationSec);
 
     if (overdose) {
       comaStateRef.current = 'tachycardia';
@@ -659,6 +707,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         comaState: 'tachycardia',
         heartRateModifier: drug.heartRateModifier,
         peristalsisModifier: drug.peristalsisModifier,
+        stimulantTimeLeft: stimTL,
         breathAmplitude: newBreath,
       }));
       triggerDialogueRef.current('overdose_tachycardia');
@@ -669,6 +718,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         comaState: 'none',
         heartRateModifier: drug.heartRateModifier,
         peristalsisModifier: drug.peristalsisModifier,
+        stimulantTimeLeft: stimTL,
         breathAmplitude: newBreath,
       }));
       triggerDialogueRef.current('cmd_stimulant');
@@ -677,6 +727,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         ...prev,
         heartRateModifier: drug.heartRateModifier,
         peristalsisModifier: drug.peristalsisModifier,
+        stimulantTimeLeft: stimTL,
         breathAmplitude: newBreath,
       }));
       triggerDialogueRef.current('cmd_stimulant');
@@ -693,11 +744,16 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     const curesTachycardia = comaStateRef.current === 'tachycardia';
     const overdose = recent.length > 10 && !curesTachycardia;
 
-    drug.heartRateModifier = Math.max(-120, drug.heartRateModifier - 12);
-    drug.breathModifier = Math.max(-1.0, drug.breathModifier - 0.15);
-    drug.painModifier = Math.max(-50, drug.painModifier - 5);
+    drug.sedHRMod = Math.max(-120, drug.sedHRMod - 12);
+    drug.sedBreathMod = Math.max(-1.0, drug.sedBreathMod - 0.15);
+    drug.sedPainMod = Math.max(-50, drug.sedPainMod - 5);
+    drug.sedativeExpiry = now + drug.durationSec * 1000;
+    drug.heartRateModifier = drug.stimHRMod + drug.sedHRMod;
+    drug.breathModifier = drug.stimBreathMod + drug.sedBreathMod;
+    drug.painModifier = drug.sedPainMod;
 
     const newBreath = Math.max(0.2, BREATH_AMPLITUDE_DEFAULT + drug.breathModifier);
+    const sedTL = Math.ceil(drug.durationSec);
 
     if (overdose) {
       comaStateRef.current = 'bradycardia';
@@ -705,6 +761,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         ...prev,
         comaState: 'bradycardia',
         heartRateModifier: drug.heartRateModifier,
+        sedativeTimeLeft: sedTL,
         breathAmplitude: newBreath,
       }));
       triggerDialogueRef.current('overdose_bradycardia');
@@ -714,6 +771,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         ...prev,
         comaState: 'none',
         heartRateModifier: drug.heartRateModifier,
+        sedativeTimeLeft: sedTL,
         breathAmplitude: newBreath,
       }));
       triggerDialogueRef.current('cmd_sedative');
@@ -721,6 +779,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       setState(prev => ({
         ...prev,
         heartRateModifier: drug.heartRateModifier,
+        sedativeTimeLeft: sedTL,
         breathAmplitude: newBreath,
       }));
       triggerDialogueRef.current('cmd_sedative');
@@ -739,12 +798,13 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     physicsRef.current = fresh;
     comaStateRef.current = 'none';
     drugRef.current = {
-      heartRateModifier: 0,
-      breathModifier: 0,
-      peristalsisModifier: 0,
-      painModifier: 0,
-      stimulantLog: [],
-      sedativeLog: [],
+      stimHRMod: 0, stimBreathMod: 0, stimPeriMod: 0,
+      sedHRMod: 0, sedBreathMod: 0, sedPainMod: 0,
+      heartRateModifier: 0, breathModifier: 0,
+      peristalsisModifier: 0, painModifier: 0,
+      stimulantLog: [], sedativeLog: [],
+      stimulantExpiry: 0, sedativeExpiry: 0,
+      durationSec: drugRef.current.durationSec,
     };
     setState(prev => ({
       ...prev,
@@ -772,6 +832,9 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       comaState: 'none',
       heartRateModifier: 0,
       peristalsisModifier: 0,
+      drugDurationSec: drugRef.current.durationSec,
+      stimulantTimeLeft: 0,
+      sedativeTimeLeft: 0,
     }));
   }, []);
 
@@ -1060,6 +1123,11 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     });
   }, []);
 
+  const setDrugDuration = useCallback((v: number) => {
+    drugRef.current.durationSec = v;
+    setState(prev => ({ ...prev, drugDurationSec: v }));
+  }, []);
+
   return (
     <GameContext.Provider value={{
       state, physicsRef,
@@ -1073,6 +1141,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       setEnemaInSmall, setEnemaSmallHeadIdx, setEnemaTarget,
       resetPhysics, resetPositions,
       relaxAbdomen, takeLaxative, takeStimulant, takeSedative, clearComaByShock,
+      setDrugDuration,
       performFirstAid, startTransfusion,
       repairIntestine, sutureIntestine, performNavelSurgery,
       transplantSmallIntestine, transplantLargeIntestine, transplantAllIntestines,
