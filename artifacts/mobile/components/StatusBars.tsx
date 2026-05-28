@@ -5,13 +5,11 @@ import { useColors } from '@/hooks/useColors';
 interface Props {
   hp: number;
   pleasure: number;
-  smallTransplantCount?: number;
-  largeTransplantCount?: number;
   embedded?: boolean;
 }
 
-function HorizBar({ value, color, bgColor, label }: {
-  value: number; color: string; bgColor: string; label: string;
+function HorizBar({ value, color, label }: {
+  value: number; color: string; label: string;
 }) {
   const anim = useRef(new Animated.Value(value)).current;
   useEffect(() => {
@@ -21,7 +19,7 @@ function HorizBar({ value, color, bgColor, label }: {
   return (
     <View style={styles.barRow}>
       <Text style={[styles.barLabel, { color }]}>{label}</Text>
-      <View style={[styles.barTrack, { backgroundColor: bgColor }]}>
+      <View style={styles.barTrack}>
         <Animated.View
           style={[
             styles.barFill,
@@ -37,9 +35,8 @@ function HorizBar({ value, color, bgColor, label }: {
   );
 }
 
-export function StatusBars({ hp, pleasure, smallTransplantCount, largeTransplantCount, embedded = false }: Props) {
+export function StatusBars({ hp, pleasure, embedded = false }: Props) {
   const colors = useColors();
-  const showTransplant = (smallTransplantCount ?? 0) > 0 || (largeTransplantCount ?? 0) > 0;
 
   const wrapperStyle: ViewStyle = embedded
     ? styles.wrapperEmbedded
@@ -47,22 +44,8 @@ export function StatusBars({ hp, pleasure, smallTransplantCount, largeTransplant
 
   return (
     <View style={wrapperStyle}>
-      <HorizBar value={hp} color={colors.hp} bgColor={colors.hpBg} label="HP" />
-      <HorizBar value={pleasure} color={colors.pleasure} bgColor={colors.pleasureBg} label="快" />
-      {showTransplant && (
-        <View style={styles.transplantRow}>
-          {(smallTransplantCount ?? 0) > 0 && (
-            <Text style={[styles.transplantText, { color: colors.mutedForeground }]}>
-              小×{smallTransplantCount}
-            </Text>
-          )}
-          {(largeTransplantCount ?? 0) > 0 && (
-            <Text style={[styles.transplantText, { color: colors.mutedForeground }]}>
-              大×{largeTransplantCount}
-            </Text>
-          )}
-        </View>
-      )}
+      <HorizBar value={hp} color={colors.hp} label="HP" />
+      <HorizBar value={pleasure} color={colors.pleasure} label="快" />
     </View>
   );
 }
@@ -78,7 +61,7 @@ const styles = StyleSheet.create({
   },
   wrapperEmbedded: {
     flex: 1,
-    gap: 4,
+    gap: 5,
   },
   barRow: {
     flexDirection: 'row',
@@ -94,29 +77,20 @@ const styles = StyleSheet.create({
   },
   barTrack: {
     flex: 1,
-    height: 7,
-    borderRadius: 4,
+    height: 10,
+    borderRadius: 5,
     overflow: 'hidden',
+    backgroundColor: 'rgba(255,255,255,0.08)',
   },
   barFill: {
     height: '100%',
-    borderRadius: 4,
+    borderRadius: 5,
     minWidth: 2,
   },
   barValue: {
-    fontSize: 8,
+    fontSize: 9,
     fontFamily: 'Inter_600SemiBold',
     width: 20,
     textAlign: 'right',
-  },
-  transplantRow: {
-    flexDirection: 'row',
-    gap: 6,
-    paddingLeft: 19,
-  },
-  transplantText: {
-    fontSize: 8,
-    fontFamily: 'Inter_400Regular',
-    opacity: 0.7,
   },
 });

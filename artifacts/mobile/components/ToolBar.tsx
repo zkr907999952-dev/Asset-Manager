@@ -7,19 +7,23 @@ import { TOOL_LIST, type ToolType } from '../constants/gameConfig';
 import { CommandPanel } from './CommandPanel';
 import { SurgeryPanel } from './SurgeryPanel';
 
-const PANEL_WIDTH = 200;
+const PANEL_WIDTH = 210;
 const TAB_WIDTH = 32;
+const PANEL_MAX_HEIGHT = 400;
 
 type TabId = 'tools' | 'commands' | 'surgery';
 
 const TOOL_ICONS: Record<string, string> = {
-  '金属棒': 'minus',
-  '抓握': 'anchor',
-  '振动器': 'zap',
-  '长柄针': 'edit-2',
-  '电击器': 'activity',
-  '注射器': 'droplet',
-  '灌肠器': 'git-branch',
+  '金属棒':   'minus',
+  '抓握':     'anchor',
+  '振动器':   'zap',
+  '长柄针':   'edit-2',
+  '电击器':   'activity',
+  '注射器':   'droplet',
+  '灌肠器':   'git-branch',
+  '刺刀':     'navigation',
+  '长硅胶棒': 'bar-chart-2',
+  '拉珠':     'more-horizontal',
 };
 
 const TABS: { id: TabId; icon: string; label: string }[] = [
@@ -27,6 +31,10 @@ const TABS: { id: TabId; icon: string; label: string }[] = [
   { id: 'commands', icon: 'command', label: '命令' },
   { id: 'surgery', icon: 'scissors', label: '手术' },
 ];
+
+const PANEL_BG = 'rgba(34,9,26,0.88)';
+const TAB_BG_OPEN = 'rgba(232,121,160,0.18)';
+const TAB_BG_CLOSED = 'rgba(34,9,26,0.78)';
 
 function ToolsContent({ onClose }: { onClose: () => void }) {
   const colors = useColors();
@@ -38,7 +46,11 @@ function ToolsContent({ onClose }: { onClose: () => void }) {
   };
 
   return (
-    <View>
+    <ScrollView
+      showsVerticalScrollIndicator={false}
+      style={styles.toolScroll}
+      nestedScrollEnabled
+    >
       <Text style={[styles.panelTitle, { color: colors.mutedForeground }]}>工具选择</Text>
       {TOOL_LIST.map(tool => {
         const isSelected = state.activeTool === tool.id;
@@ -73,7 +85,8 @@ function ToolsContent({ onClose }: { onClose: () => void }) {
           </TouchableOpacity>
         );
       })}
-    </View>
+      <View style={styles.spacer} />
+    </ScrollView>
   );
 }
 
@@ -107,7 +120,7 @@ export function ToolBar() {
     <View style={styles.wrapper} pointerEvents="box-none">
       {/* Tools panel */}
       <Animated.View
-        style={[styles.panel, { top: 0, transform: [{ translateX: toolsX }], backgroundColor: colors.card, borderColor: colors.border }]}
+        style={[styles.panel, { top: 0, transform: [{ translateX: toolsX }], backgroundColor: PANEL_BG, borderColor: `${colors.border}cc` }]}
         pointerEvents={openTab === 'tools' ? 'auto' : 'none'}
       >
         <ToolsContent onClose={() => setOpenTab(null)} />
@@ -115,7 +128,7 @@ export function ToolBar() {
 
       {/* Commands panel */}
       <Animated.View
-        style={[styles.panel, { top: 0, transform: [{ translateX: commandsX }], backgroundColor: colors.card, borderColor: colors.border }]}
+        style={[styles.panel, { top: 0, transform: [{ translateX: commandsX }], backgroundColor: PANEL_BG, borderColor: `${colors.border}cc` }]}
         pointerEvents={openTab === 'commands' ? 'auto' : 'none'}
       >
         <CommandPanel />
@@ -123,7 +136,7 @@ export function ToolBar() {
 
       {/* Surgery panel */}
       <Animated.View
-        style={[styles.panel, { top: 0, transform: [{ translateX: surgeryX }], backgroundColor: colors.card, borderColor: colors.border }]}
+        style={[styles.panel, { top: 0, transform: [{ translateX: surgeryX }], backgroundColor: PANEL_BG, borderColor: `${colors.border}cc` }]}
         pointerEvents={openTab === 'surgery' ? 'auto' : 'none'}
       >
         <SurgeryPanel />
@@ -145,8 +158,8 @@ export function ToolBar() {
               styles.tab,
               {
                 top: i * 70,
-                backgroundColor: isOpen ? `${colors.primary}22` : colors.card,
-                borderColor: isOpen ? colors.primary : colors.border,
+                backgroundColor: isOpen ? TAB_BG_OPEN : TAB_BG_CLOSED,
+                borderColor: isOpen ? `${colors.primary}cc` : `${colors.border}99`,
               },
             ]}
             onPress={() => toggle(tab.id)}
@@ -205,6 +218,7 @@ const styles = StyleSheet.create({
     position: 'absolute',
     right: TAB_WIDTH,
     width: PANEL_WIDTH,
+    maxHeight: PANEL_MAX_HEIGHT,
     borderTopLeftRadius: 10,
     borderBottomLeftRadius: 10,
     borderWidth: 1,
@@ -214,9 +228,12 @@ const styles = StyleSheet.create({
     zIndex: 1,
     elevation: 8,
     shadowColor: '#000',
-    shadowOpacity: 0.4,
-    shadowRadius: 8,
+    shadowOpacity: 0.5,
+    shadowRadius: 10,
     shadowOffset: { width: -2, height: 0 },
+  },
+  toolScroll: {
+    flex: 1,
   },
   panelTitle: {
     fontSize: 10,
@@ -241,4 +258,5 @@ const styles = StyleSheet.create({
   toolDesc: { fontSize: 9, fontFamily: 'Inter_400Regular', marginTop: 1 },
   runningDot: { width: 6, height: 6, borderRadius: 3 },
   activeDot: { width: 5, height: 5, borderRadius: 3 },
+  spacer: { height: 8 },
 });

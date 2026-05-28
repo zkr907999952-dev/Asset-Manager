@@ -65,7 +65,6 @@ export function AttributePanel() {
       <BarRow label="生命值" value={state.hp} color={colors.hp} bgColor={colors.hpBg} />
       <BarRow label="快感值" value={state.pleasure} color={colors.pleasure} bgColor={colors.pleasureBg} />
 
-      {/* ECG Heart Rate Monitor */}
       <View style={styles.ecgContainer}>
         <HeartRateMonitor
           heartRate={state.heartRate}
@@ -79,7 +78,6 @@ export function AttributePanel() {
 
       <View style={[styles.divider, { backgroundColor: colors.border }]} />
 
-      {/* Character Status */}
       <CharacterStatusBadges
         comaState={state.comaState}
         heartRate={state.heartRate}
@@ -104,6 +102,10 @@ export function AttributePanel() {
       <StatRow label="肠管断裂" value={`${breaks} 处`}
         color={breaks > 0 ? colors.hp : colors.mutedForeground}
         highlight={breaks > 0} />
+      <StatRow label="小肠移植次数" value={`${state.smallTransplantCount} 次`}
+        color={state.smallTransplantCount > 0 ? colors.pleasure : colors.mutedForeground} />
+      <StatRow label="大肠移植次数" value={`${state.largeTransplantCount} 次`}
+        color={state.largeTransplantCount > 0 ? colors.pleasure : colors.mutedForeground} />
 
       <View style={[styles.divider, { backgroundColor: colors.border }]} />
       <Text style={[styles.sectionTitle, { color: colors.primary }]}>肠道平均状态</Text>

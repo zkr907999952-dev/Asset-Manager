@@ -51,7 +51,6 @@ export function SimulationScreen({ onMenuPress }: Props) {
       }
     };
 
-    // Check pain/electric clearing coma
     const elecActive = (p.toolType === '电击器' && p.toolActive && p.electrodes.length > 0)
       || (p.toolStates['电击器']?.active && p.electrodes.length > 0);
     const voltage = p.toolType === '电击器' && p.toolActive ? p.toolParam1 : (p.toolStates['电击器']?.param1 ?? 0);
@@ -165,23 +164,21 @@ export function SimulationScreen({ onMenuPress }: Props) {
         </TouchableOpacity>
       </View>
 
-      {/* Top info bar: HP/Pleasure bars + ECG monitor */}
-      <View style={[styles.topInfoBar, { backgroundColor: colors.headerBg, borderBottomColor: colors.border }]}>
-        <View style={styles.topInfoBars}>
+      {/* Status bars + ECG stacked vertically, transparent background */}
+      <View style={styles.statusArea}>
+        <View style={styles.barsRow}>
           <StatusBars
             hp={state.hp}
             pleasure={state.pleasure}
-            smallTransplantCount={state.smallTransplantCount}
-            largeTransplantCount={state.largeTransplantCount}
             embedded
           />
         </View>
-        <View style={styles.topInfoEcg} pointerEvents="none">
+        <View style={styles.ecgRow} pointerEvents="none">
           <HeartRateMonitor
             heartRate={state.heartRate}
             comaState={state.comaState}
-            width={160}
-            height={42}
+            width={240}
+            height={38}
             transparent
             showLabel
           />
@@ -246,20 +243,20 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   viewToggleText: { fontSize: 11, fontFamily: 'Inter_600SemiBold' },
-  topInfoBar: {
+  statusArea: {
+    paddingHorizontal: 10,
+    paddingTop: 6,
+    paddingBottom: 4,
+    backgroundColor: 'transparent',
+    gap: 2,
+  },
+  barsRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderBottomWidth: 1,
-    gap: 8,
   },
-  topInfoBars: {
-    flex: 1,
-    justifyContent: 'center',
-  },
-  topInfoEcg: {
-    alignItems: 'flex-end',
+  ecgRow: {
+    alignItems: 'flex-start',
+    marginTop: 2,
   },
   canvasArea: {
     flex: 1,

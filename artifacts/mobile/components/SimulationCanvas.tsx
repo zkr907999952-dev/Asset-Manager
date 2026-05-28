@@ -193,6 +193,20 @@ function SuspendedToolOverlay({
       </G>
     );
   }
+  if (toolId === TOOLS.BAYONET) {
+    const bladeLen = 80 + param1 * 1.5;
+    const tailY = tp.y - bladeLen;
+    return (
+      <G opacity={0.55}>
+        <Line x1={tp.x} y1={tailY} x2={tp.x} y2={tp.y}
+          stroke="#d8d8e8" strokeWidth={3.5} strokeLinecap="round" />
+        <Line x1={tp.x} y1={tailY} x2={tp.x} y2={tp.y}
+          stroke="#f0f0ff" strokeWidth={1.5} strokeLinecap="round" />
+        <Circle cx={tp.x} cy={tailY} r={5} fill="#555566" stroke="#222" strokeWidth={1} />
+        <Circle cx={tp.x} cy={tp.y} r={2.5} fill="#ff3030" />
+      </G>
+    );
+  }
   return null;
 }
 
@@ -304,7 +318,7 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
       const distToNavel = Math.hypot(pos.x - NAVEL_X, pos.y - navelY);
 
       if (!isInternal && distToNavel < NAVEL_RADIUS) {
-        if (s.activeTool === TOOLS.NEEDLE && !s.navelPierced) {
+        if ((s.activeTool === TOOLS.NEEDLE || s.activeTool === TOOLS.BAYONET) && !s.navelPierced) {
           snp(true);
           td('pain_high');
           return;
@@ -313,7 +327,8 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
           s.navelPierced &&
           (s.activeTool === TOOLS.METAL_ROD ||
             s.activeTool === TOOLS.VIBRATOR ||
-            s.activeTool === TOOLS.NEEDLE)
+            s.activeTool === TOOLS.NEEDLE ||
+            s.activeTool === TOOLS.BAYONET)
         ) {
           ivn();
           physicsRef.current.toolPos = { x: NAVEL_X, y: NAVEL_Y_INTERNAL - 40 };
@@ -341,6 +356,20 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
         if (closestDist < grabRange) {
           physicsRef.current.grabbedNode = { type: closestType, idx: closest };
           td('grab');
+        }
+        return;
+      }
+      if (s.activeTool === TOOLS.SILICONE_ROD || s.activeTool === TOOLS.ANAL_BEADS) {
+        const { setEnemaTarget: setTgt } = hrRef.current;
+        const { idx, dist: d } = findNearestLargeNodeIdx(pos);
+        if (idx >= 0 && d < 65) {
+          setTgt({ largeIdx: idx });
+        }
+        if (idx <= 2 && d < 65) {
+          const { idx: sIdx, dist: sDist } = findNearestSmallNodeIdx(pos);
+          if (sIdx >= 0 && sDist < 60) {
+            setTgt({ inSmall: true, smallIdx: sIdx });
+          }
         }
         return;
       }
@@ -377,6 +406,21 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
       const { locationX, locationY } = evt.nativeEvent;
       const pos = tpc(locationX, locationY);
 
+      if (s.activeTool === TOOLS.SILICONE_ROD || s.activeTool === TOOLS.ANAL_BEADS) {
+        const { setEnemaTarget: setTgt } = hrRef.current;
+        const { idx, dist: d } = findNearestLargeNodeIdx(pos);
+        if (idx >= 0 && d < 65) {
+          setTgt({ largeIdx: idx });
+        }
+        if (idx <= 2 && d < 65) {
+          const { idx: sIdx, dist: sDist } = findNearestSmallNodeIdx(pos);
+          if (sIdx >= 0 && sDist < 60) {
+            setTgt({ inSmall: true, smallIdx: sIdx });
+          }
+        }
+        physicsRef.current.toolPos = pos;
+        return;
+      }
       if (s.activeTool === TOOLS.ENEMA) {
         // Drag physically pulls nearby intestine nodes (original drag mode)
         const prevPos = physicsRef.current.toolPos;
@@ -523,7 +567,51 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
       const stirAmp = state.toolActive ? 1.5 + state.toolParam2 * 0.04 : 0;
       return { g: computeRodGeoFor(state.toolInserted, state.toolAnchor, handlePos, rodLen, stirAmp, renderTime), radius: 5 };
     }
+    if (tool === TOOLS.BAYONET) {
+      const bladeLen = 80 + state.toolParam1 * 1.5;
+      const stirAmp = state.toolActive ? 3 + state.toolParam2 * 0.04 : 0;
+      return { g: computeRodGeoFor(state.toolInserted, state.toolAnchor, handlePos, bladeLen, stirAmp, renderTime), radius: 4 };
+    }
     return null;
+  })();
+
+  const siliconeOrBeadsVisible = (state.activeTool === TOOLS.SILICONE_ROD || state.activeTool === TOOLS.ANAL_BEADS);
+  const siliconePathLarge = (() => {
+    if (!siliconeOrBeadsVisible || renderLargeNodes.length === 0) return '';
+    const headIdx = Math.max(0, Math.min(renderLargeNodes.length - 1, state.enemaHeadIdx));
+    return buildSmoothPath(renderLargeNodes.slice(headIdx));
+  })();
+  const siliconePathSmall = (() => {
+    if (!siliconeOrBeadsVisible || !state.enemaInSmall || renderSmallNodes.length === 0) return '';
+    const smallHeadIdx = Math.max(0, Math.min(renderSmallNodes.length - 1, state.enemaSmallHeadIdx));
+    return buildSmoothPath([...renderSmallNodes.slice(smallHeadIdx)].reverse());
+  })();
+  const siliconeHead = siliconeOrBeadsVisible
+    ? (state.enemaInSmall && renderSmallNodes.length > 0
+        ? renderSmallNodes[Math.max(0, Math.min(renderSmallNodes.length - 1, state.enemaSmallHeadIdx))]
+        : renderLargeNodes[Math.max(0, Math.min(renderLargeNodes.length - 1, state.enemaHeadIdx))])
+    : null;
+
+  // Pre-compute bead positions for 拉珠
+  const beadPositions = (() => {
+    if (state.activeTool !== TOOLS.ANAL_BEADS || renderLargeNodes.length === 0) return [];
+    const headIdx = Math.max(0, Math.min(renderLargeNodes.length - 1, state.enemaHeadIdx));
+    const positions: { x: number; y: number; r: number }[] = [];
+    const step = 2;
+    for (let i = headIdx; i < renderLargeNodes.length && positions.length < 14; i += step) {
+      const n = renderLargeNodes[i];
+      const r = 5 + (positions.length * 0.35);
+      positions.push({ x: n.x, y: n.y, r });
+    }
+    if (state.enemaInSmall) {
+      const smallHead = Math.max(0, Math.min(renderSmallNodes.length - 1, state.enemaSmallHeadIdx));
+      for (let i = smallHead; i >= 0 && positions.length < 20; i -= step) {
+        const n = renderSmallNodes[i];
+        const r = 4 + (positions.length * 0.3);
+        positions.push({ x: n.x, y: n.y, r });
+      }
+    }
+    return positions;
   })();
 
   // Suspended tools: active tools that are not the current tool, with stored positions
@@ -1117,6 +1205,79 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
               stroke="#aaaaaa" strokeWidth={2} />
             <Circle cx={handlePos.x} cy={handlePos.y + 18} r={1.8} fill="#ff4040" />
           </G>
+        )}
+
+        {/* Bayonet */}
+        {handlePos && state.activeTool === TOOLS.BAYONET && (() => {
+          if (!rodGeo) return null;
+          const { g } = rodGeo;
+          const bladeWidth = 2 + state.toolParam2 * 0.06;
+          return (
+            <G key="bayonet">
+              <Line x1={g.tailX} y1={g.tailY} x2={g.headX} y2={g.headY}
+                stroke="#d8d8e8" strokeWidth={bladeWidth + 1.5} strokeLinecap="round" />
+              <Line x1={g.tailX} y1={g.tailY} x2={g.headX} y2={g.headY}
+                stroke="#f0f0ff" strokeWidth={bladeWidth * 0.5} strokeLinecap="round" />
+              <Circle cx={g.tailX} cy={g.tailY} r={7} fill="#555566" stroke="#222" strokeWidth={1} />
+              <Circle cx={g.headX} cy={g.headY} r={3} fill="#ff3030" stroke="#cc0000" strokeWidth={0.8} />
+              {state.toolActive && (
+                <Circle cx={g.headX} cy={g.headY} r={10}
+                  fill="rgba(255,40,40,0.12)" stroke="rgba(255,80,80,0.4)" strokeWidth={1} />
+              )}
+              {state.toolInserted && state.toolAnchor && (
+                <Circle cx={state.toolAnchor.x} cy={state.toolAnchor.y} r={6}
+                  fill="none" stroke="#ffaa44" strokeWidth={1.5} strokeDasharray="2 2" />
+              )}
+            </G>
+          );
+        })()}
+
+        {/* Silicone rod (长硅胶棒) */}
+        {state.activeTool === TOOLS.SILICONE_ROD && siliconePathLarge !== '' && (
+          <G>
+            <Path d={siliconePathLarge} stroke="rgba(140,80,220,0.60)" strokeWidth={6 + state.toolParam1 * 0.05}
+              fill="none" strokeLinecap="round" />
+            <Path d={siliconePathLarge} stroke="rgba(200,160,255,0.45)" strokeWidth={3}
+              fill="none" strokeLinecap="round" />
+          </G>
+        )}
+        {state.activeTool === TOOLS.SILICONE_ROD && siliconePathSmall !== '' && (
+          <G>
+            <Path d={siliconePathSmall} stroke="rgba(160,90,240,0.70)" strokeWidth={5 + state.toolParam1 * 0.04}
+              fill="none" strokeLinecap="round" />
+            <Path d={siliconePathSmall} stroke="rgba(210,170,255,0.4)" strokeWidth={2.5}
+              fill="none" strokeLinecap="round" />
+          </G>
+        )}
+        {state.activeTool === TOOLS.SILICONE_ROD && siliconeHead && (
+          <G>
+            <Circle cx={siliconeHead.x} cy={siliconeHead.y}
+              r={7 + state.toolParam1 * 0.06}
+              fill="#7030cc" stroke="#b080ff" strokeWidth={1.5} />
+            {state.toolActive && (
+              <Circle cx={siliconeHead.x} cy={siliconeHead.y}
+                r={13 + state.toolParam1 * 0.06}
+                fill="none" stroke="rgba(180,130,255,0.55)" strokeWidth={1.2} />
+            )}
+          </G>
+        )}
+
+        {/* Anal beads (拉珠) */}
+        {state.activeTool === TOOLS.ANAL_BEADS && beadPositions.map((b, i) => (
+          <G key={`bead-${i}`}>
+            <Circle cx={b.x} cy={b.y} r={b.r}
+              fill="#1a0a20" stroke="#7040a0" strokeWidth={1} />
+            <Circle cx={b.x - b.r * 0.3} cy={b.y - b.r * 0.3} r={b.r * 0.25}
+              fill="rgba(180,140,220,0.4)" />
+          </G>
+        ))}
+        {state.activeTool === TOOLS.ANAL_BEADS && siliconePathLarge !== '' && (
+          <Path d={siliconePathLarge} stroke="rgba(80,20,100,0.45)" strokeWidth={2}
+            fill="none" strokeLinecap="round" strokeDasharray="4 3" />
+        )}
+        {state.activeTool === TOOLS.ANAL_BEADS && siliconePathSmall !== '' && (
+          <Path d={siliconePathSmall} stroke="rgba(100,30,130,0.45)" strokeWidth={2}
+            fill="none" strokeLinecap="round" strokeDasharray="4 3" />
         )}
 
         {/* Enema tube (inserted section from head to anus) */}

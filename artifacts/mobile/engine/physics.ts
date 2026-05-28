@@ -650,6 +650,122 @@ export function stepPhysics(state: PhysicsState) {
     if (state.toolType === '电击器' && state.toolActive) {
       applyElectricPhysics(state, state.toolParam1, state.toolParam2);
     }
+
+    if (state.toolType === '刺刀') {
+      const bladeLen = 80 + state.toolParam1 * 1.5;
+      const bladeWidth = Math.max(4, 4 + state.toolParam2 * 0.12);
+      const stirAmp = state.toolActive ? 3 + state.toolParam2 * 0.04 : 0;
+      const { head, segments } = computeRodGeometry(bladeLen, stirAmp);
+      applyRodCollision(segments, Math.max(3, bladeWidth * 0.4));
+
+      // Bayonet can pierce navel directly when active and near navel
+      if (!state.navelPierced && state.toolActive) {
+        const navelDist = dist(tp.x, tp.y, CAVITY_CX, CAVITY_CY);
+        if (navelDist < 30) {
+          state.navelPierced = true;
+        }
+      }
+
+      if (state.toolActive) {
+        const tipRange = 10;
+        const applyBayonet = (nodes: PhysicsNode[], segs: SegmentProps[]) => {
+          for (let i = 0; i < nodes.length; i++) {
+            const dTip = dist(nodes[i].x, nodes[i].y, head.x, head.y);
+            if (dTip < tipRange) {
+              const f = 1 - dTip / tipRange;
+              const seg = segs[i];
+              if (seg && !seg.broken) {
+                seg.pain = clamp(seg.pain + 0.9 * f, 0, 100);
+                seg.health = clamp(seg.health - 0.8 * f, 0, 100);
+                seg.sensitivity = clamp(seg.sensitivity + 0.3 * f, 0, 100);
+                if (!seg.perforated && Math.random() < 0.04 + state.toolParam2 * 0.0005) {
+                  seg.perforated = true;
+                }
+              }
+            }
+            for (let si = 0; si < segments.length - 1; si++) {
+              const s = segments[si];
+              const dBody = dist(nodes[i].x, nodes[i].y, s.x, s.y);
+              if (dBody < bladeWidth * 0.55 && dBody > 0.1) {
+                const f = 1 - dBody / (bladeWidth * 0.55);
+                const seg = segs[i];
+                if (seg && !seg.broken) {
+                  seg.pain = clamp(seg.pain + 0.12 * f, 0, 100);
+                  seg.sensitivity = clamp(seg.sensitivity + 0.06 * f, 0, 100);
+                  seg.health = clamp(seg.health - 0.05 * f, 0, 100);
+                }
+              }
+            }
+          }
+        };
+        applyBayonet(state.smallNodes, state.smallSegs);
+        applyBayonet(state.largeNodes, state.largeSegs);
+      }
+    }
+
+    if (state.toolType === '长硅胶棒' || state.toolType === '拉珠') {
+      const diameter = 8 + state.toolParam1 * 0.35;
+      const largeDiameterBase = LARGE_RADIUS * 2;
+      const smallDiameterBase = SMALL_RADIUS * 2;
+      const stim = (state.toolParam2 ?? 50) * 0.004;
+      const headIdx = clamp(state.enemaHeadIdx, 0, state.largeNodes.length - 1);
+
+      const headNode = state.largeNodes[headIdx];
+      if (headNode) {
+        for (let i = Math.max(0, headIdx - 2); i <= Math.min(state.largeNodes.length - 1, headIdx + 2); i++) {
+          const n = state.largeNodes[i];
+          if (n.pinned) continue;
+          const wobble = Math.sin(state.time * 0.12 + i) * 0.28;
+          n.x += wobble;
+          n.y += wobble * 0.5;
+        }
+      }
+
+      if (state.toolActive) {
+        if (!state.enemaInSmall) {
+          for (let i = 0; i <= headIdx; i++) {
+            const seg = state.largeSegs[i];
+            if (!seg || seg.broken) continue;
+            const d = Math.abs(i - headIdx);
+            const falloff = Math.max(0, 1 - d / 3);
+            if (falloff > 0) {
+              const expansion = Math.max(0, diameter - largeDiameterBase) / largeDiameterBase;
+              const pressureAdd = expansion > 0 ? expansion * 4 * falloff : 0.4 * falloff;
+              seg.pressure = clamp(seg.pressure + pressureAdd, 0, LARGE_RUPTURE_PRESSURE);
+              seg.sensitivity = clamp(seg.sensitivity + stim * (1 + expansion * 2) * falloff, 0, 100);
+              if (expansion > 0.5 && seg.pressure > 100) {
+                seg.pain = clamp(seg.pain + stim * expansion * 2 * falloff, 0, 100);
+              }
+            }
+          }
+        } else {
+          const smallHead = clamp(state.enemaSmallHeadIdx, 0, N_SMALL - 1);
+          for (let i = 0; i < state.smallSegs.length; i++) {
+            const seg = state.smallSegs[i];
+            if (!seg || seg.broken) continue;
+            const d = Math.abs(i - smallHead);
+            const falloff = Math.max(0, 1 - d / 3);
+            if (falloff > 0) {
+              const expansion = Math.max(0, diameter - smallDiameterBase) / smallDiameterBase;
+              const pressureAdd = expansion > 0 ? expansion * 6 * falloff : 1.5 * falloff;
+              seg.pressure = clamp(seg.pressure + pressureAdd, 0, 100);
+              seg.sensitivity = clamp(seg.sensitivity + stim * (2 + expansion * 3) * falloff, 0, 100);
+              if (expansion > 0.3 || seg.pressure > 60) {
+                seg.pain = clamp(seg.pain + stim * (1 + expansion) * falloff, 0, 100);
+              }
+            }
+          }
+          for (let i = Math.max(0, smallHead - 2); i <= Math.min(N_SMALL - 1, smallHead + 2); i++) {
+            const n = state.smallNodes[i];
+            if (n.pinned) continue;
+            const wobble = Math.sin(state.time * 0.15 + i) * 0.3;
+            n.x += wobble;
+            n.y += wobble * 0.4;
+          }
+        }
+        state.peristalsisSpeed = Math.max(state.peristalsisSpeed, 1 + (state.toolParam2 ?? 50) * 0.015);
+      }
+    }
   }
 
   // === SECONDARY TOOL PHYSICS: tools that persist independently ===

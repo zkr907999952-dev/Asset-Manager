@@ -53,7 +53,17 @@ export type DialogueTrigger =
   | 'surg_small_transplant'
   | 'surg_large_transplant'
   | 'surg_full_transplant'
-  | 'surg_mesentery';
+  | 'surg_mesentery'
+  | 'bayonet_pierce'
+  | 'bayonet_deep'
+  | 'silicone_large_shallow'
+  | 'silicone_large_deep'
+  | 'silicone_small_enter'
+  | 'silicone_expand'
+  | 'beads_large_shallow'
+  | 'beads_large_deep'
+  | 'beads_small_enter'
+  | 'beads_pullout';
 
 export const DIALOGUES: Record<DialogueTrigger, string[]> = {
   idle: [
@@ -380,6 +390,56 @@ export const DIALOGUES: Record<DialogueTrigger, string[]> = {
     '呜……失去了支撑……肠子……在乱动……',
     '嗯……肠系膜……没了……感觉……好奇怪……',
     '啊……里面……失重了一样……肠子……飘来飘去……',
+  ],
+  bayonet_pierce: [
+    '啊……！刺刀……刺进来了……好锋利……！',
+    '呜……！这个……是……刀吗……？！好痛……！',
+    '不行……！刀尖……戳进肚子里了……！',
+  ],
+  bayonet_deep: [
+    '啊啊……！刺得好深……！里面……被切到了……！',
+    '呜……！切……切到肠子了……！不行……太痛了……！',
+    '不要……！再深一点就……就要戳穿了……！',
+  ],
+  silicone_large_shallow: [
+    '嗯……什么东西进来了……软软的……',
+    '呜……大肠里……有什么……滑滑的……',
+    '啊……那个……插进来了……感觉……好奇怪……',
+  ],
+  silicone_large_deep: [
+    '哈……好深……整根都进去了……里面……好撑……',
+    '呜啊……大肠……被撑开了……好宽……！',
+    '嗯……里面……被那根东西填满了……！',
+  ],
+  silicone_small_enter: [
+    '啊……进到小肠里了……！太深了……！',
+    '呜……一直往里插……小肠……撑不住了……！',
+    '不行……！进太深了……小肠都要被撑破了……！',
+  ],
+  silicone_expand: [
+    '啊……里面……被撑开了……好宽……受不了……',
+    '呜……肠子……扩张了……好胀……！',
+    '嗯……那个……太粗了……撑得好难受……',
+  ],
+  beads_large_shallow: [
+    '嗯……一颗一颗的……进去了……好奇怪……',
+    '呜……每颗……都能感觉到……好刺激……',
+    '啊……珠子……一颗一颗往里塞……',
+  ],
+  beads_large_deep: [
+    '哈……好深……好多颗……都进去了……！',
+    '呜啊……里面……全是珠子……好撑……！',
+    '嗯……大肠……被串满了……感觉……好奇怪……！',
+  ],
+  beads_small_enter: [
+    '啊……！珠子……进到小肠了……！太深了……！',
+    '呜……！连小肠……都串上珠子了……好胀……！',
+    '不行……！里面……太多珠子了……撑不住……！',
+  ],
+  beads_pullout: [
+    '啊啊啊……！一颗一颗拔出来……好……好强……！',
+    '呜……！拔……拔出来了……！每颗都……啊……！',
+    '嗯啊……！每颗经过的时候……！不行了……！',
   ],
 };
 

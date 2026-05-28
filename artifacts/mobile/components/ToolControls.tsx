@@ -7,13 +7,16 @@ import { useGame } from '@/contexts/GameContext';
 import { TOOLS } from '../constants/gameConfig';
 
 const TOOL_PARAMS: Record<string, { p1Label: string; p1Max: number; p1Step: number; p2Label: string; p2Max: number; p2Step: number }> = {
-  [TOOLS.METAL_ROD]:  { p1Label: '杆长', p1Max: 100, p1Step: 1, p2Label: '搅动强度', p2Max: 100, p2Step: 1 },
-  [TOOLS.GRAB]:       { p1Label: '抓取范围', p1Max: 100, p1Step: 1, p2Label: '抓取力度', p2Max: 100, p2Step: 1 },
-  [TOOLS.VIBRATOR]:   { p1Label: '震动强度', p1Max: 100, p1Step: 1, p2Label: '震动范围', p2Max: 100, p2Step: 1 },
-  [TOOLS.NEEDLE]:     { p1Label: '针长', p1Max: 100, p1Step: 1, p2Label: '穿刺强度', p2Max: 100, p2Step: 1 },
-  [TOOLS.ELECTRIC]:   { p1Label: '电压', p1Max: 100, p1Step: 1, p2Label: '电击范围', p2Max: 100, p2Step: 1 },
-  [TOOLS.SYRINGE]:    { p1Label: '注射速度', p1Max: 100, p1Step: 1, p2Label: '泻药浓度', p2Max: 100, p2Step: 1 },
-  [TOOLS.ENEMA]:      { p1Label: '灌肠流量', p1Max: 200, p1Step: 1, p2Label: '刺激程度', p2Max: 100, p2Step: 1 },
+  [TOOLS.METAL_ROD]:     { p1Label: '杆长',    p1Max: 100, p1Step: 1, p2Label: '搅动强度', p2Max: 100, p2Step: 1 },
+  [TOOLS.GRAB]:          { p1Label: '抓取范围', p1Max: 100, p1Step: 1, p2Label: '抓取力度', p2Max: 100, p2Step: 1 },
+  [TOOLS.VIBRATOR]:      { p1Label: '震动强度', p1Max: 100, p1Step: 1, p2Label: '震动范围', p2Max: 100, p2Step: 1 },
+  [TOOLS.NEEDLE]:        { p1Label: '针长',     p1Max: 100, p1Step: 1, p2Label: '穿刺强度', p2Max: 100, p2Step: 1 },
+  [TOOLS.ELECTRIC]:      { p1Label: '电压',     p1Max: 100, p1Step: 1, p2Label: '电击范围', p2Max: 100, p2Step: 1 },
+  [TOOLS.SYRINGE]:       { p1Label: '注射速度', p1Max: 100, p1Step: 1, p2Label: '泻药浓度', p2Max: 100, p2Step: 1 },
+  [TOOLS.ENEMA]:         { p1Label: '灌肠流量', p1Max: 200, p1Step: 1, p2Label: '刺激程度', p2Max: 100, p2Step: 1 },
+  [TOOLS.BAYONET]:       { p1Label: '刺刀长度', p1Max: 100, p1Step: 1, p2Label: '刺刀宽度', p2Max: 100, p2Step: 1 },
+  [TOOLS.SILICONE_ROD]:  { p1Label: '直径',     p1Max: 100, p1Step: 1, p2Label: '速度',     p2Max: 100, p2Step: 1 },
+  [TOOLS.ANAL_BEADS]:    { p1Label: '插入深度', p1Max: 100, p1Step: 1, p2Label: '拉出速度', p2Max: 100, p2Step: 1 },
 };
 
 export function ToolControls() {
@@ -40,7 +43,7 @@ export function ToolControls() {
     return (
       <TouchableOpacity
         style={[styles.collapsedTab, {
-          backgroundColor: 'rgba(10,3,3,0.90)',
+          backgroundColor: 'rgba(19,8,16,0.92)',
           borderColor: `${colors.border}88`,
           borderTopColor: toolActive ? `${colors.primary}88` : `${colors.border}88`,
         }]}
@@ -151,7 +154,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 10,
     borderTopWidth: 1,
-    backgroundColor: 'rgba(10, 3, 3, 0.85)',
+    backgroundColor: 'rgba(19,8,16,0.88)',
   },
   header: {
     flexDirection: 'row',

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import { View, Text, TouchableOpacity, ScrollView, StyleSheet } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { useColors } from '@/hooks/useColors';
 import { useGame } from '@/contexts/GameContext';
@@ -67,7 +67,7 @@ export function CommandPanel() {
   const { relaxAbdomen, takeLaxative, takeStimulant, takeSedative, state } = useGame();
 
   return (
-    <View>
+    <ScrollView showsVerticalScrollIndicator={false} style={styles.scroll} nestedScrollEnabled>
       <Text style={[styles.title, { color: colors.mutedForeground }]}>命令指令</Text>
 
       <CmdButton
@@ -129,11 +129,13 @@ export function CommandPanel() {
         onPress={() => {}}
         disabled
       />
-    </View>
+      <View style={styles.spacer} />
+    </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
+  scroll: { flex: 1 },
   title: {
     fontSize: 10,
     fontFamily: 'Inter_600SemiBold',
@@ -196,4 +198,5 @@ const styles = StyleSheet.create({
     flex: 1,
     flexWrap: 'wrap',
   },
+  spacer: { height: 12 },
 });
