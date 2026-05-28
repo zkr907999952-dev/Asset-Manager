@@ -5,18 +5,20 @@ import { useColors } from '@/hooks/useColors';
 interface Props {
   hp: number;
   pleasure: number;
+  smallTransplantCount?: number;
+  largeTransplantCount?: number;
 }
 
-function AnimatedBar({ value, color, bgColor, label }: {
+function HorizBar({ value, color, bgColor, label }: {
   value: number; color: string; bgColor: string; label: string;
 }) {
   const anim = useRef(new Animated.Value(value)).current;
   useEffect(() => {
-    Animated.timing(anim, { toValue: value, duration: 300, useNativeDriver: false }).start();
+    Animated.timing(anim, { toValue: value, duration: 280, useNativeDriver: false }).start();
   }, [value]);
 
   return (
-    <View style={styles.barContainer}>
+    <View style={styles.barRow}>
       <Text style={[styles.barLabel, { color }]}>{label}</Text>
       <View style={[styles.barTrack, { backgroundColor: bgColor }]}>
         <Animated.View
@@ -24,7 +26,7 @@ function AnimatedBar({ value, color, bgColor, label }: {
             styles.barFill,
             {
               backgroundColor: color,
-              height: anim.interpolate({ inputRange: [0, 100], outputRange: ['0%', '100%'] }),
+              width: anim.interpolate({ inputRange: [0, 100], outputRange: ['0%', '100%'] }),
             },
           ]}
         />
@@ -34,13 +36,27 @@ function AnimatedBar({ value, color, bgColor, label }: {
   );
 }
 
-export function StatusBars({ hp, pleasure }: Props) {
+export function StatusBars({ hp, pleasure, smallTransplantCount, largeTransplantCount }: Props) {
   const colors = useColors();
+  const showTransplant = (smallTransplantCount ?? 0) > 0 || (largeTransplantCount ?? 0) > 0;
   return (
     <View style={styles.wrapper}>
-      <AnimatedBar value={hp} color={colors.hp} bgColor={colors.hpBg} label="HP" />
-      <View style={[styles.separator, { backgroundColor: colors.border }]} />
-      <AnimatedBar value={pleasure} color={colors.pleasure} bgColor={colors.pleasureBg} label="快" />
+      <HorizBar value={hp} color={colors.hp} bgColor={colors.hpBg} label="HP" />
+      <HorizBar value={pleasure} color={colors.pleasure} bgColor={colors.pleasureBg} label="快" />
+      {showTransplant && (
+        <View style={styles.transplantRow}>
+          {(smallTransplantCount ?? 0) > 0 && (
+            <Text style={[styles.transplantText, { color: colors.mutedForeground }]}>
+              小×{smallTransplantCount}
+            </Text>
+          )}
+          {(largeTransplantCount ?? 0) > 0 && (
+            <Text style={[styles.transplantText, { color: colors.mutedForeground }]}>
+              大×{largeTransplantCount}
+            </Text>
+          )}
+        </View>
+      )}
     </View>
   );
 }
@@ -48,41 +64,49 @@ export function StatusBars({ hp, pleasure }: Props) {
 const styles = StyleSheet.create({
   wrapper: {
     position: 'absolute',
-    right: 8,
-    top: 54,
-    width: 32,
-    gap: 8,
-    alignItems: 'center',
+    left: 6,
+    top: 8,
+    width: 128,
+    gap: 5,
     zIndex: 3,
-    overflow: 'visible',
   },
-  barContainer: {
+  barRow: {
+    flexDirection: 'row',
     alignItems: 'center',
-    gap: 3,
-    overflow: 'visible',
+    gap: 5,
   },
   barLabel: {
     fontSize: 9,
     fontFamily: 'Inter_700Bold',
-    letterSpacing: 0.5,
-    textAlign: 'center',
+    width: 14,
+    textAlign: 'right',
+    letterSpacing: 0.3,
   },
   barTrack: {
-    width: 10,
-    height: 100,
-    borderRadius: 5,
+    flex: 1,
+    height: 7,
+    borderRadius: 4,
     overflow: 'hidden',
-    justifyContent: 'flex-end',
   },
   barFill: {
-    width: '100%',
-    borderRadius: 5,
-    minHeight: 2,
+    height: '100%',
+    borderRadius: 4,
+    minWidth: 2,
   },
   barValue: {
     fontSize: 8,
     fontFamily: 'Inter_600SemiBold',
-    textAlign: 'center',
+    width: 20,
+    textAlign: 'right',
   },
-  separator: { width: 8, height: 1 },
+  transplantRow: {
+    flexDirection: 'row',
+    gap: 6,
+    paddingLeft: 19,
+  },
+  transplantText: {
+    fontSize: 8,
+    fontFamily: 'Inter_400Regular',
+    opacity: 0.7,
+  },
 });

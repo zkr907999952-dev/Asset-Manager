@@ -70,6 +70,7 @@ export interface PhysicsState {
   largeRepairMarks: number[];
   largeSutureMarks: number[];
   mesenteryDisabled: number[];
+  smallMesenteryDisabled: number[];
   smallTransplantColor: { r: number; g: number; b: number } | null;
   largeTransplantColor: { r: number; g: number; b: number } | null;
 }
@@ -209,6 +210,7 @@ export function stepPhysics(state: PhysicsState) {
   if (!state.largeRepairMarks) (state as any).largeRepairMarks = [];
   if (!state.largeSutureMarks) (state as any).largeSutureMarks = [];
   if (!state.mesenteryDisabled) (state as any).mesenteryDisabled = [];
+  if (!state.smallMesenteryDisabled) (state as any).smallMesenteryDisabled = [];
   if (state.smallTransplantColor === undefined) (state as any).smallTransplantColor = null;
   if (state.largeTransplantColor === undefined) (state as any).largeTransplantColor = null;
 
@@ -255,7 +257,8 @@ export function stepPhysics(state: PhysicsState) {
 
   // --- Verlet integration with per-node mesentery ---
   const integrateSmallNodes = (nodes: PhysicsNode[], margin: number) => {
-    for (const n of nodes) {
+    for (let idx = 0; idx < nodes.length; idx++) {
+      const n = nodes[idx];
       if (n.pinned) continue;
       const vx = (n.x - n.px) * DAMPING;
       const vy = (n.y - n.py) * DAMPING;
@@ -263,13 +266,16 @@ export function stepPhysics(state: PhysicsState) {
       n.x += vx;
       n.y += vy;
       // Small intestine: uniform mesentery with small dead zone
-      const dx = n.rx - n.x, dy = n.ry - n.y;
-      const disp = Math.sqrt(dx * dx + dy * dy);
-      const deadZone = 5.0;
-      if (disp > deadZone) {
-        const factor = (disp - deadZone) / disp;
-        n.x += dx * MESENTERY_STIFFNESS * relaxMultiplier * factor;
-        n.y += dy * MESENTERY_STIFFNESS * relaxMultiplier * factor;
+      const smallMesDis = (state.smallMesenteryDisabled ?? []).includes(idx);
+      if (!smallMesDis) {
+        const dx = n.rx - n.x, dy = n.ry - n.y;
+        const disp = Math.sqrt(dx * dx + dy * dy);
+        const deadZone = 5.0;
+        if (disp > deadZone) {
+          const factor = (disp - deadZone) / disp;
+          n.x += dx * MESENTERY_STIFFNESS * relaxMultiplier * factor;
+          n.y += dy * MESENTERY_STIFFNESS * relaxMultiplier * factor;
+        }
       }
       softCavityPush(n, margin);
     }

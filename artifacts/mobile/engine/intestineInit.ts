@@ -210,6 +210,7 @@ export function createInitialPhysicsState(): PhysicsState {
     largeRepairMarks: [],
     largeSutureMarks: [],
     mesenteryDisabled: [],
+    smallMesenteryDisabled: [],
     smallTransplantColor: null,
     largeTransplantColor: null,
   };

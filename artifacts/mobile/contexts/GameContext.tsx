@@ -68,10 +68,14 @@ export interface GameUIState {
   largeRepairMarks: number[];
   largeSutureMarks: number[];
   mesenteryDisabled: number[];
+  smallMesenteryDisabled: number[];
   smallTransplantColor: { r: number; g: number; b: number } | null;
   largeTransplantColor: { r: number; g: number; b: number } | null;
   mesenterySelectionMode: boolean;
   mesenterySelectedNodes: number[];
+  smallMesenterySelectedNodes: number[];
+  smallTransplantCount: number;
+  largeTransplantCount: number;
 }
 
 interface GameContextType {
@@ -118,7 +122,7 @@ interface GameContextType {
   enterMesenterySelection: () => void;
   executeMesenterySelection: () => void;
   cancelMesenterySelection: () => void;
-  toggleMesenteryNode: (idx: number) => void;
+  toggleMesenteryNode: (idx: number, isSmall?: boolean) => void;
 }
 
 // Default tool position: slightly above cavity center, so tools activate in a meaningful spot
@@ -147,7 +151,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     toolStates: physicsRef.current.toolStates,
     pressureDiffusionRate: physicsRef.current.pressureDiffusionRate,
     viewMode: 'internal', currentScreen: 'simulation',
-    currentDialogue: null, peristalsisSpeed: 1.0,
+    currentDialogue: null, peristalsisSpeed: 1.5,
     peristalsisWaveAmplitude: PERISTALSIS_WAVE_AMPLITUDE_DEFAULT,
     peristalsisWaveSpeed: PERISTALSIS_WAVE_SPEED_DEFAULT,
     breathAmplitude: BREATH_AMPLITUDE_DEFAULT,
@@ -172,10 +176,14 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     largeRepairMarks: [],
     largeSutureMarks: [],
     mesenteryDisabled: [],
+    smallMesenteryDisabled: [],
     smallTransplantColor: null,
     largeTransplantColor: null,
     mesenterySelectionMode: false,
     mesenterySelectedNodes: [],
+    smallMesenterySelectedNodes: [],
+    smallTransplantCount: 0,
+    largeTransplantCount: 0,
   });
 
   const syncFromPhysics = useCallback(() => {
@@ -612,7 +620,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       activeTool: null, toolActive: false, toolParam1: 50, toolParam2: 50,
       toolStates: fresh.toolStates,
       pressureDiffusionRate: fresh.pressureDiffusionRate,
-      currentDialogue: null, peristalsisSpeed: 1.0,
+      currentDialogue: null, peristalsisSpeed: 1.5,
       peristalsisWaveAmplitude: PERISTALSIS_WAVE_AMPLITUDE_DEFAULT,
       peristalsisWaveSpeed: PERISTALSIS_WAVE_SPEED_DEFAULT,
       breathAmplitude: BREATH_AMPLITUDE_DEFAULT,
@@ -652,10 +660,12 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
 
   const relaxAbdomen = useCallback(() => {
     physicsRef.current.relaxFrames = 150;
+    triggerDialogueRef.current('cmd_relax');
   }, []);
 
   const takeLaxative = useCallback(() => {
     physicsRef.current.laxativeFrames = 600;
+    triggerDialogueRef.current('cmd_laxative');
   }, []);
 
   const performFirstAid = useCallback(() => {
@@ -667,47 +677,103 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       p.hpBonus = Math.min(100, (p.hpBonus ?? 0) + 25);
       setState(prev => ({ ...prev, hpBonus: p.hpBonus }));
     }
+    triggerDialogueRef.current('surg_firstaid');
   }, []);
 
   const startTransfusion = useCallback(() => {
     physicsRef.current.transfusionFrames = 600;
+    triggerDialogueRef.current('surg_transfusion');
   }, []);
 
   const repairIntestine = useCallback(() => {
     const p = physicsRef.current;
     const marks: number[] = [];
     const largeMarks: number[] = [];
-    p.smallSegs.forEach((seg, i) => { if (seg.perforated) { marks.push(i); seg.perforated = false; } });
-    p.largeSegs.forEach((seg, i) => { if (seg.perforated) { largeMarks.push(i); seg.perforated = false; } });
-    p.repairMarks = [...(p.repairMarks ?? []), ...marks];
-    p.largeRepairMarks = [...(p.largeRepairMarks ?? []), ...largeMarks];
+    p.smallSegs.forEach((seg, i) => {
+      if (seg.perforated) {
+        marks.push(i);
+        seg.perforated = false;
+        seg.health = Math.max(seg.health, 30);
+        seg.pain = Math.min(seg.pain, 40);
+      }
+    });
+    p.largeSegs.forEach((seg, i) => {
+      if (seg.perforated) {
+        largeMarks.push(i);
+        seg.perforated = false;
+        seg.health = Math.max(seg.health, 30);
+        seg.pain = Math.min(seg.pain, 40);
+      }
+    });
+    p.repairMarks = [...new Set([...(p.repairMarks ?? []), ...marks])];
+    p.largeRepairMarks = [...new Set([...(p.largeRepairMarks ?? []), ...largeMarks])];
     setState(prev => ({
       ...prev,
       repairMarks: [...p.repairMarks],
       largeRepairMarks: [...p.largeRepairMarks],
       intestinalRuptures: 0,
     }));
+    triggerDialogueRef.current('surg_repair');
   }, []);
 
   const sutureIntestine = useCallback(() => {
     const p = physicsRef.current;
     const marks: number[] = [];
     const largeMarks: number[] = [];
-    p.smallSegs.forEach((seg, i) => { if (seg.broken) { marks.push(i); seg.broken = false; } });
-    p.largeSegs.forEach((seg, i) => { if (seg.broken) { largeMarks.push(i); seg.broken = false; } });
-    p.sutureMarks = [...(p.sutureMarks ?? []), ...marks];
-    p.largeSutureMarks = [...(p.largeSutureMarks ?? []), ...largeMarks];
+    p.smallSegs.forEach((seg, i) => {
+      if (seg.broken) {
+        marks.push(i);
+        seg.broken = false;
+        seg.health = Math.max(seg.health, 35);
+        seg.pain = Math.min(seg.pain, 20);
+        seg.pressure = 0;
+        // Snap nodes back toward each other so spring reconnects
+        const nA = p.smallNodes[i], nB = p.smallNodes[i + 1];
+        if (nA && nB) {
+          const dx = nB.x - nA.x, dy = nB.y - nA.y;
+          const d = Math.sqrt(dx * dx + dy * dy);
+          if (d > 30) {
+            const ratio = 28 / d;
+            nB.x = nA.x + dx * ratio; nB.y = nA.y + dy * ratio;
+            nB.px = nB.x; nB.py = nB.y;
+          }
+        }
+      }
+    });
+    p.largeSegs.forEach((seg, i) => {
+      if (seg.broken) {
+        largeMarks.push(i);
+        seg.broken = false;
+        seg.health = Math.max(seg.health, 35);
+        seg.pain = Math.min(seg.pain, 20);
+        seg.pressure = 0;
+        const nA = p.largeNodes[i], nB = p.largeNodes[i + 1];
+        if (nA && nB) {
+          const dx = nB.x - nA.x, dy = nB.y - nA.y;
+          const d = Math.sqrt(dx * dx + dy * dy);
+          if (d > 35) {
+            const ratio = 30 / d;
+            nB.x = nA.x + dx * ratio; nB.y = nA.y + dy * ratio;
+            nB.px = nB.x; nB.py = nB.y;
+          }
+        }
+      }
+    });
+    p.sutureMarks = [...new Set([...(p.sutureMarks ?? []), ...marks])];
+    p.largeSutureMarks = [...new Set([...(p.largeSutureMarks ?? []), ...largeMarks])];
     setState(prev => ({
       ...prev,
       sutureMarks: [...p.sutureMarks],
       largeSutureMarks: [...p.largeSutureMarks],
       intestinalBreaks: 0,
     }));
+    triggerDialogueRef.current('surg_suture');
   }, []);
 
   const performNavelSurgery = useCallback(() => {
     physicsRef.current.navelPierced = true;
     setState(prev => ({ ...prev, navelPierced: true }));
+    triggerDialogueRef.current('surg_navel');
   }, []);
 
   const transplantSmallIntestine = useCallback(() => {
@@ -717,6 +783,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     p.smallSegs = fresh.smallSegs.map(s => ({ ...s, health: 85 }));
     p.repairMarks = [];
     p.sutureMarks = [];
+    p.smallMesenteryDisabled = [];
     const d = 22;
     const color = {
       r: Math.max(180, Math.min(255, 245 + Math.round((Math.random() - 0.5) * d * 2))),
@@ -729,9 +796,12 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       smallTransplantColor: color,
       repairMarks: [],
       sutureMarks: [],
+      smallMesenteryDisabled: [],
+      smallTransplantCount: prev.smallTransplantCount + 1,
       renderSmallNodes: p.smallNodes.map(n => ({ x: n.x, y: n.y })),
       renderSmallSegs: p.smallSegs.map(s => ({ ...s })),
     }));
+    triggerDialogueRef.current('surg_small_transplant');
   }, []);
 
   const transplantLargeIntestine = useCallback(() => {
@@ -755,9 +825,11 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       largeRepairMarks: [],
       largeSutureMarks: [],
       mesenteryDisabled: [],
+      largeTransplantCount: prev.largeTransplantCount + 1,
       renderLargeNodes: p.largeNodes.map(n => ({ x: n.x, y: n.y })),
       renderLargeSegs: p.largeSegs.map(s => ({ ...s })),
     }));
+    triggerDialogueRef.current('surg_large_transplant');
   }, []);
 
   const transplantAllIntestines = useCallback(() => {
@@ -770,6 +842,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     p.repairMarks = []; p.sutureMarks = [];
     p.largeRepairMarks = []; p.largeSutureMarks = [];
     p.mesenteryDisabled = [];
+    p.smallMesenteryDisabled = [];
     const d = 22;
     const sc = {
       r: Math.max(180, Math.min(255, 245 + Math.round((Math.random() - 0.5) * d * 2))),
@@ -790,35 +863,58 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       repairMarks: [], sutureMarks: [],
       largeRepairMarks: [], largeSutureMarks: [],
       mesenteryDisabled: [],
+      smallMesenteryDisabled: [],
+      smallTransplantCount: prev.smallTransplantCount + 1,
+      largeTransplantCount: prev.largeTransplantCount + 1,
       renderSmallNodes: p.smallNodes.map(n => ({ x: n.x, y: n.y })),
       renderLargeNodes: p.largeNodes.map(n => ({ x: n.x, y: n.y })),
       renderSmallSegs: p.smallSegs.map(s => ({ ...s })),
       renderLargeSegs: p.largeSegs.map(s => ({ ...s })),
     }));
+    triggerDialogueRef.current('surg_full_transplant');
   }, []);
 
   const enterMesenterySelection = useCallback(() => {
-    setState(prev => ({ ...prev, mesenterySelectionMode: true, mesenterySelectedNodes: [] }));
+    setState(prev => ({
+      ...prev,
+      mesenterySelectionMode: true,
+      mesenterySelectedNodes: [],
+      smallMesenterySelectedNodes: [],
+    }));
   }, []);
 
   const cancelMesenterySelection = useCallback(() => {
-    setState(prev => ({ ...prev, mesenterySelectionMode: false, mesenterySelectedNodes: [] }));
+    setState(prev => ({
+      ...prev,
+      mesenterySelectionMode: false,
+      mesenterySelectedNodes: [],
+      smallMesenterySelectedNodes: [],
+    }));
   }, []);
 
   const executeMesenterySelection = useCallback(() => {
     setState(prev => {
       physicsRef.current.mesenteryDisabled = [...prev.mesenterySelectedNodes];
+      physicsRef.current.smallMesenteryDisabled = [...prev.smallMesenterySelectedNodes];
       return {
         ...prev,
         mesenterySelectionMode: false,
         mesenteryDisabled: [...prev.mesenterySelectedNodes],
+        smallMesenteryDisabled: [...prev.smallMesenterySelectedNodes],
         mesenterySelectedNodes: [],
+        smallMesenterySelectedNodes: [],
       };
     });
+    triggerDialogueRef.current('surg_mesentery');
   }, []);
 
-  const toggleMesenteryNode = useCallback((idx: number) => {
+  const toggleMesenteryNode = useCallback((idx: number, isSmall = false) => {
     setState(prev => {
+      if (isSmall) {
+        const cur = prev.smallMesenterySelectedNodes;
+        const next = cur.includes(idx) ? cur.filter(i => i !== idx) : [...cur, idx];
+        return { ...prev, smallMesenterySelectedNodes: next };
+      }
       const cur = prev.mesenterySelectedNodes;
       const next = cur.includes(idx) ? cur.filter(i => i !== idx) : [...cur, idx];
       return { ...prev, mesenterySelectedNodes: next };

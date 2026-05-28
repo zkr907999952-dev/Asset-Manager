@@ -104,7 +104,7 @@ export function SettingsScreen({ onMenuPress }: Props) {
             label="蠕动速度"
             value={state.peristalsisSpeed}
             displayValue={`${state.peristalsisSpeed.toFixed(1)}×`}
-            min={0.3} max={3.0} step={0.1}
+            min={0.3} max={6.0} step={0.1}
             onValueChange={setPeriSpeed}
             trackColor={colors.primary}
           />
@@ -113,7 +113,7 @@ export function SettingsScreen({ onMenuPress }: Props) {
             label="蠕动波幅"
             value={state.peristalsisWaveAmplitude}
             displayValue={state.peristalsisWaveAmplitude.toFixed(2)}
-            min={0.0} max={0.6} step={0.01}
+            min={0.0} max={1.5} step={0.01}
             onValueChange={setPeriWaveAmplitude}
             trackColor={colors.primary}
           />

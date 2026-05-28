@@ -60,16 +60,39 @@ export function SimulationScreen({ onMenuPress }: Props) {
     const breaks = segs.filter(s => s.broken).length;
     if (breaks > 0) tryTrigger('break', () => triggerDialogue('intestine_break'), 3000);
 
-    // Electric stimulation: layered dialogue based on voltage level
+    // Electric stimulation: layered dialogue based on voltage + intestine type
     const elecActive = (p.toolType === '电击器' && p.toolActive && p.electrodes.length > 0)
       || (p.toolStates['电击器']?.active && p.electrodes.length > 0);
     if (elecActive) {
       const ts = p.toolStates['电击器'];
       const voltage = (p.toolType === '电击器' && p.toolActive) ? p.toolParam1 : (ts?.param1 ?? 50);
-      if (voltage > 75) tryTrigger('elec_crit', () => triggerDialogue('electric_critical'), 2000);
-      else if (voltage > 50) tryTrigger('elec_high', () => triggerDialogue('electric_high'), 2500);
-      else if (voltage > 25) tryTrigger('elec_med', () => triggerDialogue('electric_medium'), 3000);
-      else tryTrigger('elec_low', () => triggerDialogue('electric_low'), 4000);
+      const radius = 30 + (p.toolParam2 ?? 50) * 0.3;
+      // Determine which intestine the electrodes are primarily hitting
+      let smallHits = 0, largeHits = 0;
+      for (const el of p.electrodes) {
+        for (const n of p.smallNodes) {
+          if (Math.hypot(n.x - el.x, n.y - el.y) < radius) smallHits++;
+        }
+        for (const n of p.largeNodes) {
+          if (Math.hypot(n.x - el.x, n.y - el.y) < radius) largeHits++;
+        }
+      }
+      const prefix: 'electric_small' | 'electric_large' | 'electric' = smallHits >= largeHits
+        ? (smallHits > 0 ? 'electric_small' : 'electric')
+        : (largeHits > 0 ? 'electric_large' : 'electric');
+      if (voltage > 75) {
+        const key = prefix === 'electric' ? 'electric_critical' : `${prefix}_critical` as const;
+        tryTrigger('elec_crit', () => triggerDialogue(key), 2000);
+      } else if (voltage > 50) {
+        const key = prefix === 'electric' ? 'electric_high' : `${prefix}_high` as const;
+        tryTrigger('elec_high', () => triggerDialogue(key), 2500);
+      } else if (voltage > 25) {
+        const key = prefix === 'electric' ? 'electric_medium' : `${prefix}_medium` as const;
+        tryTrigger('elec_med', () => triggerDialogue(key), 3000);
+      } else {
+        const key = prefix === 'electric' ? 'electric_low' : `${prefix}_low` as const;
+        tryTrigger('elec_low', () => triggerDialogue(key), 4000);
+      }
     }
   }, [triggerDialogue]);
 
@@ -133,7 +156,9 @@ export function SimulationScreen({ onMenuPress }: Props) {
           canvasLayout={canvasLayout.current}
           onLayout={layout => { canvasLayout.current = layout; }}
         />
-        <StatusBars hp={state.hp} pleasure={state.pleasure} />
+        <StatusBars hp={state.hp} pleasure={state.pleasure}
+          smallTransplantCount={state.smallTransplantCount}
+          largeTransplantCount={state.largeTransplantCount} />
         <ToolBar />
 
         {/* Floating bottom overlay: dialogue + tool controls */}

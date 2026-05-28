@@ -280,12 +280,20 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
       const { locationX, locationY } = evt.nativeEvent;
       const pos = tpc(locationX, locationY);
 
-      // Mesentery selection mode: tapping near large nodes toggles selection
+      // Mesentery selection mode: tapping near any intestine node toggles selection
       if (s.mesenterySelectionMode) {
-        const nodes = physicsRef.current.largeNodes;
-        for (let i = 0; i < nodes.length; i++) {
-          if (!nodes[i].pinned && Math.hypot(nodes[i].x - pos.x, nodes[i].y - pos.y) < 28) {
-            tmn(i);
+        const largeNodes = physicsRef.current.largeNodes;
+        for (let i = 0; i < largeNodes.length; i++) {
+          if (!largeNodes[i].pinned && Math.hypot(largeNodes[i].x - pos.x, largeNodes[i].y - pos.y) < 28) {
+            tmn(i, false);
+            return;
+          }
+        }
+        const smallNodes = physicsRef.current.smallNodes;
+        for (let i = 0; i < smallNodes.length; i++) {
+          if (!smallNodes[i].pinned && Math.hypot(smallNodes[i].x - pos.x, smallNodes[i].y - pos.y) < 22) {
+            tmn(i, true);
+            return;
           }
         }
         return;
@@ -671,6 +679,40 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
               );
             })()}
 
+            {/* Large intestine rupture burst markers */}
+            {renderLargeSegs.map((seg, i) => {
+              if (!seg.ruptured) return null;
+              const n = renderLargeNodes[i];
+              if (!n) return null;
+              return (
+                <G key={`lgrpt-${i}`}>
+                  {[0, 45, 90, 135].map(angle => {
+                    const rad = angle * Math.PI / 180;
+                    const r = LARGE_RADIUS + 6;
+                    return (
+                      <Line key={angle}
+                        x1={n.x} y1={n.y}
+                        x2={n.x + Math.cos(rad) * r} y2={n.y + Math.sin(rad) * r}
+                        stroke="#ff3030" strokeWidth={2} strokeLinecap="round" />
+                    );
+                  })}
+                  <Circle cx={n.x} cy={n.y} r={5} fill="#cc0000" stroke="#ff4040" strokeWidth={1} />
+                </G>
+              );
+            })}
+
+            {/* Large intestine perforation markers */}
+            {renderLargeSegs.map((seg, i) =>
+              seg.perforated && !seg.broken ? (
+                <G key={`lgprf-${i}`}>
+                  <Circle cx={renderLargeNodes[i]?.x ?? 0} cy={renderLargeNodes[i]?.y ?? 0}
+                    r={3.5} fill="#440000" stroke="#aa2020" strokeWidth={1} />
+                  <Circle cx={renderLargeNodes[i]?.x ?? 0} cy={renderLargeNodes[i]?.y ?? 0}
+                    r={6} fill="none" stroke="rgba(200,40,40,0.4)" strokeWidth={0.8} />
+                </G>
+              ) : null
+            )}
+
             {/* Large intestine break markers */}
             {renderLargeSegs.map((seg, i) => {
               if (!seg.broken) return null;
@@ -874,7 +916,7 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
               );
             })}
 
-            {/* ===== MESENTERY SELECTION HIGHLIGHT ===== */}
+            {/* ===== MESENTERY SELECTION HIGHLIGHT — large intestine ===== */}
             {mesenterySelectionMode && renderLargeNodes.map((n, i) => {
               const isSelected = (mesenterySelectedNodes ?? []).includes(i);
               if (!physicsRef.current.largeNodes[i] || physicsRef.current.largeNodes[i].pinned) return null;
@@ -887,7 +929,20 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
               );
             })}
 
-            {/* Debug overlays */}
+            {/* ===== MESENTERY SELECTION HIGHLIGHT — small intestine ===== */}
+            {mesenterySelectionMode && renderSmallNodes.map((n, i) => {
+              const isSelected = (state.smallMesenterySelectedNodes ?? []).includes(i);
+              if (!physicsRef.current.smallNodes[i] || physicsRef.current.smallNodes[i].pinned) return null;
+              return (
+                <Circle key={`msel-sm-${i}`} cx={n.x} cy={n.y}
+                  r={SMALL_RADIUS + 4}
+                  fill={isSelected ? 'rgba(255,180,40,0.20)' : 'rgba(120,200,255,0.08)'}
+                  stroke={isSelected ? 'rgba(255,180,40,0.70)' : 'rgba(120,200,255,0.30)'}
+                  strokeWidth={isSelected ? 1.2 : 0.7} />
+              );
+            })}
+
+            {/* Debug overlays — small intestine */}
             {state.debugMode && renderSmallSegs.map((seg, i) => {
               const n = renderSmallNodes[i];
               if (!n) return null;
@@ -898,6 +953,21 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
                   <Rect x={bx} y={by + 3} width={seg.sensitivity * 0.3} height={2} fill="#cc00cc" />
                   <Rect x={bx} y={by + 6} width={seg.pain * 0.3} height={2} fill="#cc0000" />
                   <Rect x={bx} y={by + 9} width={seg.pressure * 0.3} height={2} fill="#0088ff" />
+                </G>
+              );
+            })}
+
+            {/* Debug overlays — large intestine */}
+            {state.debugMode && renderLargeSegs.map((seg, i) => {
+              const n = renderLargeNodes[i];
+              if (!n) return null;
+              const bx = n.x + 18, by = n.y - 14;
+              return (
+                <G key={`dbgL-${i}`}>
+                  <Rect x={bx} y={by} width={seg.health * 0.28} height={3} fill="#44ee44" />
+                  <Rect x={bx} y={by + 4} width={seg.sensitivity * 0.28} height={3} fill="#ee44ee" />
+                  <Rect x={bx} y={by + 8} width={seg.pain * 0.28} height={3} fill="#ee4444" />
+                  <Rect x={bx} y={by + 12} width={(seg.pressure / 180) * 28} height={3} fill="#4488ff" />
                 </G>
               );
             })}
