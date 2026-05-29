@@ -4,6 +4,12 @@ import { Feather } from '@expo/vector-icons';
 import { useColors } from '@/hooks/useColors';
 import { useGame } from '@/contexts/GameContext';
 
+const STEP_LABELS: Record<number, string> = {
+  1: '第一步：切开感染肠段…',
+  2: '第二步：取出寄生虫…',
+  3: '第三步：缝合修复…',
+};
+
 interface SurgBtnProps {
   label: string;
   subLabel: string;
@@ -51,6 +57,7 @@ export function SurgeryPanel() {
     performNavelSurgery,
     transplantSmallIntestine, transplantLargeIntestine, transplantAllIntestines,
     enterMesenterySelection, executeMesenterySelection, cancelMesenterySelection,
+    performParasiteSurgery,
   } = useGame();
 
   const inSelMode = state.mesenterySelectionMode;
@@ -72,6 +79,42 @@ export function SurgeryPanel() {
       <SurgButton icon="plus-circle" label="肠道修补手术" subLabel="清除所有穿孔，留下修补痕迹" onPress={repairIntestine} />
       <SurgButton icon="scissors" label="断肠缝合手术" subLabel="清除所有断裂，留下缝合痕迹" onPress={sutureIntestine} />
       <SurgButton icon="circle" label="肚脐贯通手术" subLabel="永久开放肚脐，工具可直接插入" onPress={performNavelSurgery} />
+
+      <Text style={[styles.section, { color: colors.mutedForeground }]}>寄生虫清除</Text>
+      {state.parasiteSurgeryPhase === 0 ? (
+        <SurgButton
+          icon="zap"
+          label="寄生虫清除手术"
+          subLabel={state.parasites.length === 0
+            ? '无寄生虫（须先服用寄生虫卵）'
+            : `检测到 ${state.parasites.length} 个寄生体 — 三步手术清除`}
+          onPress={state.parasites.length > 0 ? performParasiteSurgery : () => {}}
+          variant={state.parasites.length > 0 ? 'danger' : 'disabled'}
+        />
+      ) : (
+        <View style={[styles.surgProgress, { borderColor: '#88cc6688', backgroundColor: '#88cc6614' }]}>
+          <Feather name="loader" size={12} color="#88cc66" />
+          <View style={{ flex: 1, marginLeft: 8 }}>
+            <Text style={[styles.surgProgressTitle, { color: '#88cc66' }]}>
+              寄生虫清除手术进行中
+            </Text>
+            <Text style={[styles.surgProgressSub, { color: colors.mutedForeground }]}>
+              {STEP_LABELS[state.parasiteSurgeryPhase] ?? '手术中…'}
+            </Text>
+            <View style={[styles.stepDots, { marginTop: 5 }]}>
+              {[1, 2, 3].map(s => (
+                <View key={s} style={[
+                  styles.stepDot,
+                  {
+                    backgroundColor: s <= state.parasiteSurgeryPhase ? '#88cc66' : `${colors.mutedForeground}44`,
+                    borderColor: s === state.parasiteSurgeryPhase ? '#88cc66' : 'transparent',
+                  }
+                ]} />
+              ))}
+            </View>
+          </View>
+        </View>
+      )}
 
       <Text style={[styles.section, { color: colors.mutedForeground }]}>移植手术</Text>
       <SurgButton icon="refresh-cw" label="小肠移植手术" subLabel="重置小肠（初始健康85%，随机色调）" onPress={transplantSmallIntestine} variant="danger" />
@@ -147,4 +190,31 @@ const styles = StyleSheet.create({
   },
   selText: { fontSize: 10, fontFamily: 'Inter_400Regular', flex: 1, lineHeight: 14 },
   spacer: { height: 16 },
+  surgProgress: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    padding: 8,
+    borderRadius: 6,
+    borderWidth: 1,
+    marginBottom: 3,
+  },
+  surgProgressTitle: {
+    fontSize: 11,
+    fontFamily: 'Inter_600SemiBold',
+  },
+  surgProgressSub: {
+    fontSize: 9,
+    fontFamily: 'Inter_400Regular',
+    marginTop: 2,
+  },
+  stepDots: {
+    flexDirection: 'row',
+    gap: 5,
+  },
+  stepDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    borderWidth: 1.5,
+  },
 });

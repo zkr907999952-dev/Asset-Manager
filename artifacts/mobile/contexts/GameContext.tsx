@@ -132,6 +132,7 @@ export interface GameUIState {
   // Parasite system
   parasites: ParasiteEntity[];
   hatchDurationSec: number;
+  parasiteSurgeryPhase: 0 | 1 | 2 | 3;
 }
 
 interface GameContextType {
@@ -188,6 +189,7 @@ interface GameContextType {
   toggleMesenteryNode: (idx: number, isSmall?: boolean) => void;
   takeParasiteEgg: () => void;
   setHatchDuration: (v: number) => void;
+  performParasiteSurgery: () => void;
 }
 
 const DEFAULT_TOOL_POS = { x: CAVITY_CX, y: CAVITY_CY - 40 };
@@ -256,6 +258,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
   const parasiteRef = useRef<ParasiteEntity[]>([]);
   const parasiteIdRef = useRef(0);
   const hatchDurationRef = useRef(9);
+  const parasiteSurgeryPhaseRef = useRef<0 | 1 | 2 | 3>(0);
 
   const [state, setState] = useState<GameUIState>({
     hp: 100, pleasure: 0, heartRate: 72,
@@ -315,6 +318,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     sedativeTimeLeft: 0,
     parasites: [],
     hatchDurationSec: 9,
+    parasiteSurgeryPhase: 0,
   });
 
   const syncFromPhysics = useCallback(() => {
@@ -1704,6 +1708,121 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     setState(prev => ({ ...prev, hatchDurationSec: v }));
   }, []);
 
+  const performParasiteSurgery = useCallback(() => {
+    if (parasiteSurgeryPhaseRef.current !== 0) return;
+    if (parasiteRef.current.length === 0) return;
+
+    const td = triggerDialogueRef.current;
+    const p = physicsRef.current;
+
+    // === STEP 1: Incise infected segments (perforate them) ===
+    parasiteSurgeryPhaseRef.current = 1;
+    setState(prev => ({ ...prev, parasiteSurgeryPhase: 1 }));
+    td('surg_parasite_step1');
+
+    const infectedSmallSegs = new Set<number>();
+    const infectedLargeSegs = new Set<number>();
+    parasiteRef.current.forEach(par => {
+      getParasiteOccupiedSegs(par).forEach(({ intestine, seg }) => {
+        if (intestine === 'small') infectedSmallSegs.add(seg);
+        else infectedLargeSegs.add(seg);
+      });
+    });
+
+    infectedSmallSegs.forEach(i => {
+      if (i < p.smallSegs.length) {
+        p.smallSegs[i].perforated = true;
+        p.smallSegs[i].pain = Math.min(100, p.smallSegs[i].pain + 20);
+      }
+    });
+    infectedLargeSegs.forEach(i => {
+      if (i < p.largeSegs.length) {
+        p.largeSegs[i].perforated = true;
+        p.largeSegs[i].pain = Math.min(100, p.largeSegs[i].pain + 20);
+      }
+    });
+
+    // === STEP 2 (after 2s): Remove parasites, deal pain + HP cost ===
+    setTimeout(() => {
+      if (parasiteSurgeryPhaseRef.current !== 1) return;
+      parasiteSurgeryPhaseRef.current = 2;
+      setState(prev => ({ ...prev, parasiteSurgeryPhase: 2 }));
+      td('surg_parasite_step2');
+
+      // Remove all parasites
+      parasiteRef.current = [];
+
+      // Apply pain and HP cost proportional to parasite count
+      const parasiteCount = infectedSmallSegs.size + infectedLargeSegs.size;
+      const hpLoss = Math.min(25, 4 + parasiteCount * 2);
+      const painGain = Math.min(30, 5 + parasiteCount * 3);
+
+      infectedSmallSegs.forEach(i => {
+        if (i < p.smallSegs.length) {
+          p.smallSegs[i].pain = Math.min(100, p.smallSegs[i].pain + painGain);
+          p.smallSegs[i].health = Math.max(0, p.smallSegs[i].health - 5);
+        }
+      });
+      infectedLargeSegs.forEach(i => {
+        if (i < p.largeSegs.length) {
+          p.largeSegs[i].pain = Math.min(100, p.largeSegs[i].pain + painGain);
+          p.largeSegs[i].health = Math.max(0, p.largeSegs[i].health - 5);
+        }
+      });
+
+      setState(prev => ({
+        ...prev,
+        parasites: [],
+        hp: Math.max(1, prev.hp - hpLoss),
+        parasiteSurgeryPhase: 2,
+      }));
+
+      // === STEP 3 (after 2 more s): Repair perforations ===
+      setTimeout(() => {
+        if (parasiteSurgeryPhaseRef.current !== 2) return;
+        parasiteSurgeryPhaseRef.current = 3;
+        setState(prev => ({ ...prev, parasiteSurgeryPhase: 3 }));
+        td('surg_parasite_step3');
+
+        // Repair all perforations (same logic as repairIntestine)
+        const marks: number[] = [];
+        const largeMarks: number[] = [];
+        p.smallSegs.forEach((seg, i) => {
+          if (seg.perforated) {
+            marks.push(i);
+            seg.perforated = false;
+            seg.health = Math.max(seg.health, 30);
+            seg.pain = Math.min(seg.pain, 40);
+          }
+        });
+        p.largeSegs.forEach((seg, i) => {
+          if (seg.perforated) {
+            largeMarks.push(i);
+            seg.perforated = false;
+            seg.health = Math.max(seg.health, 30);
+            seg.pain = Math.min(seg.pain, 40);
+          }
+        });
+        p.repairMarks = [...new Set([...(p.repairMarks ?? []), ...marks])];
+        p.largeRepairMarks = [...new Set([...(p.largeRepairMarks ?? []), ...largeMarks])];
+
+        setState(prev => ({
+          ...prev,
+          repairMarks: [...p.repairMarks],
+          largeRepairMarks: [...p.largeRepairMarks],
+          intestinalRuptures: 0,
+          parasiteSurgeryPhase: 3,
+        }));
+
+        // Done — reset phase after a brief moment
+        setTimeout(() => {
+          parasiteSurgeryPhaseRef.current = 0;
+          setState(prev => ({ ...prev, parasiteSurgeryPhase: 0 }));
+        }, 2000);
+      }, 2000);
+    }, 2000);
+  }, []);
+
   return (
     <GameContext.Provider value={{
       state, physicsRef,
@@ -1724,7 +1843,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       transplantSmallIntestine, transplantLargeIntestine, transplantAllIntestines,
       enterMesenterySelection, executeMesenterySelection, cancelMesenterySelection,
       toggleMesenteryNode,
-      takeParasiteEgg, setHatchDuration,
+      takeParasiteEgg, setHatchDuration, performParasiteSurgery,
     }}>
       {children}
     </GameContext.Provider>

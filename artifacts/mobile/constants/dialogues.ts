@@ -54,6 +54,9 @@ export type DialogueTrigger =
   | 'surg_large_transplant'
   | 'surg_full_transplant'
   | 'surg_mesentery'
+  | 'surg_parasite_step1'
+  | 'surg_parasite_step2'
+  | 'surg_parasite_step3'
   | 'bayonet_pierce'
   | 'bayonet_deep'
   | 'silicone_large_shallow'
@@ -394,6 +397,24 @@ export const DIALOGUES: Record<DialogueTrigger, string[]> = {
     '呜……失去了支撑……肠子……在乱动……',
     '嗯……肠系膜……没了……感觉……好奇怪……',
     '啊……里面……失重了一样……肠子……飘来飘去……',
+  ],
+  surg_parasite_step1: [
+    '啊……！里面……被切开了……！有虫子在……动……！',
+    '呜……！肠子……切开了……那个……那个东西……在里面……！',
+    '嗯啊……！里面……剖开了……好痛……那些虫……还活着……！',
+    '啊……！切开了……虫子……虫卵……都看见了……好恶心……！',
+  ],
+  surg_parasite_step2: [
+    '啊啊……！把……把它们取出来了……疼……好疼……！',
+    '呜……虫子……取出来了……里面……还在痛……！',
+    '嗯……！终于……取出来了……肚子里……好空……好痛……',
+    '啊……都取出来了……里面……空了……但是……好难受……！',
+  ],
+  surg_parasite_step3: [
+    '呜……缝起来了……终于……结束了……',
+    '嗯……伤口……缝合了……里面……清干净了……',
+    '啊……缝好了……虫子……都消失了……里面……只剩疼痛……',
+    '呜……手术……做完了……肚子里……干净了……',
   ],
   bayonet_pierce: [
     '啊……！刺刀……刺进来了……好锋利……！',
