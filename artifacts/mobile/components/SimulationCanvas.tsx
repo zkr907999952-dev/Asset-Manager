@@ -5,6 +5,7 @@ import Svg, {
   Ellipse, Circle, Line, Path, Rect, Defs, RadialGradient, LinearGradient, Stop, G,
   Image as SvgImage, ClipPath,
 } from 'react-native-svg';
+import type { ParasiteEntity } from '../contexts/GameContext';
 
 const INTESTINES_REF = require('@/assets/images/intestines.png');
 const BELLY_EXTERNAL_IMG = require('@/assets/images/belly_external.png');
@@ -694,6 +695,7 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
     repairMarks, sutureMarks, largeRepairMarks, largeSutureMarks,
     smallTransplantColor, largeTransplantColor,
     mesenterySelectionMode, mesenterySelectedNodes,
+    parasites,
   } = state;
   const isInternal = state.viewMode === 'internal';
 
@@ -1222,6 +1224,100 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
                   ))}
                 </G>
               );
+            })}
+
+            {/* ===== PARASITES ===== */}
+            {(parasites ?? []).map((parasite: ParasiteEntity) => {
+              const segIdx = Math.max(0, Math.min(renderSmallNodes.length - 2, parasite.segIdx));
+              const nodeA = renderSmallNodes[segIdx];
+              const nodeB = renderSmallNodes[segIdx + 1];
+              if (!nodeA) return null;
+              const midX = nodeB ? (nodeA.x + nodeB.x) / 2 : nodeA.x;
+              const midY = nodeB ? (nodeA.y + nodeB.y) / 2 : nodeA.y;
+
+              if (parasite.phase === 'egg_traveling' || parasite.phase === 'egg_hatching') {
+                const now = Date.now();
+                const hatchProgress = parasite.phase === 'egg_hatching' && parasite.hatchDurationMs > 0
+                  ? Math.min(1, (now - parasite.hatchStartTime) / parasite.hatchDurationMs)
+                  : 0;
+                const r = 3 + hatchProgress * 3;
+                const opacity = 0.7 + hatchProgress * 0.3;
+                const green = Math.round(100 + hatchProgress * 155);
+                return (
+                  <G key={`parasite-${parasite.id}`}>
+                    <Circle cx={midX} cy={midY} r={r + 2}
+                      fill={`rgba(60,${green},40,0.25)`}
+                      stroke={`rgba(80,${green},50,0.5)`}
+                      strokeWidth={0.8} />
+                    <Circle cx={midX} cy={midY} r={r}
+                      fill={`rgba(80,${green},50,${opacity})`}
+                      stroke={`rgba(180,255,140,0.9)`}
+                      strokeWidth={parasite.phase === 'egg_hatching' ? 1.2 : 0.5} />
+                    {parasite.phase === 'egg_hatching' && (
+                      <>
+                        {[0,1,2,3].map(k => {
+                          const a = (k / 4) * Math.PI * 2 + hatchProgress * Math.PI;
+                          const cr = r + 1.5 + hatchProgress * 2;
+                          return (
+                            <Circle key={k}
+                              cx={midX + Math.cos(a) * cr}
+                              cy={midY + Math.sin(a) * cr}
+                              r={0.8}
+                              fill={`rgba(180,255,140,${0.5 + hatchProgress * 0.4})`} />
+                          );
+                        })}
+                      </>
+                    )}
+                  </G>
+                );
+              }
+
+              if (parasite.phase === 'worm') {
+                const wormLen = Math.max(1, parasite.wormLength);
+                const segments: Array<{ x: number; y: number }> = [];
+                for (let w = 0; w < wormLen; w++) {
+                  const sIdx = Math.max(0, Math.min(renderSmallNodes.length - 2, parasite.segIdx - w));
+                  const nA = renderSmallNodes[sIdx];
+                  const nB = renderSmallNodes[sIdx + 1];
+                  if (!nA) break;
+                  segments.push({
+                    x: nB ? (nA.x + nB.x) / 2 : nA.x,
+                    y: nB ? (nA.y + nB.y) / 2 : nA.y,
+                  });
+                }
+                if (segments.length === 0) return null;
+                const headX = segments[0].x;
+                const headY = segments[0].y;
+                const alpha = Math.min(1, 0.5 + wormLen / 6 * 0.5);
+                return (
+                  <G key={`parasite-${parasite.id}`}>
+                    {segments.slice(1).map((seg, i) => (
+                      <Line key={i}
+                        x1={segments[i].x} y1={segments[i].y}
+                        x2={seg.x} y2={seg.y}
+                        stroke={`rgba(200,255,160,${alpha * 0.6})`}
+                        strokeWidth={3.5}
+                        strokeLinecap="round" />
+                    ))}
+                    {segments.map((seg, i) => {
+                      const isHead = i === 0;
+                      const r = isHead ? 4.5 : 3 - i * 0.2;
+                      return (
+                        <Ellipse key={i}
+                          cx={seg.x} cy={seg.y}
+                          rx={Math.max(1.5, r)}
+                          ry={Math.max(1.2, r * 0.7)}
+                          fill={isHead ? `rgba(180,255,120,${alpha})` : `rgba(140,220,90,${alpha * 0.85})`}
+                          stroke={isHead ? 'rgba(255,255,200,0.9)' : 'rgba(200,255,160,0.5)'}
+                          strokeWidth={isHead ? 1.0 : 0.5} />
+                      );
+                    })}
+                    <Circle cx={headX - 1.2} cy={headY - 1} r={0.8} fill="rgba(20,20,20,0.9)" />
+                    <Circle cx={headX + 1.2} cy={headY - 1} r={0.8} fill="rgba(20,20,20,0.9)" />
+                  </G>
+                );
+              }
+              return null;
             })}
 
             {/* ===== MESENTERY SELECTION HIGHLIGHT — large intestine ===== */}

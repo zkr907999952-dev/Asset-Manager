@@ -13,6 +13,32 @@ import {
 import { getRandomDialogue, type DialogueTrigger } from '../constants/dialogues';
 import type { ComaState } from '../components/HeartRateMonitor';
 
+export interface ParasiteEntity {
+  id: number;
+  phase: 'egg_traveling' | 'egg_hatching' | 'worm';
+  segIdx: number;
+  targetSegIdx: number;
+  hatchStartTime: number;
+  hatchDurationMs: number;
+  wormLength: number;
+  lastGrowTime: number;
+  lastDamageTime: number;
+  isFreeMoving: boolean;
+  freeMoveTarget: number;
+  freeMoveWaitUntil: number;
+  lastMoveStepTime: number;
+}
+
+function getParasiteOccupiedSegs(par: ParasiteEntity): number[] {
+  if (par.phase !== 'worm') return [Math.max(0, Math.min(N_SMALL - 2, par.segIdx))];
+  const segs: number[] = [];
+  for (let i = 0; i < par.wormLength; i++) {
+    const s = par.segIdx - i;
+    if (s >= 0 && s < N_SMALL - 1) segs.push(s);
+  }
+  return segs;
+}
+
 export type ScreenName = 'character' | 'simulation' | 'console' | 'settings' | 'help';
 
 export interface RenderSegment {
@@ -97,6 +123,9 @@ export interface GameUIState {
   drugDurationSec: number;
   stimulantTimeLeft: number;
   sedativeTimeLeft: number;
+  // Parasite system
+  parasites: ParasiteEntity[];
+  hatchDurationSec: number;
 }
 
 interface GameContextType {
@@ -151,6 +180,8 @@ interface GameContextType {
   executeMesenterySelection: () => void;
   cancelMesenterySelection: () => void;
   toggleMesenteryNode: (idx: number, isSmall?: boolean) => void;
+  takeParasiteEgg: () => void;
+  setHatchDuration: (v: number) => void;
 }
 
 const DEFAULT_TOOL_POS = { x: CAVITY_CX, y: CAVITY_CY - 40 };
@@ -216,6 +247,10 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     lastStepTime: 0,
   });
 
+  const parasiteRef = useRef<ParasiteEntity[]>([]);
+  const parasiteIdRef = useRef(0);
+  const hatchDurationRef = useRef(9);
+
   const [state, setState] = useState<GameUIState>({
     hp: 100, pleasure: 0, heartRate: 72,
     navelPierced: false, intestinalRuptures: 0, intestinalBreaks: 0,
@@ -272,6 +307,8 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     drugDurationSec: 120,
     stimulantTimeLeft: 0,
     sedativeTimeLeft: 0,
+    parasites: [],
+    hatchDurationSec: 9,
   });
 
   const syncFromPhysics = useCallback(() => {
@@ -477,6 +514,126 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         setState(prev => ({ ...prev, enemaSmallHeadIdx: newIdx }));
       }
     }, STEP_MS);
+    return () => clearInterval(timer);
+  }, []);
+
+  // === Parasite egg / worm simulation loop ===
+  useEffect(() => {
+    const timer = setInterval(() => {
+      const p = physicsRef.current;
+      const now = Date.now();
+      const td = triggerDialogueRef.current;
+
+      if (parasiteRef.current.length === 0) return;
+
+      // Electric shock kill detection (medium+ = toolParam2 >= 40)
+      const electricMedium =
+        p.toolType === '电击器' && p.toolActive && (p.toolParam2 ?? 0) >= 40;
+      const killSmallSegs = new Set<number>();
+      if (electricMedium && p.electrodes.length > 0) {
+        p.electrodes.forEach(elec => {
+          p.smallNodes.forEach((n, i) => {
+            if (i < N_SMALL - 1 && Math.hypot(n.x - elec.x, n.y - elec.y) < 44) {
+              killSmallSegs.add(i);
+            }
+          });
+        });
+      }
+
+      let changed = false;
+      const kept: ParasiteEntity[] = [];
+
+      for (const par of parasiteRef.current) {
+        const occupiedSegs = getParasiteOccupiedSegs(par);
+        if (electricMedium && occupiedSegs.some(s => killSmallSegs.has(s))) {
+          changed = true;
+          continue;
+        }
+
+        if (par.phase === 'egg_traveling') {
+          const periScale = p.periScaleSmall[par.segIdx] ?? 1;
+          const minInterval = Math.max(450, 1400 / Math.max(0.5, p.peristalsisSpeed ?? 1.5));
+          if (periScale > 1.06 && now - par.lastMoveStepTime > minInterval) {
+            par.lastMoveStepTime = now;
+            const newIdx = Math.min(N_SMALL - 2, par.segIdx + 1);
+            par.segIdx = newIdx;
+            changed = true;
+            if (par.segIdx >= par.targetSegIdx) {
+              par.phase = 'egg_hatching';
+              par.hatchStartTime = now;
+            }
+          }
+        } else if (par.phase === 'egg_hatching') {
+          if (now - par.hatchStartTime >= par.hatchDurationMs) {
+            par.phase = 'worm';
+            par.wormLength = 1;
+            par.lastGrowTime = now;
+            par.lastDamageTime = now;
+            par.isFreeMoving = false;
+            par.freeMoveTarget = par.segIdx;
+            par.freeMoveWaitUntil = now + 5000;
+            par.lastMoveStepTime = 0;
+            td('parasite_hatch');
+            changed = true;
+          }
+        } else {
+          // Pleasure boost to occupied segments
+          occupiedSegs.forEach(i => {
+            if (i < p.smallSegs.length) {
+              p.smallSegs[i].sensitivity = Math.min(100, p.smallSegs[i].sensitivity + 0.025);
+            }
+          });
+          changed = true;
+
+          // Growth every 9s up to max 6 segments
+          if (par.wormLength < 6 && now - par.lastGrowTime >= 9000) {
+            par.wormLength = Math.min(6, par.wormLength + 1);
+            par.lastGrowTime = now;
+          }
+
+          // Adult damage every 4s
+          if (par.wormLength >= 6 && now - par.lastDamageTime >= 4000) {
+            par.lastDamageTime = now;
+            const si = par.segIdx;
+            if (si < p.smallSegs.length) {
+              p.smallSegs[si].health = Math.max(0, p.smallSegs[si].health - 10);
+              p.smallSegs[si].pain = Math.min(100, p.smallSegs[si].pain + 15);
+              if (Math.random() < 0.3) {
+                p.smallSegs[si].perforated = true;
+                td('parasite_perforation');
+              } else {
+                td('parasite_damage');
+              }
+            }
+          }
+
+          // Free movement when fully grown
+          if (par.wormLength >= 6) {
+            if (!par.isFreeMoving && now >= par.freeMoveWaitUntil) {
+              par.isFreeMoving = true;
+              par.freeMoveTarget = Math.floor(Math.random() * (N_SMALL - 1));
+              par.lastMoveStepTime = now;
+            }
+            if (par.isFreeMoving && now - par.lastMoveStepTime >= 1000) {
+              par.lastMoveStepTime = now;
+              if (par.segIdx < par.freeMoveTarget) par.segIdx++;
+              else if (par.segIdx > par.freeMoveTarget) par.segIdx--;
+              if (par.segIdx === par.freeMoveTarget) {
+                par.isFreeMoving = false;
+                par.freeMoveWaitUntil = now + 5000;
+              }
+            }
+          }
+        }
+
+        kept.push(par);
+      }
+
+      if (changed || kept.length !== parasiteRef.current.length) {
+        parasiteRef.current = kept;
+        setState(prev => ({ ...prev, parasites: [...kept] }));
+      }
+    }, 120);
     return () => clearInterval(timer);
   }, []);
 
@@ -1132,6 +1289,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       stimulantExpiry: 0, sedativeExpiry: 0,
       durationSec: drugRef.current.durationSec,
     };
+    parasiteRef.current = [];
     setState(prev => ({
       ...prev,
       hp: 100, pleasure: 0, heartRate: 72,
@@ -1161,6 +1319,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       drugDurationSec: drugRef.current.durationSec,
       stimulantTimeLeft: 0,
       sedativeTimeLeft: 0,
+      parasites: [],
     }));
   }, []);
 
@@ -1312,6 +1471,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     p.repairMarks = [];
     p.sutureMarks = [];
     p.smallMesenteryDisabled = [];
+    parasiteRef.current = [];
     const d = 22;
     const color = {
       r: Math.max(180, Math.min(255, 245 + Math.round((Math.random() - 0.5) * d * 2))),
@@ -1328,6 +1488,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       smallTransplantCount: prev.smallTransplantCount + 1,
       renderSmallNodes: p.smallNodes.map(n => ({ x: n.x, y: n.y })),
       renderSmallSegs: p.smallSegs.map(s => ({ ...s })),
+      parasites: [],
     }));
     triggerDialogueRef.current('surg_small_transplant');
   }, []);
@@ -1384,6 +1545,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     };
     p.smallTransplantColor = sc;
     p.largeTransplantColor = lc;
+    parasiteRef.current = [];
     setState(prev => ({
       ...prev,
       smallTransplantColor: sc,
@@ -1398,6 +1560,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       renderLargeNodes: p.largeNodes.map(n => ({ x: n.x, y: n.y })),
       renderSmallSegs: p.smallSegs.map(s => ({ ...s })),
       renderLargeSegs: p.largeSegs.map(s => ({ ...s })),
+      parasites: [],
     }));
     triggerDialogueRef.current('surg_full_transplant');
   }, []);
@@ -1454,6 +1617,37 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     setState(prev => ({ ...prev, drugDurationSec: v }));
   }, []);
 
+  const takeParasiteEgg = useCallback(() => {
+    const id = parasiteIdRef.current++;
+    const totalSegs = N_SMALL - 1;
+    const targetSegIdx = Math.floor(Math.random() * totalSegs);
+    const newParasite: ParasiteEntity = {
+      id,
+      phase: 'egg_traveling',
+      segIdx: 0,
+      targetSegIdx,
+      hatchStartTime: 0,
+      hatchDurationMs: hatchDurationRef.current * 1000,
+      wormLength: 0,
+      lastGrowTime: 0,
+      lastDamageTime: 0,
+      isFreeMoving: false,
+      freeMoveTarget: targetSegIdx,
+      freeMoveWaitUntil: 0,
+      lastMoveStepTime: 0,
+    };
+    parasiteRef.current = [...parasiteRef.current, newParasite];
+    setState(prev => ({ ...prev, parasites: [...parasiteRef.current] }));
+    triggerDialogueRef.current('cmd_parasite_egg');
+    setTimeout(() => triggerDialogueRef.current('cmd_parasite_egg'), 4000);
+    setTimeout(() => triggerDialogueRef.current('cmd_parasite_egg'), 8000);
+  }, []);
+
+  const setHatchDuration = useCallback((v: number) => {
+    hatchDurationRef.current = v;
+    setState(prev => ({ ...prev, hatchDurationSec: v }));
+  }, []);
+
   return (
     <GameContext.Provider value={{
       state, physicsRef,
@@ -1474,6 +1668,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       transplantSmallIntestine, transplantLargeIntestine, transplantAllIntestines,
       enterMesenterySelection, executeMesenterySelection, cancelMesenterySelection,
       toggleMesenteryNode,
+      takeParasiteEgg, setHatchDuration,
     }}>
       {children}
     </GameContext.Provider>

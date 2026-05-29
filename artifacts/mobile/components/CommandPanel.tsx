@@ -64,7 +64,7 @@ function CmdButton({ label, subLabel, icon, onPress, cooldownSec = 0, disabled, 
 
 export function CommandPanel() {
   const colors = useColors();
-  const { relaxAbdomen, takeLaxative, takeStimulant, takeSedative, state } = useGame();
+  const { relaxAbdomen, takeLaxative, takeStimulant, takeSedative, takeParasiteEgg, state } = useGame();
 
   return (
     <ScrollView showsVerticalScrollIndicator={false} style={styles.scroll} nestedScrollEnabled>
@@ -122,13 +122,26 @@ export function CommandPanel() {
         </View>
       )}
 
+      <View style={[styles.divider, { backgroundColor: colors.border }]} />
+      <Text style={[styles.subTitle, { color: colors.mutedForeground }]}>寄生虫</Text>
+
       <CmdButton
-        icon="alert-circle"
+        icon="activity"
         label="服用寄生虫卵"
-        subLabel="（功能预留）"
-        onPress={() => {}}
-        disabled
+        subLabel="虫卵在小肠内孵化并寄生，随时间成长"
+        onPress={takeParasiteEgg}
+        accentColor="#88cc66"
       />
+      {state.parasites.length > 0 && (
+        <View style={[styles.parasiteInfo, { borderColor: '#88cc6644', backgroundColor: '#88cc6611' }]}>
+          <Text style={[styles.parasiteText, { color: '#88cc66' }]}>
+            寄生体: {state.parasites.length} 个（
+            {state.parasites.filter(p => p.phase === 'egg_traveling').length} 卵·
+            {state.parasites.filter(p => p.phase === 'egg_hatching').length} 孵·
+            {state.parasites.filter(p => p.phase === 'worm').length} 虫）
+          </Text>
+        </View>
+      )}
       <View style={styles.spacer} />
     </ScrollView>
   );
@@ -199,4 +212,19 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
   },
   spacer: { height: 12 },
+  parasiteInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+    borderRadius: 5,
+    borderWidth: 1,
+    marginBottom: 4,
+  },
+  parasiteText: {
+    fontSize: 9,
+    fontFamily: 'Inter_600SemiBold',
+    flex: 1,
+    flexWrap: 'wrap',
+  },
 });

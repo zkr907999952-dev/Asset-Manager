@@ -63,7 +63,11 @@ export type DialogueTrigger =
   | 'beads_large_shallow'
   | 'beads_large_deep'
   | 'beads_small_enter'
-  | 'beads_pullout';
+  | 'beads_pullout'
+  | 'cmd_parasite_egg'
+  | 'parasite_hatch'
+  | 'parasite_damage'
+  | 'parasite_perforation';
 
 export const DIALOGUES: Record<DialogueTrigger, string[]> = {
   idle: [
@@ -440,6 +444,34 @@ export const DIALOGUES: Record<DialogueTrigger, string[]> = {
     '啊啊啊……！一颗一颗拔出来……好……好强……！',
     '呜……！拔……拔出来了……！每颗都……啊……！',
     '嗯啊……！每颗经过的时候……！不行了……！',
+  ],
+  cmd_parasite_egg: [
+    '呜……这是……什么……咽下去了……',
+    '嗯……肚子里……有什么奇怪的东西……',
+    '啊……里面……有什么在动……好奇怪……',
+    '呜……感觉……什么东西进到肠子里了……',
+    '嗯……吞下去了……里面……好像有东西……',
+    '啊……肠子里……有什么东西在爬……？',
+  ],
+  parasite_hatch: [
+    '啊……！里面……有什么破开了……！',
+    '呜……！孵……孵化了……！里面有什么活的……！',
+    '不行……！肠子里……有虫子……！破壳了……！',
+    '啊啊……！里面……有东西出来了……好恶心……好奇怪……！',
+    '嗯啊……！孵出来了……！肠子里……有东西在动……！',
+  ],
+  parasite_damage: [
+    '啊……！肠子里……有什么在咬……！好痛……！',
+    '呜……！里面……被什么啃了……！',
+    '嗯啊……！虫子……在啃噬……！好痛……受不了……！',
+    '啊……！里面……有东西在造成伤害……！痛……！',
+    '呜啊……！被……被啃了……肠子好痛……！',
+  ],
+  parasite_perforation: [
+    '啊啊……！虫子……咬穿了……！穿孔了……！',
+    '呜……！里面……被咬出洞了……！不行……！',
+    '不行不行……！虫子把肠子咬穿了……！好痛……！',
+    '啊……！穿孔了……是……是虫子咬的……！',
   ],
 };
 

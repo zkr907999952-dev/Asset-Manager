@@ -79,7 +79,7 @@ export function SettingsScreen({ onMenuPress }: Props) {
     setDebugMode, setShowCollisionBoxes,
     setPeriSpeed, setPeriWaveAmplitude, setPeriWaveSpeed,
     setBreathAmplitude, setExpansionScale, setPressureDiffusionRate,
-    setDrugDuration,
+    setDrugDuration, setHatchDuration,
   } = useGame();
   const topPad = Platform.OS === 'web' ? 67 : insets.top;
   const bottomPad = Platform.OS === 'web' ? 34 : insets.bottom;
@@ -166,6 +166,19 @@ export function SettingsScreen({ onMenuPress }: Props) {
             min={30} max={300} step={10}
             onValueChange={setDrugDuration}
             trackColor="#ffaa00"
+          />
+        </View>
+
+        {/* Parasite system */}
+        <Text style={[styles.sectionTitle, { color: colors.primary }]}>寄生虫系统</Text>
+        <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
+          <SliderRow
+            label="虫卵孵化时间"
+            value={state.hatchDurationSec}
+            displayValue={`${Math.round(state.hatchDurationSec)}秒`}
+            min={3} max={60} step={1}
+            onValueChange={setHatchDuration}
+            trackColor="#88cc66"
           />
         </View>
 
