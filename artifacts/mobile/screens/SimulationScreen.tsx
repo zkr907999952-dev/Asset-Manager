@@ -170,33 +170,29 @@ export function SimulationScreen({ onMenuPress }: Props) {
           onLayout={layout => { canvasLayout.current = layout; }}
         />
 
-        {/* Status bars + ECG — transparent absolute overlay at top of canvas */}
+        {/* Status bars + ECG + status badges — transparent absolute overlay at top of canvas */}
         <View style={styles.statusArea} pointerEvents="none">
           <StatusBars hp={state.hp} pleasure={state.pleasure} embedded />
           <View style={styles.ecgRow}>
             <HeartRateMonitor
               heartRate={state.heartRate}
               comaState={state.comaState}
-              width={240}
+              width={190}
               height={38}
               transparent
               showLabel
             />
+            <CharacterStatusBadges
+              comaState={state.comaState}
+              heartRate={state.heartRate}
+              hp={state.hp}
+              ruptures={state.intestinalRuptures}
+              breaks={state.intestinalBreaks}
+              heartRateModifier={state.heartRateModifier}
+              avgPain={avgPain}
+              compact
+            />
           </View>
-        </View>
-
-        {/* Character status — bottom right */}
-        <View style={styles.statusOverlay} pointerEvents="none">
-          <CharacterStatusBadges
-            comaState={state.comaState}
-            heartRate={state.heartRate}
-            hp={state.hp}
-            ruptures={state.intestinalRuptures}
-            breaks={state.intestinalBreaks}
-            heartRateModifier={state.heartRateModifier}
-            avgPain={avgPain}
-            compact
-          />
         </View>
 
         <ToolBar />
@@ -250,8 +246,10 @@ const styles = StyleSheet.create({
     gap: 2,
   },
   ecgRow: {
-    alignItems: 'flex-start',
+    flexDirection: 'row',
+    alignItems: 'center',
     marginTop: 2,
+    gap: 6,
   },
   canvasArea: {
     flex: 1,

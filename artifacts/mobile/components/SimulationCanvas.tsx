@@ -652,16 +652,13 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
         {/* ===== BACKGROUND LAYER ===== */}
         {isInternal ? (
           <G>
+            {/* Same character image as external view — no dark overlay so brightness matches */}
             <SvgImage
               href={BELLY_EXTERNAL_IMG}
-              x={-50} y={breathImgOffsetY}
-              width={440} height={breathImgH}
-              preserveAspectRatio="xMidYMid slice"
-              opacity={0.18}
+              x={-80} y={breathImgOffsetY}
+              width={500} height={breathImgH}
+              preserveAspectRatio="xMidYMid meet"
             />
-            <Ellipse cx={CAVITY_CX} cy={CAVITY_CY}
-              rx={CAVITY_RX * bulge} ry={CAVITY_RY}
-              fill="rgba(18,4,4,0.78)" stroke="#6a2020" strokeWidth={2} />
           </G>
         ) : (
           <G>
@@ -1149,21 +1146,25 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
           const { g } = rodGeo;
           const rodColor = isVib ? '#b078ff' : '#aaaacc';
           const rodWidth = isVib ? 6 : 5;
+          const splitAtNavel = !isInternal && state.toolInserted;
+          const nx = NAVEL_X, ny = navelYBreath;
           return (
             <G key="rod">
               {isVib && state.toolActive && (
-                <Circle cx={g.headX} cy={g.headY}
+                <Circle cx={splitAtNavel ? nx : g.headX} cy={splitAtNavel ? ny : g.headY}
                   r={30 + state.toolParam2 * 0.4}
                   fill="rgba(180,120,255,0.10)"
                   stroke="rgba(180,120,255,0.5)" strokeWidth={1} strokeDasharray="4 4" />
               )}
-              <Line x1={g.tailX} y1={g.tailY} x2={g.headX} y2={g.headY}
+              {splitAtNavel && (
+                <Line x1={nx} y1={ny} x2={g.headX} y2={g.headY}
+                  stroke={rodColor} strokeWidth={rodWidth} strokeLinecap="round" opacity={0.12} />
+              )}
+              <Line x1={g.tailX} y1={g.tailY} x2={splitAtNavel ? nx : g.headX} y2={splitAtNavel ? ny : g.headY}
                 stroke={rodColor} strokeWidth={rodWidth} strokeLinecap="round" />
               <Circle cx={g.tailX} cy={g.tailY} r={isVib ? 9 : 7} fill="#666688" stroke="#222" strokeWidth={1} />
-              <Circle cx={g.headX} cy={g.headY} r={isVib ? 8 : 6} fill={rodColor} stroke="#222" strokeWidth={0.5} />
-              {state.toolInserted && state.toolAnchor && (
-                <Circle cx={state.toolAnchor.x} cy={state.toolAnchor.y} r={6}
-                  fill="none" stroke="#ffaa44" strokeWidth={1.5} strokeDasharray="2 2" />
+              {!splitAtNavel && (
+                <Circle cx={g.headX} cy={g.headY} r={isVib ? 8 : 6} fill={rodColor} stroke="#222" strokeWidth={0.5} />
               )}
             </G>
           );
@@ -1173,16 +1174,18 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
         {handlePos && state.activeTool === TOOLS.NEEDLE && (() => {
           if (!rodGeo) return null;
           const { g } = rodGeo;
+          const splitAtNavel = !isInternal && state.toolInserted;
+          const nx = NAVEL_X, ny = navelYBreath;
           return (
             <G key="needle">
-              <Line x1={g.tailX} y1={g.tailY} x2={g.headX} y2={g.headY}
+              {splitAtNavel && (
+                <Line x1={nx} y1={ny} x2={g.headX} y2={g.headY}
+                  stroke="#cccccc" strokeWidth={2.2} strokeLinecap="round" opacity={0.12} />
+              )}
+              <Line x1={g.tailX} y1={g.tailY} x2={splitAtNavel ? nx : g.headX} y2={splitAtNavel ? ny : g.headY}
                 stroke="#cccccc" strokeWidth={2.2} strokeLinecap="round" />
               <Circle cx={g.tailX} cy={g.tailY} r={5} fill="#888899" stroke="#222" strokeWidth={1} />
-              <Circle cx={g.headX} cy={g.headY} r={2} fill="#ff4040" />
-              {state.toolInserted && state.toolAnchor && (
-                <Circle cx={state.toolAnchor.x} cy={state.toolAnchor.y} r={5}
-                  fill="none" stroke="#ffaa44" strokeWidth={1.2} strokeDasharray="2 2" />
-              )}
+              {!splitAtNavel && <Circle cx={g.headX} cy={g.headY} r={2} fill="#ff4040" />}
             </G>
           );
         })()}
@@ -1217,21 +1220,31 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
           if (!rodGeo) return null;
           const { g } = rodGeo;
           const bladeWidth = 2 + state.toolParam2 * 0.06;
+          const splitAtNavel = !isInternal && state.toolInserted;
+          const nx = NAVEL_X, ny = navelYBreath;
           return (
             <G key="bayonet">
-              <Line x1={g.tailX} y1={g.tailY} x2={g.headX} y2={g.headY}
+              {splitAtNavel && (
+                <G opacity={0.12}>
+                  <Line x1={nx} y1={ny} x2={g.headX} y2={g.headY}
+                    stroke="#d8d8e8" strokeWidth={bladeWidth + 1.5} strokeLinecap="round" />
+                  <Line x1={nx} y1={ny} x2={g.headX} y2={g.headY}
+                    stroke="#f0f0ff" strokeWidth={bladeWidth * 0.5} strokeLinecap="round" />
+                </G>
+              )}
+              <Line x1={g.tailX} y1={g.tailY} x2={splitAtNavel ? nx : g.headX} y2={splitAtNavel ? ny : g.headY}
                 stroke="#d8d8e8" strokeWidth={bladeWidth + 1.5} strokeLinecap="round" />
-              <Line x1={g.tailX} y1={g.tailY} x2={g.headX} y2={g.headY}
+              <Line x1={g.tailX} y1={g.tailY} x2={splitAtNavel ? nx : g.headX} y2={splitAtNavel ? ny : g.headY}
                 stroke="#f0f0ff" strokeWidth={bladeWidth * 0.5} strokeLinecap="round" />
               <Circle cx={g.tailX} cy={g.tailY} r={7} fill="#555566" stroke="#222" strokeWidth={1} />
-              <Circle cx={g.headX} cy={g.headY} r={3} fill="#ff3030" stroke="#cc0000" strokeWidth={0.8} />
-              {state.toolActive && (
-                <Circle cx={g.headX} cy={g.headY} r={10}
-                  fill="rgba(255,40,40,0.12)" stroke="rgba(255,80,80,0.4)" strokeWidth={1} />
-              )}
-              {state.toolInserted && state.toolAnchor && (
-                <Circle cx={state.toolAnchor.x} cy={state.toolAnchor.y} r={6}
-                  fill="none" stroke="#ffaa44" strokeWidth={1.5} strokeDasharray="2 2" />
+              {!splitAtNavel && (
+                <>
+                  <Circle cx={g.headX} cy={g.headY} r={3} fill="#ff3030" stroke="#cc0000" strokeWidth={0.8} />
+                  {state.toolActive && (
+                    <Circle cx={g.headX} cy={g.headY} r={10}
+                      fill="rgba(255,40,40,0.12)" stroke="rgba(255,80,80,0.4)" strokeWidth={1} />
+                  )}
+                </>
               )}
             </G>
           );

@@ -154,9 +154,9 @@ export function buildLargeIntestineNodes(): PhysicsNode[] {
   // [30] Perineal flexure — curves forward-down before anus
   const rectum: [number, number][] = [
     [168, 356], // entry
-    [150, 348], // sacral flexure (backward)
-    [144, 362], // sacral apex
-    [154, 376], // perineal flexure (forward)
+    [158, 350], // sacral flexure — moved right toward center
+    [154, 364], // sacral apex — moved right toward center
+    [162, 377], // perineal flexure — moved right toward center
   ];
   for (const [x, y] of rectum) {
     const [sx, sy] = scalePos(x, y);
