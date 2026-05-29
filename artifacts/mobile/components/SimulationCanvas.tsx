@@ -12,10 +12,10 @@ const BELLY_EXTERNAL_IMG = require('@/assets/images/belly_external.png');
 import {
   CANVAS_W, CANVAS_H, CAVITY_CX, CAVITY_CY, CAVITY_RX, CAVITY_RY,
   SMALL_RADIUS, LARGE_RADIUS, LARGE_RUPTURE_PRESSURE,
+  TOOLS, N_SMALL, N_LARGE,
 } from '../constants/gameConfig';
 import { buildSmoothPath } from '../engine/physics';
 import { useGame } from '../contexts/GameContext';
-import { TOOLS } from '../constants/gameConfig';
 
 const NAVEL_X = CANVAS_W / 2;
 const NAVEL_Y_EXTERNAL = CAVITY_CY;
@@ -1299,59 +1299,102 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
 
               if (parasite.phase === 'worm') {
                 const wormLen = Math.max(1, parasite.wormLength);
-                const { r: wr, g: wg, b: wb } = parasite.wormColor;
+                // Age-based color darkening: starts full brightness, dims to 40% at 5 minutes
+                const LIFESPAN_MS = 5 * 60 * 1000;
+                const ageRatio = Math.min(1, (now - (parasite.bornAt ?? now)) / LIFESPAN_MS);
+                const ageDarken = 1 - ageRatio * 0.6;
+                const { r: wr0, g: wg0, b: wb0 } = parasite.wormColor;
+                const wr = Math.round(wr0 * ageDarken);
+                const wg = Math.round(wg0 * ageDarken);
+                const wb = Math.round(wb0 * ageDarken);
                 const alpha = Math.min(1, 0.65 + wormLen / 6 * 0.35);
 
-                // Build segment positions with lateral offset applied
+                // Build segment positions. Handles cross-junction rendering by
+                // using the correct node array for each segment.
                 const segments: Array<{ x: number; y: number; nx: number; ny: number }> = [];
                 for (let w = 0; w < wormLen; w++) {
-                  const sIdx = Math.max(0, Math.min(nodes.length - 2, parasite.segIdx - w));
-                  const nA = nodes[sIdx];
-                  const nB = nodes[sIdx + 1] ?? nA;
+                  let nodeSet: typeof renderSmallNodes;
+                  let sIdx: number;
+                  const SMALL_OFF_PX = SMALL_RADIUS - 4;
+                  const LARGE_OFF_PX = LARGE_RADIUS - 4;
+                  let segLatPx = latPx;
+
+                  if (parasite.crossDirection === 'smallToLarge') {
+                    const largeIdx = parasite.segIdx - w;
+                    if (largeIdx >= 0) {
+                      nodeSet = renderLargeNodes;
+                      sIdx = Math.max(0, Math.min(renderLargeNodes.length - 2, largeIdx));
+                      segLatPx = parasite.lateralOffset * LARGE_OFF_PX;
+                    } else {
+                      nodeSet = renderSmallNodes;
+                      sIdx = Math.max(0, Math.min(renderSmallNodes.length - 2, N_SMALL - 1 + largeIdx));
+                      segLatPx = parasite.lateralOffset * SMALL_OFF_PX;
+                    }
+                  } else if (parasite.crossDirection === 'largeToSmall') {
+                    const smallIdx = parasite.segIdx + w;
+                    if (smallIdx <= N_SMALL - 2) {
+                      nodeSet = renderSmallNodes;
+                      sIdx = Math.max(0, Math.min(renderSmallNodes.length - 2, smallIdx));
+                      segLatPx = parasite.lateralOffset * SMALL_OFF_PX;
+                    } else {
+                      nodeSet = renderLargeNodes;
+                      sIdx = Math.max(0, Math.min(renderLargeNodes.length - 2, smallIdx - (N_SMALL - 1)));
+                      segLatPx = parasite.lateralOffset * LARGE_OFF_PX;
+                    }
+                  } else {
+                    nodeSet = nodes;
+                    sIdx = Math.max(0, Math.min(nodes.length - 2, parasite.segIdx - w));
+                    segLatPx = latPx;
+                  }
+
+                  const nA = nodeSet[sIdx];
+                  const nB = nodeSet[sIdx + 1] ?? nA;
                   if (!nA) break;
                   const sdx = nB.x - nA.x; const sdy = nB.y - nA.y;
                   const slen = Math.hypot(sdx, sdy) || 1;
                   const snx = -sdy / slen; const sny = sdx / slen;
                   segments.push({
-                    x: (nA.x + nB.x) / 2 + snx * latPx,
-                    y: (nA.y + nB.y) / 2 + sny * latPx,
+                    x: (nA.x + nB.x) / 2 + snx * segLatPx,
+                    y: (nA.y + nB.y) / 2 + sny * segLatPx,
                     nx: snx, ny: sny,
                   });
                 }
                 if (segments.length === 0) return null;
-                const head = segments[0];
 
-                // Compute true forward direction: from body toward head.
-                // This automatically reflects the actual movement direction,
-                // including reversals, so the head always faces the right way.
+                // When moving in reverse (movingDir === -1), the visual head is
+                // at the far end of the segment chain. Reverse so segments[0] is
+                // always the rendered head regardless of movement direction.
+                const movingDir = parasite.movingDir ?? 1;
+                const orderedSegs = movingDir === -1 ? [...segments].reverse() : segments;
+                const head = orderedSegs[0];
+
+                // Forward direction: body → head (automatically correct after reversal)
                 let rawFwdX: number, rawFwdY: number;
-                if (segments.length > 1) {
-                  rawFwdX = segments[0].x - segments[1].x;
-                  rawFwdY = segments[0].y - segments[1].y;
+                if (orderedSegs.length > 1) {
+                  rawFwdX = orderedSegs[0].x - orderedSegs[1].x;
+                  rawFwdY = orderedSegs[0].y - orderedSegs[1].y;
                 } else {
-                  // Single segment: use intestine tangent direction (ny, -nx)
-                  rawFwdX = head.ny;
-                  rawFwdY = -head.nx;
+                  rawFwdX = head.ny; rawFwdY = -head.nx;
                 }
                 const fwdLen = Math.hypot(rawFwdX, rawFwdY) || 1;
-                const fdx = rawFwdX / fwdLen;  // forward unit vector
+                const fdx = rawFwdX / fwdLen;
                 const fdy = rawFwdY / fwdLen;
-                const ldx = -fdy;              // lateral unit vector (perpendicular to forward)
+                const ldx = -fdy;
                 const ldy = fdx;
 
                 return (
                   <G key={`parasite-${parasite.id}`}>
                     {/* Body connector lines */}
-                    {segments.slice(1).map((seg, i) => (
+                    {orderedSegs.slice(1).map((seg, i) => (
                       <Line key={i}
-                        x1={segments[i].x} y1={segments[i].y}
+                        x1={orderedSegs[i].x} y1={orderedSegs[i].y}
                         x2={seg.x} y2={seg.y}
                         stroke={`rgba(${wr},${wg},${wb},${alpha * 0.55})`}
                         strokeWidth={5.5}
                         strokeLinecap="round" />
                     ))}
                     {/* Body segments as ellipses */}
-                    {segments.map((seg, i) => {
+                    {orderedSegs.map((seg, i) => {
                       const isHead = i === 0;
                       const segFade = 1 - i * 0.06;
                       const bodyR = isHead ? 5.5 : 4.8 - i * 0.15;
@@ -1366,7 +1409,7 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
                       );
                     })}
                     {/* Segment rings (annulation) */}
-                    {segments.map((seg, i) => (
+                    {orderedSegs.map((seg, i) => (
                       <Ellipse key={`ring-${i}`}
                         cx={seg.x} cy={seg.y}
                         rx={Math.max(2, 4.8 - i * 0.15)}
@@ -1375,7 +1418,7 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
                         stroke={`rgba(${Math.max(0,wr-30)},${Math.max(0,wg-30)},${Math.max(0,wb-25)},${0.25 * alpha})`}
                         strokeWidth={0.5} />
                     ))}
-                    {/* Eyes — positioned in front of head, side by side along the lateral axis */}
+                    {/* Eyes — in front of head, side by side along the lateral axis */}
                     <Circle cx={head.x + fdx * 2.2 + ldx * 1.6}
                       cy={head.y + fdy * 2.2 + ldy * 1.6} r={1.0}
                       fill="rgba(18,10,8,0.95)" />

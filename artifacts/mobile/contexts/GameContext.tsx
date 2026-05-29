@@ -32,17 +32,57 @@ export interface ParasiteEntity {
   lastMoveStepTime: number;
   wormColor: { r: number; g: number; b: number };
   lateralOffset: number;
+  bornAt: number;
+  movingDir: 1 | -1;
+  crossDirection: 'smallToLarge' | 'largeToSmall' | null;
 }
 
 function getParasiteOccupiedSegs(par: ParasiteEntity): { intestine: 'small' | 'large'; seg: number }[] {
-  const maxSeg = par.intestine === 'small' ? N_SMALL - 2 : N_LARGE - 2;
-  if (par.phase !== 'worm') return [{ intestine: par.intestine, seg: Math.max(0, Math.min(maxSeg, par.segIdx)) }];
+  if (par.phase !== 'worm') {
+    const maxSeg = par.intestine === 'small' ? N_SMALL - 2 : N_LARGE - 2;
+    return [{ intestine: par.intestine, seg: Math.max(0, Math.min(maxSeg, par.segIdx)) }];
+  }
   const segs: { intestine: 'small' | 'large'; seg: number }[] = [];
   for (let i = 0; i < par.wormLength; i++) {
-    const s = par.segIdx - i;
-    if (s >= 0 && s <= maxSeg) segs.push({ intestine: par.intestine, seg: s });
+    if (par.crossDirection === 'smallToLarge') {
+      const largeIdx = par.segIdx - i;
+      if (largeIdx >= 0) {
+        segs.push({ intestine: 'large', seg: Math.min(N_LARGE - 2, largeIdx) });
+      } else {
+        const smallIdx = N_SMALL - 1 + largeIdx;
+        if (smallIdx >= 0) segs.push({ intestine: 'small', seg: Math.min(N_SMALL - 2, smallIdx) });
+      }
+    } else if (par.crossDirection === 'largeToSmall') {
+      const smallIdx = par.segIdx + i;
+      if (smallIdx <= N_SMALL - 2) {
+        segs.push({ intestine: 'small', seg: smallIdx });
+      } else {
+        const largeIdx = smallIdx - (N_SMALL - 1);
+        if (largeIdx >= 0 && largeIdx <= N_LARGE - 2) segs.push({ intestine: 'large', seg: largeIdx });
+      }
+    } else {
+      const maxSeg = par.intestine === 'small' ? N_SMALL - 2 : N_LARGE - 2;
+      const s = par.segIdx - i;
+      if (s >= 0 && s <= maxSeg) segs.push({ intestine: par.intestine, seg: s });
+    }
   }
   return segs;
+}
+
+function getReachableRange(segIdx: number, intestine: 'small' | 'large', p: { smallSegs: { broken?: boolean }[]; largeSegs: { broken?: boolean }[] }): {
+  leftLimit: number; rightLimit: number; canCrossToLarge: boolean; canCrossToSmall: boolean;
+} {
+  const segs = intestine === 'small' ? p.smallSegs : p.largeSegs;
+  const maxSeg = intestine === 'small' ? N_SMALL - 2 : N_LARGE - 2;
+  let rightLimit = segIdx;
+  while (rightLimit < maxSeg && !segs[rightLimit + 1]?.broken) rightLimit++;
+  let leftLimit = segIdx;
+  while (leftLimit > 0 && !segs[leftLimit - 1]?.broken) leftLimit--;
+  const canCrossToLarge = intestine === 'small' && rightLimit >= N_SMALL - 2
+    && !p.smallSegs[N_SMALL - 2]?.broken && !p.largeSegs[0]?.broken;
+  const canCrossToSmall = intestine === 'large' && leftLimit === 0
+    && !p.largeSegs[0]?.broken && !p.smallSegs[N_SMALL - 2]?.broken;
+  return { leftLimit, rightLimit, canCrossToLarge, canCrossToSmall };
 }
 
 export type ScreenName = 'character' | 'simulation' | 'console' | 'settings' | 'help';
@@ -259,6 +299,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
   const parasiteIdRef = useRef(0);
   const hatchDurationRef = useRef(9);
   const parasiteSurgeryPhaseRef = useRef<0 | 1 | 2 | 3>(0);
+  const lastAutoEggTimeRef = useRef<number>(0);
 
   const [state, setState] = useState<GameUIState>({
     hp: 100, pleasure: 0, heartRate: 72,
@@ -552,10 +593,17 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         });
       }
 
+      const PARASITE_LIFESPAN_MS = 5 * 60 * 1000;
       let changed = false;
       const kept: ParasiteEntity[] = [];
 
       for (const par of parasiteRef.current) {
+        // Lifespan check — worms die after 5 minutes
+        if (par.phase === 'worm' && now - par.bornAt > PARASITE_LIFESPAN_MS) {
+          changed = true;
+          continue;
+        }
+
         // Electric kill check
         const occupiedSegs = getParasiteOccupiedSegs(par);
         const killed = electricMedium && occupiedSegs.some(({ intestine, seg }) =>
@@ -565,19 +613,26 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
 
         if (par.phase === 'egg_traveling') {
           const inSmall = par.intestine === 'small';
+          const segs = inSmall ? p.smallSegs : p.largeSegs;
           const periScale = (inSmall ? p.periScaleSmall : p.periScaleLarge)[par.segIdx] ?? 1;
           const minInterval = Math.max(450, 1400 / Math.max(0.5, p.peristalsisSpeed ?? 1.5));
           if (periScale > 1.06 && now - par.lastMoveStepTime > minInterval) {
             par.lastMoveStepTime = now;
             const maxSeg = inSmall ? N_SMALL - 2 : N_LARGE - 2;
             if (par.segIdx < maxSeg) {
-              par.segIdx++;
+              // Block movement into broken segment
+              if (!segs[par.segIdx + 1]?.broken) {
+                par.segIdx++;
+                par.movingDir = 1;
+              }
             } else if (inSmall && par.targetIntestine === 'large') {
-              // Transition from small to large intestine at junction
-              par.intestine = 'large';
-              par.segIdx = 0;
+              // Cross junction only if not broken
+              if (!p.smallSegs[par.segIdx]?.broken && !p.largeSegs[0]?.broken) {
+                par.intestine = 'large';
+                par.segIdx = 0;
+                par.movingDir = 1;
+              }
             }
-            // Arrived at target?
             if (par.intestine === par.targetIntestine && par.segIdx >= par.targetSegIdx) {
               par.phase = 'egg_hatching';
               par.hatchStartTime = now;
@@ -590,20 +645,20 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
             par.wormLength = 1;
             par.lastGrowTime = now;
             par.lastDamageTime = now;
+            par.bornAt = now;
             par.isFreeMoving = false;
             par.freeMoveIntestine = par.intestine;
             par.freeMoveTarget = par.segIdx;
-            par.freeMoveWaitUntil = now + 3000; // free movement starts 3s after hatching
+            par.freeMoveWaitUntil = now + 3000;
             par.lastMoveStepTime = 0;
             td('parasite_hatch');
             changed = true;
           }
         } else {
           // Worm phase
-          // Sensitivity boost to occupied segments
           occupiedSegs.forEach(({ intestine, seg }) => {
-            const segs = intestine === 'small' ? p.smallSegs : p.largeSegs;
-            if (seg < segs.length) segs[seg].sensitivity = Math.min(100, segs[seg].sensitivity + 0.025);
+            const segList = intestine === 'small' ? p.smallSegs : p.largeSegs;
+            if (seg < segList.length) segList[seg].sensitivity = Math.min(100, segList[seg].sensitivity + 0.025);
           });
           changed = true;
 
@@ -617,12 +672,12 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
           if (par.wormLength >= 6 && now - par.lastDamageTime >= 4000) {
             par.lastDamageTime = now;
             const si = par.segIdx;
-            const segs = par.intestine === 'small' ? p.smallSegs : p.largeSegs;
-            if (si < segs.length) {
-              segs[si].health = Math.max(0, segs[si].health - 10);
-              segs[si].pain = Math.min(100, segs[si].pain + 15);
+            const segList = par.intestine === 'small' ? p.smallSegs : p.largeSegs;
+            if (si < segList.length) {
+              segList[si].health = Math.max(0, segList[si].health - 10);
+              segList[si].pain = Math.min(100, segList[si].pain + 15);
               if (Math.random() < 0.3) {
-                segs[si].perforated = true;
+                segList[si].perforated = true;
                 td('parasite_perforation');
               } else {
                 td('parasite_damage');
@@ -634,44 +689,134 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
           if (par.wormLength >= 6) {
             if (!par.isFreeMoving && now >= par.freeMoveWaitUntil) {
               par.isFreeMoving = true;
-              // Pick random target in either intestine
-              const goLarge = Math.random() < 0.5;
-              par.freeMoveIntestine = goLarge ? 'large' : 'small';
-              par.freeMoveTarget = goLarge
-                ? Math.floor(Math.random() * (N_LARGE - 1))
-                : Math.floor(Math.random() * (N_SMALL - 1));
+              // Pick reachable random target — respect broken segments
+              const range = getReachableRange(par.segIdx, par.intestine, p);
+              const tryLarge = range.canCrossToLarge && Math.random() < 0.4;
+              const trySmall = range.canCrossToSmall && Math.random() < 0.4;
+              if (tryLarge) {
+                // Find reachable portion of large from idx 0
+                let largeRight = 0;
+                while (largeRight < N_LARGE - 2 && !p.largeSegs[largeRight + 1]?.broken) largeRight++;
+                par.freeMoveIntestine = 'large';
+                par.freeMoveTarget = Math.floor(Math.random() * (largeRight + 1));
+              } else if (trySmall) {
+                // Find reachable portion of small from N_SMALL-2 going left
+                let smallLeft = N_SMALL - 2;
+                while (smallLeft > 0 && !p.smallSegs[smallLeft - 1]?.broken) smallLeft--;
+                par.freeMoveIntestine = 'small';
+                par.freeMoveTarget = smallLeft + Math.floor(Math.random() * (N_SMALL - 2 - smallLeft + 1));
+              } else {
+                par.freeMoveIntestine = par.intestine;
+                par.freeMoveTarget = range.leftLimit + Math.floor(Math.random() * (range.rightLimit - range.leftLimit + 1));
+              }
               par.lastMoveStepTime = now;
             }
+
             if (par.isFreeMoving && now - par.lastMoveStepTime >= 800) {
               par.lastMoveStepTime = now;
-              const inSmall = par.intestine === 'small';
-              const atTarget = par.intestine === par.freeMoveIntestine && par.segIdx === par.freeMoveTarget;
-              if (!atTarget) {
-                const reachedIntestine = par.intestine === par.freeMoveIntestine;
-                if (!reachedIntestine) {
-                  // Need to cross junction
-                  if (inSmall) {
-                    // Head toward end of small intestine
-                    if (par.segIdx < N_SMALL - 2) par.segIdx++;
-                    else { par.intestine = 'large'; par.segIdx = 0; }
+
+              // --- Continue junction crossing ---
+              if (par.crossDirection === 'smallToLarge') {
+                par.segIdx++;
+                par.movingDir = 1;
+                if (par.segIdx >= par.wormLength - 1) par.crossDirection = null;
+              } else if (par.crossDirection === 'largeToSmall') {
+                par.segIdx--;
+                par.movingDir = -1;
+                if (par.segIdx + par.wormLength - 1 <= N_SMALL - 2) par.crossDirection = null;
+              } else {
+                // Normal movement
+                const inSmall = par.intestine === 'small';
+                const segList = inSmall ? p.smallSegs : p.largeSegs;
+                const atTarget = par.intestine === par.freeMoveIntestine && par.segIdx === par.freeMoveTarget;
+                if (!atTarget) {
+                  const reachedIntestine = par.intestine === par.freeMoveIntestine;
+                  if (!reachedIntestine) {
+                    // Need to cross junction
+                    if (inSmall) {
+                      if (par.segIdx < N_SMALL - 2) {
+                        if (!segList[par.segIdx + 1]?.broken) { par.segIdx++; par.movingDir = 1; }
+                        else { par.isFreeMoving = false; }
+                      } else {
+                        // At junction — start gradual crossing
+                        if (!p.smallSegs[par.segIdx]?.broken && !p.largeSegs[0]?.broken) {
+                          par.crossDirection = 'smallToLarge';
+                          par.intestine = 'large';
+                          par.segIdx = 0;
+                          par.movingDir = 1;
+                        } else { par.isFreeMoving = false; }
+                      }
+                    } else {
+                      if (par.segIdx > 0) {
+                        if (!segList[par.segIdx - 1]?.broken) { par.segIdx--; par.movingDir = -1; }
+                        else { par.isFreeMoving = false; }
+                      } else {
+                        // At junction — start gradual crossing back to small
+                        if (!p.largeSegs[0]?.broken && !p.smallSegs[N_SMALL - 2]?.broken) {
+                          par.crossDirection = 'largeToSmall';
+                          par.intestine = 'small';
+                          par.segIdx = N_SMALL - 2;
+                          par.movingDir = -1;
+                        } else { par.isFreeMoving = false; }
+                      }
+                    }
                   } else {
-                    // Head toward start of large intestine (back to small)
-                    if (par.segIdx > 0) par.segIdx--;
-                    else { par.intestine = 'small'; par.segIdx = N_SMALL - 2; }
+                    // Same intestine
+                    if (par.segIdx < par.freeMoveTarget) {
+                      if (!segList[par.segIdx + 1]?.broken) { par.segIdx++; par.movingDir = 1; }
+                      else { par.isFreeMoving = false; par.freeMoveWaitUntil = now + 5000; }
+                    } else if (par.segIdx > par.freeMoveTarget) {
+                      if (!segList[par.segIdx - 1]?.broken) { par.segIdx--; par.movingDir = -1; }
+                      else { par.isFreeMoving = false; par.freeMoveWaitUntil = now + 5000; }
+                    }
                   }
                 } else {
-                  if (par.segIdx < par.freeMoveTarget) par.segIdx++;
-                  else if (par.segIdx > par.freeMoveTarget) par.segIdx--;
+                  par.isFreeMoving = false;
+                  par.freeMoveWaitUntil = now + 5000;
                 }
-              } else {
-                par.isFreeMoving = false;
-                par.freeMoveWaitUntil = now + 5000;
               }
             }
           }
         }
 
         kept.push(par);
+      }
+
+      // Auto egg laying: when total parasites > 2 and 2 min have passed, a random worm lays an egg at its tail
+      const worms = kept.filter(w => w.phase === 'worm' && w.wormLength >= 3);
+      if (kept.length > 2 && worms.length > 0 && now - lastAutoEggTimeRef.current >= 120000) {
+        lastAutoEggTimeRef.current = now;
+        const layer = worms[Math.floor(Math.random() * worms.length)];
+        // Tail is opposite end from head: when movingDir=1, tail is at segIdx-(wormLen-1); -1 means tail is at segIdx
+        const tailSeg = layer.movingDir === 1
+          ? Math.max(0, layer.segIdx - layer.wormLength + 1)
+          : layer.segIdx;
+        const eggId = parasiteIdRef.current++;
+        const wormColor = {
+          r: 225 + Math.floor((Math.random() - 0.5) * 24),
+          g: 215 + Math.floor((Math.random() - 0.5) * 20),
+          b: 200 + Math.floor((Math.random() - 0.5) * 20),
+        };
+        // Choose a reachable target for the new egg
+        const range = getReachableRange(tailSeg, layer.intestine, p);
+        const goLarge = range.canCrossToLarge && Math.random() < 0.5;
+        const targetIntestine: 'small' | 'large' = goLarge ? 'large' : layer.intestine;
+        const targetSegIdx = goLarge
+          ? Math.floor(Math.random() * (N_LARGE - 1))
+          : range.leftLimit + Math.floor(Math.random() * (range.rightLimit - range.leftLimit + 1));
+        kept.push({
+          id: eggId, phase: 'egg_traveling',
+          intestine: layer.intestine, segIdx: tailSeg,
+          targetIntestine, targetSegIdx,
+          hatchStartTime: 0, hatchDurationMs: hatchDurationRef.current * 1000,
+          wormLength: 0, lastGrowTime: 0, lastDamageTime: 0,
+          isFreeMoving: false, freeMoveIntestine: targetIntestine,
+          freeMoveTarget: targetSegIdx, freeMoveWaitUntil: 0,
+          lastMoveStepTime: 0, wormColor,
+          lateralOffset: (Math.random() * 1.4) - 0.7,
+          bornAt: now, movingDir: 1, crossDirection: null,
+        });
+        changed = true;
       }
 
       if (changed || kept.length !== parasiteRef.current.length) {
@@ -1695,6 +1840,9 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       lastMoveStepTime: 0,
       wormColor,
       lateralOffset,
+      bornAt: Date.now(),
+      movingDir: 1,
+      crossDirection: null,
     };
     parasiteRef.current = [...parasiteRef.current, newParasite];
     setState(prev => ({ ...prev, parasites: [...parasiteRef.current] }));
