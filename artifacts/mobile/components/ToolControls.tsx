@@ -94,7 +94,9 @@ export function ToolControls() {
           >
             <Feather name={toolActive ? 'pause' : 'play'} size={13} color={toolActive ? colors.primaryForeground : colors.foreground} />
             <Text style={[styles.toggleText, { color: toolActive ? colors.primaryForeground : colors.foreground }]}>
-              {toolActive ? '停止' : '启动'}
+              {(activeTool === TOOLS.SILICONE_ROD || activeTool === TOOLS.ANAL_BEADS)
+                ? (toolActive ? '停振' : '震动')
+                : (toolActive ? '停止' : '启动')}
             </Text>
           </TouchableOpacity>
           <TouchableOpacity

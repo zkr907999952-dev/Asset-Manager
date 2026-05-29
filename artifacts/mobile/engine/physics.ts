@@ -720,30 +720,32 @@ export function stepPhysics(state: PhysicsState) {
       const speedFactor = 0.5 + (state.toolParam2 ?? 50) * 0.01;
       const headIdx = clamp(state.siliconeHeadIdx, 0, N_LARGE - 1);
 
-      // Physical wobble at head — rod pushes the intestine wall
-      for (let i = Math.max(0, headIdx - 1); i <= Math.min(N_LARGE - 1, headIdx + 1); i++) {
-        const n = state.largeNodes[i];
-        if (n && !n.pinned) {
-          n.x += Math.sin(state.time * 0.13 + i * 0.7) * 0.32 * speedFactor;
-          n.y += Math.cos(state.time * 0.10 + i * 0.5) * 0.16 * speedFactor;
-        }
-      }
-      if (state.siliconeInSmall) {
-        const sHead = clamp(state.siliconeSmallHeadIdx, 0, N_SMALL - 1);
-        for (let i = Math.max(0, sHead - 1); i <= Math.min(N_SMALL - 1, sHead + 1); i++) {
-          const n = state.smallNodes[i];
+      // Vibration wobble — only when toolActive (activate button = vibration toggle)
+      if (state.toolActive) {
+        for (let i = Math.max(0, headIdx - 1); i <= Math.min(N_LARGE - 1, headIdx + 1); i++) {
+          const n = state.largeNodes[i];
           if (n && !n.pinned) {
-            n.x += Math.sin(state.time * 0.16 + i * 0.9) * 0.28 * speedFactor;
-            n.y += Math.cos(state.time * 0.13 + i * 0.6) * 0.14 * speedFactor;
+            n.x += Math.sin(state.time * 0.13 + i * 0.7) * 0.64 * speedFactor;
+            n.y += Math.cos(state.time * 0.10 + i * 0.5) * 0.32 * speedFactor;
+          }
+        }
+        if (state.siliconeInSmall) {
+          const sHead = clamp(state.siliconeSmallHeadIdx, 0, N_SMALL - 1);
+          for (let i = Math.max(0, sHead - 1); i <= Math.min(N_SMALL - 1, sHead + 1); i++) {
+            const n = state.smallNodes[i];
+            if (n && !n.pinned) {
+              n.x += Math.sin(state.time * 0.16 + i * 0.9) * 0.56 * speedFactor;
+              n.y += Math.cos(state.time * 0.13 + i * 0.6) * 0.28 * speedFactor;
+            }
           }
         }
       }
 
-      if (state.toolActive) {
+      // Expansion/stimulation — always active when inserted (no toolActive required)
+      {
         const stim = speedFactor * 0.0035;
         if (!state.siliconeInSmall) {
           const largeExp = Math.max(0, rodDiam - largeDiam) / largeDiam;
-          // All segments the rod passes through (head to anus) get stimulated
           for (let i = headIdx; i < state.largeSegs.length; i++) {
             const seg = state.largeSegs[i];
             if (!seg || seg.broken) continue;
@@ -791,20 +793,11 @@ export function stepPhysics(state: PhysicsState) {
         }
         state.peristalsisSpeed = Math.max(state.peristalsisSpeed, 1 + (state.toolParam2 ?? 50) * 0.012);
       }
-      // Fast spring-back: recover segments the rod no longer occupies
+      // Recover segments the rod no longer occupies (behind head)
       const SILICONE_RECOVERY = 1.0;
       for (let i = 0; i < headIdx && i < state.largeSegs.length; i++) {
         const seg = state.largeSegs[i];
         if (seg && !seg.ruptured) seg.pressure = clamp(seg.pressure - SILICONE_RECOVERY, 0, LARGE_RUPTURE_PRESSURE);
-      }
-      if (!state.toolActive) {
-        for (let i = headIdx; i < state.largeSegs.length; i++) {
-          const seg = state.largeSegs[i];
-          if (seg && !seg.ruptured) seg.pressure = clamp(seg.pressure - SILICONE_RECOVERY, 0, LARGE_RUPTURE_PRESSURE);
-        }
-        for (const seg of state.smallSegs) {
-          if (seg && !seg.ruptured) seg.pressure = clamp(seg.pressure - SILICONE_RECOVERY, 0, 100);
-        }
       }
     }
 
@@ -815,7 +808,8 @@ export function stepPhysics(state: PhysicsState) {
       const speedFactor = 0.5 + (state.toolParam2 ?? 50) * 0.01;
       const headIdx = clamp(state.beadsHeadIdx, 0, N_LARGE - 1);
 
-      if (state.toolActive) {
+      // Expansion/stimulation — always active when inserted (no toolActive required)
+      {
         if (!state.beadsInSmall) {
           const internalCount = Math.min(40, Math.max(0, N_LARGE - headIdx));
           for (let i = 0; i < internalCount; i++) {
@@ -831,14 +825,6 @@ export function stepPhysics(state: PhysicsState) {
             seg.sensitivity = clamp(seg.sensitivity + stim * (1 + expansion * 2.5), 0, 100);
             if (seg.pressure > 110) {
               seg.pain = clamp(seg.pain + stim * (expansion + 0.2), 0, 100);
-            }
-          }
-          // Wobble at head
-          for (let i = Math.max(0, headIdx - 1); i <= Math.min(N_LARGE - 1, headIdx + 1); i++) {
-            const n = state.largeNodes[i];
-            if (n && !n.pinned) {
-              n.x += Math.sin(state.time * 0.14 + i) * 0.25 * speedFactor;
-              n.y += Math.cos(state.time * 0.11 + i) * 0.12 * speedFactor;
             }
           }
         } else {
@@ -873,19 +859,30 @@ export function stepPhysics(state: PhysicsState) {
         }
         state.peristalsisSpeed = Math.max(state.peristalsisSpeed, 1 + (state.toolParam2 ?? 50) * 0.013);
       }
-      // Fast spring-back: release pressure when beads inactive or retracted
-      const BEADS_RECOVERY = 0.9;
-      if (!state.toolActive) {
-        for (let i = headIdx; i < state.largeSegs.length; i++) {
-          const seg = state.largeSegs[i];
-          if (seg && !seg.ruptured) seg.pressure = clamp(seg.pressure - BEADS_RECOVERY, 0, LARGE_RUPTURE_PRESSURE);
+
+      // Vibration wobble at head — only when toolActive (activate button = vibration toggle)
+      if (state.toolActive) {
+        for (let i = Math.max(0, headIdx - 1); i <= Math.min(N_LARGE - 1, headIdx + 1); i++) {
+          const n = state.largeNodes[i];
+          if (n && !n.pinned) {
+            n.x += Math.sin(state.time * 0.14 + i) * 0.50 * speedFactor;
+            n.y += Math.cos(state.time * 0.11 + i) * 0.25 * speedFactor;
+          }
         }
         if (state.beadsInSmall) {
-          for (const seg of state.smallSegs) {
-            if (seg && !seg.ruptured) seg.pressure = clamp(seg.pressure - BEADS_RECOVERY, 0, 100);
+          const sHead = clamp(state.beadsSmallHeadIdx, 0, N_SMALL - 1);
+          for (let i = Math.max(0, sHead - 1); i <= Math.min(N_SMALL - 1, sHead + 1); i++) {
+            const n = state.smallNodes[i];
+            if (n && !n.pinned) {
+              n.x += Math.sin(state.time * 0.14 + i) * 0.40 * speedFactor;
+              n.y += Math.cos(state.time * 0.11 + i) * 0.20 * speedFactor;
+            }
           }
         }
       }
+
+      // Recover pressure for segments the beads no longer occupy (behind head)
+      const BEADS_RECOVERY = 0.9;
       for (let i = 0; i < headIdx && i < state.largeSegs.length; i++) {
         const seg = state.largeSegs[i];
         if (seg && !seg.ruptured) seg.pressure = clamp(seg.pressure - BEADS_RECOVERY * 0.5, 0, LARGE_RUPTURE_PRESSURE);

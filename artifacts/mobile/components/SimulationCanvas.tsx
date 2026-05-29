@@ -368,14 +368,17 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
       if (s.activeTool === TOOLS.SILICONE_ROD) {
         const { setSiliconeTarget: setST } = hrRef.current;
         const { idx, dist: d } = findNearestLargeNodeIdx(pos);
+        const retractingFromSmall = idx >= 0 && d < 65 && s.siliconeInSmall;
         if (idx >= 0 && d < 65) {
           setST({ largeIdx: idx });
           if (s.siliconeInSmall) setST({ inSmall: false });
         }
-        // Small intestine: any nearby small node → enter (no cecum proximity requirement)
-        const { idx: sIdx, dist: sDist } = findNearestSmallNodeIdx(pos);
-        if (sIdx >= 0 && sDist < 88) {
-          setST({ inSmall: true, smallIdx: sIdx });
+        // Only enter small intestine if not already retracting via a large node
+        if (!retractingFromSmall) {
+          const { idx: sIdx, dist: sDist } = findNearestSmallNodeIdx(pos);
+          if (sIdx >= 0 && sDist < 88) {
+            setST({ inSmall: true, smallIdx: sIdx });
+          }
         }
         physicsRef.current.toolPos = pos;
         return;
@@ -406,14 +409,17 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
         }
         // Internal → push/pull
         const { idx, dist: d } = findNearestLargeNodeIdx(pos);
+        const retractingFromSmall = idx >= 0 && d < 65 && s.beadsInSmall;
         if (idx >= 0 && d < 65) {
           setBT({ largeIdx: idx });
           if (s.beadsInSmall) setBT({ inSmall: false });
         }
-        // Small intestine: any nearby small node → enter
-        const { idx: sIdx, dist: sDist } = findNearestSmallNodeIdx(pos);
-        if (sIdx >= 0 && sDist < 88) {
-          setBT({ inSmall: true, smallIdx: sIdx });
+        // Only enter small intestine if not already retracting via a large node
+        if (!retractingFromSmall) {
+          const { idx: sIdx, dist: sDist } = findNearestSmallNodeIdx(pos);
+          if (sIdx >= 0 && sDist < 88) {
+            setBT({ inSmall: true, smallIdx: sIdx });
+          }
         }
         physicsRef.current.toolPos = pos;
         return;
@@ -476,14 +482,16 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
           }
         }
         const { idx, dist: d } = findNearestLargeNodeIdx(pos);
+        const retractingFromSmall = idx >= 0 && d < 65 && s.siliconeInSmall;
         if (idx >= 0 && d < 65) {
           setST({ largeIdx: idx });
           if (s.siliconeInSmall) setST({ inSmall: false });
         }
-        // Small intestine: any nearby small node → enter
-        const { idx: sIdx, dist: sDist } = findNearestSmallNodeIdx(pos);
-        if (sIdx >= 0 && sDist < 88) {
-          setST({ inSmall: true, smallIdx: sIdx });
+        if (!retractingFromSmall) {
+          const { idx: sIdx, dist: sDist } = findNearestSmallNodeIdx(pos);
+          if (sIdx >= 0 && sDist < 88) {
+            setST({ inSmall: true, smallIdx: sIdx });
+          }
         }
         physicsRef.current.toolPos = pos;
         return;
@@ -519,14 +527,16 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
           return;
         }
         const { idx, dist: d } = findNearestLargeNodeIdx(pos);
+        const retractingFromSmall = idx >= 0 && d < 65 && s.beadsInSmall;
         if (idx >= 0 && d < 65) {
           setBT({ largeIdx: idx });
           if (s.beadsInSmall) setBT({ inSmall: false });
         }
-        // Small intestine: any nearby small node → enter
-        const { idx: sIdx, dist: sDist } = findNearestSmallNodeIdx(pos);
-        if (sIdx >= 0 && sDist < 88) {
-          setBT({ inSmall: true, smallIdx: sIdx });
+        if (!retractingFromSmall) {
+          const { idx: sIdx, dist: sDist } = findNearestSmallNodeIdx(pos);
+          if (sIdx >= 0 && sDist < 88) {
+            setBT({ inSmall: true, smallIdx: sIdx });
+          }
         }
         physicsRef.current.toolPos = pos;
         return;
@@ -1382,50 +1392,61 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
           const externalCount = Math.max(0, 40 - internalCount);
           const chain = state.beadsChain ?? [];
 
-          // Build internal bead node list (large intestine)
+          // Small-intestine beads — FRONT of chain (smallest beads, indices 0+)
+          // Computed first so we know the offset for large-intestine bead indices
+          const sBeads: { x: number; y: number; r: number }[] = [];
+          if (state.beadsInSmall && renderSmallNodes.length > 0) {
+            const sHead = Math.max(0, Math.min(renderSmallNodes.length - 1, state.beadsSmallHeadIdx));
+            for (let i = 0; i < 20 && sHead + i < renderSmallNodes.length && sBeads.length < 20; i++) {
+              sBeads.push({ ...renderSmallNodes[sHead + i], r: BEAD_R(i) });
+            }
+          }
+
+          // Large-intestine beads — TAIL of chain; bead indices start after sBeads
+          const iBeadOffset = sBeads.length;
           const iBeads: { x: number; y: number; r: number }[] = [];
           for (let i = 0; i < internalCount; i++) {
             const ni = headIdx + i;
             if (ni < renderLargeNodes.length) {
-              iBeads.push({ ...renderLargeNodes[ni], r: BEAD_R(i) });
+              iBeads.push({ ...renderLargeNodes[ni], r: BEAD_R(iBeadOffset + i) });
             }
           }
-          // Small-intestine beads if in small
-          const sBeads: { x: number; y: number; r: number }[] = [];
-          if (state.beadsInSmall && renderSmallNodes.length > 0) {
-            const sHead = Math.max(0, Math.min(renderSmallNodes.length - 1, state.beadsSmallHeadIdx));
-            for (let i = 0; i < 20 && sHead + i < renderSmallNodes.length && sBeads.length + iBeads.length < 40; i++) {
-              sBeads.push({ ...renderSmallNodes[sHead + i], r: BEAD_R(i) });
-            }
-          }
+
           const lastInternal = iBeads[iBeads.length - 1] ?? null;
           const anusNode = renderLargeNodes[renderLargeNodes.length - 1];
           return (
             <G>
-              {/* Internal connecting string */}
-              {iBeads.map((b, i) => i === 0 ? null : (
-                <Line key={`iline-${i}`}
-                  x1={iBeads[i-1].x} y1={iBeads[i-1].y} x2={b.x} y2={b.y}
-                  stroke="#111" strokeWidth={1.4} />
-              ))}
               {/* Small-intestine connecting string */}
               {sBeads.map((b, i) => i === 0 ? null : (
                 <Line key={`sline-${i}`}
                   x1={sBeads[i-1].x} y1={sBeads[i-1].y} x2={b.x} y2={b.y}
                   stroke="#0f0f0f" strokeWidth={1.2} />
               ))}
-              {/* Internal beads — fully opaque */}
-              {iBeads.map((b, i) => (
-                <G key={`ib-${i}`}>
-                  <Circle cx={b.x} cy={b.y} r={b.r} fill="#1c1c1c" stroke="#303030" strokeWidth={0.7} />
-                  <Circle cx={b.x - b.r * 0.28} cy={b.y - b.r * 0.28} r={b.r * 0.22} fill="rgba(255,255,255,0.13)" />
-                </G>
+              {/* Bridge from last small bead → first large bead (ileocecal junction) */}
+              {sBeads.length > 0 && iBeads.length > 0 && (
+                <Line
+                  x1={sBeads[sBeads.length - 1].x} y1={sBeads[sBeads.length - 1].y}
+                  x2={iBeads[0].x} y2={iBeads[0].y}
+                  stroke="#111" strokeWidth={1.3} />
+              )}
+              {/* Internal connecting string */}
+              {iBeads.map((b, i) => i === 0 ? null : (
+                <Line key={`iline-${i}`}
+                  x1={iBeads[i-1].x} y1={iBeads[i-1].y} x2={b.x} y2={b.y}
+                  stroke="#111" strokeWidth={1.4} />
               ))}
-              {/* Small-intestine beads — slightly brighter */}
+              {/* Small-intestine beads — slightly brighter (front of chain) */}
               {sBeads.map((b, i) => (
                 <G key={`sb-${i}`}>
                   <Circle cx={b.x} cy={b.y} r={b.r} fill="#141414" stroke="#252525" strokeWidth={0.7} />
                   <Circle cx={b.x - b.r * 0.25} cy={b.y - b.r * 0.25} r={b.r * 0.18} fill="rgba(255,255,255,0.09)" />
+                </G>
+              ))}
+              {/* Internal beads — fully opaque (tail through large intestine) */}
+              {iBeads.map((b, i) => (
+                <G key={`ib-${i}`}>
+                  <Circle cx={b.x} cy={b.y} r={b.r} fill="#1c1c1c" stroke="#303030" strokeWidth={0.7} />
+                  <Circle cx={b.x - b.r * 0.28} cy={b.y - b.r * 0.28} r={b.r * 0.22} fill="rgba(255,255,255,0.13)" />
                 </G>
               ))}
               {/* Bridge from last internal bead → anus node → first external bead */}
