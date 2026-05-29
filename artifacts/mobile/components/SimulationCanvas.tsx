@@ -1228,42 +1228,67 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
 
             {/* ===== PARASITES ===== */}
             {(parasites ?? []).map((parasite: ParasiteEntity) => {
-              const segIdx = Math.max(0, Math.min(renderSmallNodes.length - 2, parasite.segIdx));
-              const nodeA = renderSmallNodes[segIdx];
-              const nodeB = renderSmallNodes[segIdx + 1];
+              const nodes = parasite.intestine === 'small' ? renderSmallNodes : renderLargeNodes;
+              const radius = parasite.intestine === 'small' ? SMALL_RADIUS : LARGE_RADIUS;
+              const maxOffsetPx = radius - 4;
+              const segIdx = Math.max(0, Math.min(nodes.length - 2, parasite.segIdx));
+              const nodeA = nodes[segIdx];
+              const nodeB = nodes[segIdx + 1] ?? nodeA;
               if (!nodeA) return null;
-              const midX = nodeB ? (nodeA.x + nodeB.x) / 2 : nodeA.x;
-              const midY = nodeB ? (nodeA.y + nodeB.y) / 2 : nodeA.y;
+
+              // Compute midpoint and perpendicular direction for lateral offset
+              const dx = nodeB.x - nodeA.x;
+              const dy = nodeB.y - nodeA.y;
+              const len = Math.hypot(dx, dy) || 1;
+              const nx = -dy / len; // perpendicular
+              const ny = dx / len;
+              const latPx = parasite.lateralOffset * maxOffsetPx;
+              const baseMidX = (nodeA.x + nodeB.x) / 2;
+              const baseMidY = (nodeA.y + nodeB.y) / 2;
+              const midX = baseMidX + nx * latPx;
+              const midY = baseMidY + ny * latPx;
 
               if (parasite.phase === 'egg_traveling' || parasite.phase === 'egg_hatching') {
                 const now = Date.now();
                 const hatchProgress = parasite.phase === 'egg_hatching' && parasite.hatchDurationMs > 0
                   ? Math.min(1, (now - parasite.hatchStartTime) / parasite.hatchDurationMs)
                   : 0;
-                const r = 3 + hatchProgress * 3;
-                const opacity = 0.7 + hatchProgress * 0.3;
-                const green = Math.round(100 + hatchProgress * 155);
+                // Realistic egg: oval amber-tan shell, darker at poles
+                const eggW = 4.5 + hatchProgress * 2;
+                const eggH = 3.2 + hatchProgress * 1.5;
+                const shellAlpha = 0.82 + hatchProgress * 0.18;
+                // Crack lines on hatching
                 return (
                   <G key={`parasite-${parasite.id}`}>
-                    <Circle cx={midX} cy={midY} r={r + 2}
-                      fill={`rgba(60,${green},40,0.25)`}
-                      stroke={`rgba(80,${green},50,0.5)`}
-                      strokeWidth={0.8} />
-                    <Circle cx={midX} cy={midY} r={r}
-                      fill={`rgba(80,${green},50,${opacity})`}
-                      stroke={`rgba(180,255,140,0.9)`}
-                      strokeWidth={parasite.phase === 'egg_hatching' ? 1.2 : 0.5} />
-                    {parasite.phase === 'egg_hatching' && (
+                    {/* Ambient glow */}
+                    <Ellipse cx={midX} cy={midY} rx={eggW + 3} ry={eggH + 2}
+                      fill={`rgba(120,85,40,${0.15 + hatchProgress * 0.1})`} />
+                    {/* Egg outer shell */}
+                    <Ellipse cx={midX} cy={midY} rx={eggW} ry={eggH}
+                      fill={`rgba(175,138,78,${shellAlpha})`}
+                      stroke={`rgba(140,100,50,0.7)`}
+                      strokeWidth={0.6} />
+                    {/* Inner yolk area */}
+                    <Ellipse cx={midX - eggW * 0.1} cy={midY - eggH * 0.1}
+                      rx={eggW * 0.55} ry={eggH * 0.5}
+                      fill={`rgba(210,175,100,0.55)`} />
+                    {/* Specular highlight */}
+                    <Ellipse cx={midX - eggW * 0.28} cy={midY - eggH * 0.35}
+                      rx={eggW * 0.22} ry={eggH * 0.2}
+                      fill={`rgba(245,230,190,0.5)`} />
+                    {/* Cracks when hatching */}
+                    {parasite.phase === 'egg_hatching' && hatchProgress > 0.3 && (
                       <>
-                        {[0,1,2,3].map(k => {
-                          const a = (k / 4) * Math.PI * 2 + hatchProgress * Math.PI;
-                          const cr = r + 1.5 + hatchProgress * 2;
+                        {[0,1,2].map(k => {
+                          const a = (k / 3) * Math.PI * 2 + 0.5;
+                          const r1 = eggW * 0.4 * hatchProgress;
+                          const r2 = eggW * 0.9;
                           return (
-                            <Circle key={k}
-                              cx={midX + Math.cos(a) * cr}
-                              cy={midY + Math.sin(a) * cr}
-                              r={0.8}
-                              fill={`rgba(180,255,140,${0.5 + hatchProgress * 0.4})`} />
+                            <Line key={k}
+                              x1={midX + Math.cos(a) * r1} y1={midY + Math.sin(a) * r1 * 0.7}
+                              x2={midX + Math.cos(a) * r2} y2={midY + Math.sin(a) * r2 * 0.7}
+                              stroke={`rgba(100,65,25,${hatchProgress * 0.7})`}
+                              strokeWidth={0.7} strokeLinecap="round" />
                           );
                         })}
                       </>
@@ -1274,46 +1299,75 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
 
               if (parasite.phase === 'worm') {
                 const wormLen = Math.max(1, parasite.wormLength);
-                const segments: Array<{ x: number; y: number }> = [];
+                const { r: wr, g: wg, b: wb } = parasite.wormColor;
+                const alpha = Math.min(1, 0.65 + wormLen / 6 * 0.35);
+
+                // Build segment positions with lateral offset applied
+                const segments: Array<{ x: number; y: number; nx: number; ny: number }> = [];
                 for (let w = 0; w < wormLen; w++) {
-                  const sIdx = Math.max(0, Math.min(renderSmallNodes.length - 2, parasite.segIdx - w));
-                  const nA = renderSmallNodes[sIdx];
-                  const nB = renderSmallNodes[sIdx + 1];
+                  const sIdx = Math.max(0, Math.min(nodes.length - 2, parasite.segIdx - w));
+                  const nA = nodes[sIdx];
+                  const nB = nodes[sIdx + 1] ?? nA;
                   if (!nA) break;
+                  const sdx = nB.x - nA.x; const sdy = nB.y - nA.y;
+                  const slen = Math.hypot(sdx, sdy) || 1;
+                  const snx = -sdy / slen; const sny = sdx / slen;
                   segments.push({
-                    x: nB ? (nA.x + nB.x) / 2 : nA.x,
-                    y: nB ? (nA.y + nB.y) / 2 : nA.y,
+                    x: (nA.x + nB.x) / 2 + snx * latPx,
+                    y: (nA.y + nB.y) / 2 + sny * latPx,
+                    nx: snx, ny: sny,
                   });
                 }
                 if (segments.length === 0) return null;
-                const headX = segments[0].x;
-                const headY = segments[0].y;
-                const alpha = Math.min(1, 0.5 + wormLen / 6 * 0.5);
+                const head = segments[0];
+
                 return (
                   <G key={`parasite-${parasite.id}`}>
+                    {/* Body connector lines */}
                     {segments.slice(1).map((seg, i) => (
                       <Line key={i}
                         x1={segments[i].x} y1={segments[i].y}
                         x2={seg.x} y2={seg.y}
-                        stroke={`rgba(200,255,160,${alpha * 0.6})`}
-                        strokeWidth={3.5}
+                        stroke={`rgba(${wr},${wg},${wb},${alpha * 0.55})`}
+                        strokeWidth={5.5}
                         strokeLinecap="round" />
                     ))}
+                    {/* Body segments as ellipses */}
                     {segments.map((seg, i) => {
                       const isHead = i === 0;
-                      const r = isHead ? 4.5 : 3 - i * 0.2;
+                      const segFade = 1 - i * 0.06;
+                      const bodyR = isHead ? 5.5 : 4.8 - i * 0.15;
                       return (
                         <Ellipse key={i}
                           cx={seg.x} cy={seg.y}
-                          rx={Math.max(1.5, r)}
-                          ry={Math.max(1.2, r * 0.7)}
-                          fill={isHead ? `rgba(180,255,120,${alpha})` : `rgba(140,220,90,${alpha * 0.85})`}
-                          stroke={isHead ? 'rgba(255,255,200,0.9)' : 'rgba(200,255,160,0.5)'}
-                          strokeWidth={isHead ? 1.0 : 0.5} />
+                          rx={Math.max(2.2, bodyR)}
+                          ry={Math.max(1.8, bodyR * 0.72)}
+                          fill={`rgba(${wr},${wg},${wb},${alpha * segFade})`}
+                          stroke={`rgba(${Math.min(255,wr+20)},${Math.min(255,wg+20)},${Math.min(255,wb+25)},${alpha * 0.6})`}
+                          strokeWidth={0.6} />
                       );
                     })}
-                    <Circle cx={headX - 1.2} cy={headY - 1} r={0.8} fill="rgba(20,20,20,0.9)" />
-                    <Circle cx={headX + 1.2} cy={headY - 1} r={0.8} fill="rgba(20,20,20,0.9)" />
+                    {/* Segment rings (annulation) */}
+                    {segments.map((seg, i) => (
+                      <Ellipse key={`ring-${i}`}
+                        cx={seg.x} cy={seg.y}
+                        rx={Math.max(2, 4.8 - i * 0.15)}
+                        ry={Math.max(1.4, (4.8 - i * 0.15) * 0.35)}
+                        fill="none"
+                        stroke={`rgba(${Math.max(0,wr-30)},${Math.max(0,wg-30)},${Math.max(0,wb-25)},${0.25 * alpha})`}
+                        strokeWidth={0.5} />
+                    ))}
+                    {/* Eyes */}
+                    <Circle cx={head.x + head.nx * 1.8 - head.ny * 1.5}
+                      cy={head.y + head.ny * 1.8 + head.nx * 1.5} r={1.0}
+                      fill="rgba(18,10,8,0.95)" />
+                    <Circle cx={head.x + head.nx * 1.8 + head.ny * 1.5}
+                      cy={head.y + head.ny * 1.8 - head.nx * 1.5} r={1.0}
+                      fill="rgba(18,10,8,0.95)" />
+                    {/* Head highlight */}
+                    <Ellipse cx={head.x - head.nx * 1.5} cy={head.y - head.ny * 1.5}
+                      rx={2.2} ry={1.4}
+                      fill={`rgba(255,255,255,0.22)`} />
                   </G>
                 );
               }
