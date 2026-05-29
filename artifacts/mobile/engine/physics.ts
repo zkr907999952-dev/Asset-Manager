@@ -73,6 +73,15 @@ export interface PhysicsState {
   smallMesenteryDisabled: number[];
   smallTransplantColor: { r: number; g: number; b: number } | null;
   largeTransplantColor: { r: number; g: number; b: number } | null;
+  // === Silicone rod — completely independent state ===
+  siliconeHeadIdx: number;
+  siliconeInSmall: boolean;
+  siliconeSmallHeadIdx: number;
+  // === Anal beads — completely independent state ===
+  beadsHeadIdx: number;
+  beadsInSmall: boolean;
+  beadsSmallHeadIdx: number;
+  beadsChain: { x: number; y: number; vx: number; vy: number }[];
 }
 
 function clamp(v: number, min: number, max: number) {
@@ -703,67 +712,211 @@ export function stepPhysics(state: PhysicsState) {
       }
     }
 
-    if (state.toolType === '长硅胶棒' || state.toolType === '拉珠') {
-      const diameter = 8 + state.toolParam1 * 0.35;
-      const largeDiameterBase = LARGE_RADIUS * 2;
-      const smallDiameterBase = SMALL_RADIUS * 2;
-      const stim = (state.toolParam2 ?? 50) * 0.004;
-      const headIdx = clamp(state.enemaHeadIdx, 0, state.largeNodes.length - 1);
+    // === 长硅胶棒 — fully independent state, no sharing with enema ===
+    if (state.toolType === '长硅胶棒') {
+      const rodDiam = SMALL_RADIUS * 2 + state.toolParam1 * 0.3;
+      const largeDiam = LARGE_RADIUS * 2;
+      const smallDiam = SMALL_RADIUS * 2;
+      const speedFactor = 0.5 + (state.toolParam2 ?? 50) * 0.01;
+      const headIdx = clamp(state.siliconeHeadIdx, 0, N_LARGE - 1);
 
-      const headNode = state.largeNodes[headIdx];
-      if (headNode) {
-        for (let i = Math.max(0, headIdx - 2); i <= Math.min(state.largeNodes.length - 1, headIdx + 2); i++) {
-          const n = state.largeNodes[i];
-          if (n.pinned) continue;
-          const wobble = Math.sin(state.time * 0.12 + i) * 0.28;
-          n.x += wobble;
-          n.y += wobble * 0.5;
+      // Physical wobble at head — rod pushes the intestine wall
+      for (let i = Math.max(0, headIdx - 1); i <= Math.min(N_LARGE - 1, headIdx + 1); i++) {
+        const n = state.largeNodes[i];
+        if (n && !n.pinned) {
+          n.x += Math.sin(state.time * 0.13 + i * 0.7) * 0.32 * speedFactor;
+          n.y += Math.cos(state.time * 0.10 + i * 0.5) * 0.16 * speedFactor;
+        }
+      }
+      if (state.siliconeInSmall) {
+        const sHead = clamp(state.siliconeSmallHeadIdx, 0, N_SMALL - 1);
+        for (let i = Math.max(0, sHead - 1); i <= Math.min(N_SMALL - 1, sHead + 1); i++) {
+          const n = state.smallNodes[i];
+          if (n && !n.pinned) {
+            n.x += Math.sin(state.time * 0.16 + i * 0.9) * 0.28 * speedFactor;
+            n.y += Math.cos(state.time * 0.13 + i * 0.6) * 0.14 * speedFactor;
+          }
         }
       }
 
       if (state.toolActive) {
-        if (!state.enemaInSmall) {
-          for (let i = 0; i <= headIdx; i++) {
+        const stim = speedFactor * 0.0035;
+        if (!state.siliconeInSmall) {
+          const largeExp = Math.max(0, rodDiam - largeDiam) / largeDiam;
+          // All segments the rod passes through (head to anus) get stimulated
+          for (let i = headIdx; i < state.largeSegs.length; i++) {
             const seg = state.largeSegs[i];
             if (!seg || seg.broken) continue;
-            const d = Math.abs(i - headIdx);
-            const falloff = Math.max(0, 1 - d / 3);
-            if (falloff > 0) {
-              const expansion = Math.max(0, diameter - largeDiameterBase) / largeDiameterBase;
-              const pressureAdd = expansion > 0 ? expansion * 4 * falloff : 0.4 * falloff;
-              seg.pressure = clamp(seg.pressure + pressureAdd, 0, LARGE_RUPTURE_PRESSURE);
-              seg.sensitivity = clamp(seg.sensitivity + stim * (1 + expansion * 2) * falloff, 0, 100);
-              if (expansion > 0.5 && seg.pressure > 100) {
-                seg.pain = clamp(seg.pain + stim * expansion * 2 * falloff, 0, 100);
-              }
+            const distFromHead = i - headIdx;
+            const falloff = Math.max(0.08, 1.0 - distFromHead * 0.035);
+            const pressureAdd = largeExp > 0
+              ? largeExp * 3.5 * falloff
+              : 0.25 * falloff;
+            seg.pressure = clamp(seg.pressure + pressureAdd, 0, LARGE_RUPTURE_PRESSURE);
+            seg.sensitivity = clamp(seg.sensitivity + stim * (1 + largeExp * 2.5) * falloff, 0, 100);
+            if (seg.pressure > 110) {
+              seg.pain = clamp(seg.pain + stim * (largeExp + 0.2) * falloff, 0, 100);
             }
           }
         } else {
-          const smallHead = clamp(state.enemaSmallHeadIdx, 0, N_SMALL - 1);
-          for (let i = 0; i < state.smallSegs.length; i++) {
+          // In small intestine — more sensitive, easier rupture
+          const smallHead = clamp(state.siliconeSmallHeadIdx, 0, N_SMALL - 1);
+          const smallExp = Math.max(0, rodDiam - smallDiam) / smallDiam;
+          for (let i = smallHead; i < state.smallSegs.length; i++) {
             const seg = state.smallSegs[i];
             if (!seg || seg.broken) continue;
-            const d = Math.abs(i - smallHead);
-            const falloff = Math.max(0, 1 - d / 3);
-            if (falloff > 0) {
-              const expansion = Math.max(0, diameter - smallDiameterBase) / smallDiameterBase;
-              const pressureAdd = expansion > 0 ? expansion * 6 * falloff : 1.5 * falloff;
-              seg.pressure = clamp(seg.pressure + pressureAdd, 0, 100);
-              seg.sensitivity = clamp(seg.sensitivity + stim * (2 + expansion * 3) * falloff, 0, 100);
-              if (expansion > 0.3 || seg.pressure > 60) {
-                seg.pain = clamp(seg.pain + stim * (1 + expansion) * falloff, 0, 100);
-              }
+            const distFromHead = i - smallHead;
+            const falloff = Math.max(0.12, 1.0 - distFromHead * 0.06);
+            const pressureAdd = smallExp > 0
+              ? smallExp * 7 * falloff
+              : 1.0 * falloff;
+            seg.pressure = clamp(seg.pressure + pressureAdd, 0, 100);
+            seg.sensitivity = clamp(seg.sensitivity + stim * (2.8 + smallExp * 4.5) * falloff, 0, 100);
+            if (seg.pressure > 50) {
+              seg.pain = clamp(seg.pain + stim * (0.6 + smallExp * 1.8) * falloff, 0, 100);
+            }
+            if (seg.pressure >= 100 && !seg.ruptured && Math.random() < 0.012 * (1 + smallExp * 2)) {
+              seg.ruptured = true;
             }
           }
-          for (let i = Math.max(0, smallHead - 2); i <= Math.min(N_SMALL - 1, smallHead + 2); i++) {
-            const n = state.smallNodes[i];
-            if (n.pinned) continue;
-            const wobble = Math.sin(state.time * 0.15 + i) * 0.3;
-            n.x += wobble;
-            n.y += wobble * 0.4;
+          // Large intestine still stimulated (rod passes through all of it)
+          const largeExp = Math.max(0, rodDiam - largeDiam) / largeDiam;
+          for (let i = 0; i < state.largeSegs.length; i++) {
+            const seg = state.largeSegs[i];
+            if (!seg || seg.broken) continue;
+            const pressureAdd = largeExp > 0 ? largeExp * 1.8 : 0.12;
+            seg.pressure = clamp(seg.pressure + pressureAdd, 0, LARGE_RUPTURE_PRESSURE);
+            seg.sensitivity = clamp(seg.sensitivity + stim * 0.9, 0, 100);
           }
         }
-        state.peristalsisSpeed = Math.max(state.peristalsisSpeed, 1 + (state.toolParam2 ?? 50) * 0.015);
+        state.peristalsisSpeed = Math.max(state.peristalsisSpeed, 1 + (state.toolParam2 ?? 50) * 0.012);
+      }
+    }
+
+    // === 拉珠 — fully independent state, no sharing with enema or silicone ===
+    if (state.toolType === '拉珠') {
+      const BEAD_RADII: number[] = [];
+      for (let i = 0; i < 20; i++) BEAD_RADII.push(3 + i * 0.65);
+      const speedFactor = 0.5 + (state.toolParam2 ?? 50) * 0.01;
+      const headIdx = clamp(state.beadsHeadIdx, 0, N_LARGE - 1);
+
+      if (state.toolActive) {
+        if (!state.beadsInSmall) {
+          const internalCount = Math.min(20, Math.max(0, N_LARGE - headIdx));
+          for (let i = 0; i < internalCount; i++) {
+            const segIdx = headIdx + i;
+            if (segIdx >= state.largeSegs.length) break;
+            const seg = state.largeSegs[segIdx];
+            if (!seg || seg.broken) continue;
+            const ballDiam = BEAD_RADII[i] * 2;
+            const largeDiam = LARGE_RADIUS * 2;
+            const expansion = Math.max(0, ballDiam - largeDiam) / largeDiam;
+            const stim = speedFactor * 0.006 * (1 + i * 0.04);
+            seg.pressure = clamp(seg.pressure + (expansion > 0 ? expansion * 4.5 : 0.35), 0, LARGE_RUPTURE_PRESSURE);
+            seg.sensitivity = clamp(seg.sensitivity + stim * (1 + expansion * 2.5), 0, 100);
+            if (seg.pressure > 110) {
+              seg.pain = clamp(seg.pain + stim * (expansion + 0.2), 0, 100);
+            }
+          }
+          // Wobble at head
+          for (let i = Math.max(0, headIdx - 1); i <= Math.min(N_LARGE - 1, headIdx + 1); i++) {
+            const n = state.largeNodes[i];
+            if (n && !n.pinned) {
+              n.x += Math.sin(state.time * 0.14 + i) * 0.25 * speedFactor;
+              n.y += Math.cos(state.time * 0.11 + i) * 0.12 * speedFactor;
+            }
+          }
+        } else {
+          const smallHead = clamp(state.beadsSmallHeadIdx, 0, N_SMALL - 1);
+          const smallInternal = Math.min(10, Math.max(0, N_SMALL - smallHead));
+          for (let i = 0; i < smallInternal; i++) {
+            const segIdx = smallHead + i;
+            if (segIdx >= state.smallSegs.length) break;
+            const seg = state.smallSegs[segIdx];
+            if (!seg || seg.broken) continue;
+            const ballDiam = BEAD_RADII[Math.min(i, 14)] * 2;
+            const smallDiam = SMALL_RADIUS * 2;
+            const expansion = Math.max(0, ballDiam - smallDiam) / smallDiam;
+            const stim = speedFactor * 0.009 * (1 + i * 0.06);
+            seg.pressure = clamp(seg.pressure + (expansion > 0 ? expansion * 8 : 1.0), 0, 100);
+            seg.sensitivity = clamp(seg.sensitivity + stim * (2.5 + expansion * 4), 0, 100);
+            if (seg.pressure > 45) {
+              seg.pain = clamp(seg.pain + stim * (0.6 + expansion * 1.2), 0, 100);
+            }
+            if (seg.pressure >= 100 && !seg.ruptured && Math.random() < 0.018) {
+              seg.ruptured = true;
+            }
+          }
+          for (let i = 0; i < state.largeSegs.length; i++) {
+            const seg = state.largeSegs[i];
+            if (!seg || seg.broken) continue;
+            const ballDiam = BEAD_RADII[Math.min(i, 19)] * 2;
+            const exp = Math.max(0, ballDiam - LARGE_RADIUS * 2) / (LARGE_RADIUS * 2);
+            seg.pressure = clamp(seg.pressure + (exp > 0 ? exp * 2 : 0.18), 0, LARGE_RUPTURE_PRESSURE);
+            seg.sensitivity = clamp(seg.sensitivity + speedFactor * 0.005, 0, 100);
+          }
+        }
+        state.peristalsisSpeed = Math.max(state.peristalsisSpeed, 1 + (state.toolParam2 ?? 50) * 0.013);
+      }
+
+      // External chain physics — runs every tick (independent of toolActive)
+      const anusNode = state.largeNodes[N_LARGE - 1];
+      const internalCount = state.beadsInSmall
+        ? Math.min(20, N_LARGE)
+        : Math.min(20, Math.max(0, N_LARGE - headIdx));
+      const externalCount = Math.max(0, 20 - internalCount);
+
+      if (externalCount > 0 && anusNode) {
+        // Grow chain array if needed
+        while (state.beadsChain.length < 20) {
+          const j = state.beadsChain.length;
+          state.beadsChain.push({ x: anusNode.x, y: anusNode.y + (j + 1) * 14, vx: 0, vy: 0 });
+        }
+        const chain = state.beadsChain;
+        // Gravity + damping
+        for (let i = 0; i < externalCount; i++) {
+          chain[i].vy += 0.38;
+          chain[i].vx *= 0.87;
+          chain[i].vy *= 0.87;
+          chain[i].x += chain[i].vx;
+          chain[i].y += chain[i].vy;
+        }
+        // Distance constraints (4 iterations)
+        for (let iter = 0; iter < 4; iter++) {
+          // Anchor: first external ball attached to anus
+          const gIdx0 = internalCount;
+          const rFirst = BEAD_RADII[gIdx0] ?? 3;
+          const rAnchor = internalCount > 0 ? (BEAD_RADII[internalCount - 1] ?? 3) : 3;
+          const targetD0 = rFirst + rAnchor + 3;
+          const dx0 = chain[0].x - anusNode.x;
+          const dy0 = chain[0].y - anusNode.y;
+          const d0 = Math.hypot(dx0, dy0) || 1;
+          if (d0 > targetD0) {
+            const corr = (d0 - targetD0) / d0;
+            chain[0].x -= dx0 * corr;
+            chain[0].y -= dy0 * corr;
+            chain[0].vx -= dx0 * corr * 0.08;
+            chain[0].vy -= dy0 * corr * 0.08;
+          }
+          // Constraints between consecutive external balls
+          for (let i = 1; i < externalCount; i++) {
+            const gA = internalCount + i - 1;
+            const gB = internalCount + i;
+            const rA = BEAD_RADII[Math.min(gA, 19)] ?? 3;
+            const rB = BEAD_RADII[Math.min(gB, 19)] ?? 3;
+            const tDist = rA + rB + 3;
+            const dx = chain[i].x - chain[i - 1].x;
+            const dy = chain[i].y - chain[i - 1].y;
+            const d = Math.hypot(dx, dy) || 1;
+            if (d > tDist) {
+              const corr = (d - tDist) / d * 0.5;
+              chain[i].x -= dx * corr;
+              chain[i].y -= dy * corr;
+              chain[i - 1].x += dx * corr;
+              chain[i - 1].y += dy * corr;
+            }
+          }
+        }
       }
     }
   }

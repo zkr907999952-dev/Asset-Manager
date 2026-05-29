@@ -213,5 +213,12 @@ export function createInitialPhysicsState(): PhysicsState {
     smallMesenteryDisabled: [],
     smallTransplantColor: null,
     largeTransplantColor: null,
+    siliconeHeadIdx: N_LARGE - 4,
+    siliconeInSmall: false,
+    siliconeSmallHeadIdx: N_SMALL - 1,
+    beadsHeadIdx: N_LARGE - 4,
+    beadsInSmall: false,
+    beadsSmallHeadIdx: N_SMALL - 1,
+    beadsChain: [],
   };
 }

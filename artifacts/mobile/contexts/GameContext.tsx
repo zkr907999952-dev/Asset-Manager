@@ -63,6 +63,15 @@ export interface GameUIState {
   enemaHeadIdx: number;
   enemaInSmall: boolean;
   enemaSmallHeadIdx: number;
+  // === Silicone rod — independent state ===
+  siliconeHeadIdx: number;
+  siliconeInSmall: boolean;
+  siliconeSmallHeadIdx: number;
+  // === Anal beads — independent state ===
+  beadsHeadIdx: number;
+  beadsInSmall: boolean;
+  beadsSmallHeadIdx: number;
+  beadsChain: { x: number; y: number; vx: number; vy: number }[];
   hpBonus: number;
   repairMarks: number[];
   sutureMarks: number[];
@@ -115,6 +124,8 @@ interface GameContextType {
   setEnemaInSmall: (v: boolean) => void;
   setEnemaSmallHeadIdx: (idx: number) => void;
   setEnemaTarget: (params: { largeIdx?: number; smallIdx?: number; inSmall?: boolean }) => void;
+  setSiliconeTarget: (params: { largeIdx?: number; inSmall?: boolean; smallIdx?: number }) => void;
+  setBeadsTarget: (params: { largeIdx?: number; inSmall?: boolean; smallIdx?: number; fastPull?: boolean }) => void;
   resetPhysics: () => void;
   resetPositions: () => void;
   relaxAbdomen: () => void;
@@ -174,6 +185,25 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     dialogueFnRef: null as null | ((t: DialogueTrigger) => void),
   });
 
+  const siliconeAnimRef = useRef({
+    targetLargeIdx: N_LARGE - 1,
+    targetSmallIdx: N_SMALL - 1,
+    targetInSmall: false,
+    lastDialogueLargeDepth: -99,
+    lastDialogueSmallDepth: -99,
+    lastStepTime: 0,
+  });
+
+  const beadsAnimRef = useRef({
+    targetLargeIdx: N_LARGE - 1,
+    targetSmallIdx: N_SMALL - 1,
+    targetInSmall: false,
+    lastDialogueLargeDepth: -99,
+    lastDialogueSmallDepth: -99,
+    lastStepTime: 0,
+    fastPull: false,
+  });
+
   const [state, setState] = useState<GameUIState>({
     hp: 100, pleasure: 0, heartRate: 72,
     navelPierced: false, intestinalRuptures: 0, intestinalBreaks: 0,
@@ -200,6 +230,13 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     enemaHeadIdx: physicsRef.current.enemaHeadIdx,
     enemaInSmall: false,
     enemaSmallHeadIdx: physicsRef.current.enemaSmallHeadIdx,
+    siliconeHeadIdx: physicsRef.current.siliconeHeadIdx,
+    siliconeInSmall: false,
+    siliconeSmallHeadIdx: physicsRef.current.siliconeSmallHeadIdx,
+    beadsHeadIdx: physicsRef.current.beadsHeadIdx,
+    beadsInSmall: false,
+    beadsSmallHeadIdx: physicsRef.current.beadsSmallHeadIdx,
+    beadsChain: [],
     hpBonus: 0,
     repairMarks: [],
     sutureMarks: [],
@@ -290,6 +327,13 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       enemaHeadIdx: p.enemaHeadIdx,
       enemaInSmall: p.enemaInSmall,
       enemaSmallHeadIdx: p.enemaSmallHeadIdx,
+      siliconeHeadIdx: p.siliconeHeadIdx,
+      siliconeInSmall: p.siliconeInSmall,
+      siliconeSmallHeadIdx: p.siliconeSmallHeadIdx,
+      beadsHeadIdx: p.beadsHeadIdx,
+      beadsInSmall: p.beadsInSmall,
+      beadsSmallHeadIdx: p.beadsSmallHeadIdx,
+      beadsChain: [...p.beadsChain],
       electrodes: [...p.electrodes],
       hpBonus: p.hpBonus ?? 0,
       heartRateModifier: drug.heartRateModifier,
@@ -418,6 +462,164 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         setState(prev => ({ ...prev, enemaSmallHeadIdx: newIdx }));
       }
     }, STEP_MS);
+    return () => clearInterval(timer);
+  }, []);
+
+  // === 长硅胶棒 animation loop — completely independent from enema ===
+  useEffect(() => {
+    const timer = setInterval(() => {
+      const p = physicsRef.current;
+      if (p.toolType !== '长硅胶棒') return;
+
+      const anim = siliconeAnimRef.current;
+      const td = triggerDialogueRef.current;
+      const now = Date.now();
+      const curInSmall = p.siliconeInSmall;
+      // Speed: param2=50→280ms/node in large, 520ms in small; faster at higher param2
+      const speedMs = curInSmall
+        ? Math.max(280, 520 - (p.toolParam2 ?? 50) * 2.4)
+        : Math.max(180, 380 - (p.toolParam2 ?? 50) * 2);
+      if (now - anim.lastStepTime < speedMs) return;
+      anim.lastStepTime = now;
+
+      const curLarge = p.siliconeHeadIdx;
+      const curSmall = p.siliconeSmallHeadIdx;
+
+      if (!curInSmall && !anim.targetInSmall) {
+        if (curLarge === anim.targetLargeIdx) return;
+        const dir = anim.targetLargeIdx < curLarge ? -1 : 1;
+        const newIdx = Math.max(0, Math.min(N_LARGE - 1, curLarge + dir));
+        const depth = N_LARGE - 1 - newIdx;
+        if (Math.abs(depth - anim.lastDialogueLargeDepth) >= 3) {
+          anim.lastDialogueLargeDepth = depth;
+          if (dir === -1) {
+            if (depth <= 10) td('silicone_large_shallow');
+            else td('silicone_large_deep');
+          }
+          if (depth >= 4 && p.toolParam1 > 35) td('silicone_expand');
+        }
+        p.siliconeHeadIdx = newIdx;
+        setState(prev => ({ ...prev, siliconeHeadIdx: newIdx }));
+
+      } else if (!curInSmall && anim.targetInSmall) {
+        if (curLarge > 0) {
+          const newIdx = curLarge - 1;
+          p.siliconeHeadIdx = newIdx;
+          setState(prev => ({ ...prev, siliconeHeadIdx: newIdx }));
+        } else {
+          p.siliconeInSmall = true;
+          p.siliconeSmallHeadIdx = N_SMALL - 1;
+          anim.lastDialogueSmallDepth = -99;
+          td('silicone_small_enter');
+          setState(prev => ({ ...prev, siliconeInSmall: true, siliconeSmallHeadIdx: N_SMALL - 1 }));
+        }
+
+      } else if (curInSmall && !anim.targetInSmall) {
+        if (curSmall < N_SMALL - 1) {
+          const newIdx = curSmall + 1;
+          p.siliconeSmallHeadIdx = newIdx;
+          setState(prev => ({ ...prev, siliconeSmallHeadIdx: newIdx }));
+        } else {
+          p.siliconeInSmall = false;
+          p.siliconeSmallHeadIdx = N_SMALL - 1;
+          p.siliconeHeadIdx = 0;
+          setState(prev => ({ ...prev, siliconeInSmall: false, siliconeSmallHeadIdx: N_SMALL - 1, siliconeHeadIdx: 0 }));
+        }
+
+      } else if (curInSmall && anim.targetInSmall) {
+        if (curSmall === anim.targetSmallIdx) return;
+        const dir = anim.targetSmallIdx < curSmall ? -1 : 1;
+        const newIdx = Math.max(0, Math.min(N_SMALL - 1, curSmall + dir));
+        const depth = N_SMALL - 1 - newIdx;
+        if (Math.abs(depth - anim.lastDialogueSmallDepth) >= 4) {
+          anim.lastDialogueSmallDepth = depth;
+          if (dir === -1) td('silicone_small_enter');
+        }
+        p.siliconeSmallHeadIdx = newIdx;
+        setState(prev => ({ ...prev, siliconeSmallHeadIdx: newIdx }));
+      }
+    }, 80);
+    return () => clearInterval(timer);
+  }, []);
+
+  // === 拉珠 animation loop — completely independent from enema and silicone ===
+  useEffect(() => {
+    const timer = setInterval(() => {
+      const p = physicsRef.current;
+      if (p.toolType !== '拉珠') return;
+
+      const anim = beadsAnimRef.current;
+      const td = triggerDialogueRef.current;
+      const now = Date.now();
+      const curInSmall = p.beadsInSmall;
+      // Fast pull = rapid retraction; normal = param2-controlled speed
+      const speedMs = anim.fastPull
+        ? 95
+        : (curInSmall
+            ? Math.max(300, 560 - (p.toolParam2 ?? 50) * 2.6)
+            : Math.max(200, 420 - (p.toolParam2 ?? 50) * 2.2));
+      if (now - anim.lastStepTime < speedMs) return;
+      anim.lastStepTime = now;
+
+      const curLarge = p.beadsHeadIdx;
+      const curSmall = p.beadsSmallHeadIdx;
+
+      if (!curInSmall && !anim.targetInSmall) {
+        if (curLarge === anim.targetLargeIdx) {
+          anim.fastPull = false;
+          return;
+        }
+        const dir = anim.targetLargeIdx < curLarge ? -1 : 1;
+        const newIdx = Math.max(0, Math.min(N_LARGE - 1, curLarge + dir));
+        const depth = N_LARGE - 1 - newIdx;
+        if (Math.abs(depth - anim.lastDialogueLargeDepth) >= 3) {
+          anim.lastDialogueLargeDepth = depth;
+          if (dir === -1) {
+            if (depth <= 10) td('beads_large_shallow');
+            else td('beads_large_deep');
+          } else {
+            td('beads_pullout');
+          }
+        }
+        p.beadsHeadIdx = newIdx;
+        setState(prev => ({ ...prev, beadsHeadIdx: newIdx }));
+
+      } else if (!curInSmall && anim.targetInSmall) {
+        if (curLarge > 0) {
+          const newIdx = curLarge - 1;
+          p.beadsHeadIdx = newIdx;
+          setState(prev => ({ ...prev, beadsHeadIdx: newIdx }));
+        } else {
+          p.beadsInSmall = true;
+          p.beadsSmallHeadIdx = N_SMALL - 1;
+          anim.lastDialogueSmallDepth = -99;
+          td('beads_small_enter');
+          setState(prev => ({ ...prev, beadsInSmall: true, beadsSmallHeadIdx: N_SMALL - 1 }));
+        }
+
+      } else if (curInSmall && !anim.targetInSmall) {
+        if (curSmall < N_SMALL - 1) {
+          const newIdx = curSmall + 1;
+          td('beads_pullout');
+          p.beadsSmallHeadIdx = newIdx;
+          setState(prev => ({ ...prev, beadsSmallHeadIdx: newIdx }));
+        } else {
+          p.beadsInSmall = false;
+          p.beadsSmallHeadIdx = N_SMALL - 1;
+          p.beadsHeadIdx = 0;
+          anim.fastPull = false;
+          setState(prev => ({ ...prev, beadsInSmall: false, beadsSmallHeadIdx: N_SMALL - 1, beadsHeadIdx: 0 }));
+        }
+
+      } else if (curInSmall && anim.targetInSmall) {
+        if (curSmall === anim.targetSmallIdx) return;
+        const dir = anim.targetSmallIdx < curSmall ? -1 : 1;
+        const newIdx = Math.max(0, Math.min(N_SMALL - 1, curSmall + dir));
+        if (dir === 1) td('beads_pullout');
+        p.beadsSmallHeadIdx = newIdx;
+        setState(prev => ({ ...prev, beadsSmallHeadIdx: newIdx }));
+      }
+    }, 80);
     return () => clearInterval(timer);
   }, []);
 
@@ -668,6 +870,38 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
 
   const setEnemaTarget = useCallback((params: { largeIdx?: number; smallIdx?: number; inSmall?: boolean }) => {
     const anim = enemaAnimRef.current;
+    if (params.largeIdx !== undefined) {
+      anim.targetLargeIdx = Math.max(0, Math.min(N_LARGE - 1, params.largeIdx));
+    }
+    if (params.smallIdx !== undefined) {
+      anim.targetSmallIdx = Math.max(0, Math.min(N_SMALL - 1, params.smallIdx));
+    }
+    if (params.inSmall !== undefined) {
+      anim.targetInSmall = params.inSmall;
+    }
+  }, []);
+
+  const setSiliconeTarget = useCallback((params: { largeIdx?: number; inSmall?: boolean; smallIdx?: number }) => {
+    const anim = siliconeAnimRef.current;
+    if (params.largeIdx !== undefined) {
+      anim.targetLargeIdx = Math.max(0, Math.min(N_LARGE - 1, params.largeIdx));
+    }
+    if (params.smallIdx !== undefined) {
+      anim.targetSmallIdx = Math.max(0, Math.min(N_SMALL - 1, params.smallIdx));
+    }
+    if (params.inSmall !== undefined) {
+      anim.targetInSmall = params.inSmall;
+    }
+  }, []);
+
+  const setBeadsTarget = useCallback((params: { largeIdx?: number; inSmall?: boolean; smallIdx?: number; fastPull?: boolean }) => {
+    const anim = beadsAnimRef.current;
+    if (params.fastPull) {
+      anim.fastPull = true;
+      anim.targetLargeIdx = N_LARGE - 1;
+      anim.targetInSmall = false;
+      return;
+    }
     if (params.largeIdx !== undefined) {
       anim.targetLargeIdx = Math.max(0, Math.min(N_LARGE - 1, params.largeIdx));
     }
@@ -1139,6 +1373,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       syncFromPhysics, triggerDialogue, addElectrode, clearElectrodes,
       insertViaNavel, retractTool, setNavelPierced, setEnemaHeadIdx,
       setEnemaInSmall, setEnemaSmallHeadIdx, setEnemaTarget,
+      setSiliconeTarget, setBeadsTarget,
       resetPhysics, resetPositions,
       relaxAbdomen, takeLaxative, takeStimulant, takeSedative, clearComaByShock,
       setDrugDuration,
