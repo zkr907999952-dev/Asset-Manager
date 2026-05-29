@@ -791,18 +791,33 @@ export function stepPhysics(state: PhysicsState) {
         }
         state.peristalsisSpeed = Math.max(state.peristalsisSpeed, 1 + (state.toolParam2 ?? 50) * 0.012);
       }
+      // Fast spring-back: recover segments the rod no longer occupies
+      const SILICONE_RECOVERY = 1.0;
+      for (let i = 0; i < headIdx && i < state.largeSegs.length; i++) {
+        const seg = state.largeSegs[i];
+        if (seg && !seg.ruptured) seg.pressure = clamp(seg.pressure - SILICONE_RECOVERY, 0, LARGE_RUPTURE_PRESSURE);
+      }
+      if (!state.toolActive) {
+        for (let i = headIdx; i < state.largeSegs.length; i++) {
+          const seg = state.largeSegs[i];
+          if (seg && !seg.ruptured) seg.pressure = clamp(seg.pressure - SILICONE_RECOVERY, 0, LARGE_RUPTURE_PRESSURE);
+        }
+        for (const seg of state.smallSegs) {
+          if (seg && !seg.ruptured) seg.pressure = clamp(seg.pressure - SILICONE_RECOVERY, 0, 100);
+        }
+      }
     }
 
     // === 拉珠 — fully independent state, no sharing with enema or silicone ===
     if (state.toolType === '拉珠') {
       const BEAD_RADII: number[] = [];
-      for (let i = 0; i < 20; i++) BEAD_RADII.push(3 + i * 0.65);
+      for (let i = 0; i < 40; i++) BEAD_RADII.push(Math.min(3 + i * 0.65, 16.0));
       const speedFactor = 0.5 + (state.toolParam2 ?? 50) * 0.01;
       const headIdx = clamp(state.beadsHeadIdx, 0, N_LARGE - 1);
 
       if (state.toolActive) {
         if (!state.beadsInSmall) {
-          const internalCount = Math.min(20, Math.max(0, N_LARGE - headIdx));
+          const internalCount = Math.min(40, Math.max(0, N_LARGE - headIdx));
           for (let i = 0; i < internalCount; i++) {
             const segIdx = headIdx + i;
             if (segIdx >= state.largeSegs.length) break;
@@ -834,7 +849,7 @@ export function stepPhysics(state: PhysicsState) {
             if (segIdx >= state.smallSegs.length) break;
             const seg = state.smallSegs[segIdx];
             if (!seg || seg.broken) continue;
-            const ballDiam = BEAD_RADII[Math.min(i, 14)] * 2;
+            const ballDiam = BEAD_RADII[Math.min(i, 39)] * 2;
             const smallDiam = SMALL_RADIUS * 2;
             const expansion = Math.max(0, ballDiam - smallDiam) / smallDiam;
             const stim = speedFactor * 0.009 * (1 + i * 0.06);
@@ -850,7 +865,7 @@ export function stepPhysics(state: PhysicsState) {
           for (let i = 0; i < state.largeSegs.length; i++) {
             const seg = state.largeSegs[i];
             if (!seg || seg.broken) continue;
-            const ballDiam = BEAD_RADII[Math.min(i, 19)] * 2;
+            const ballDiam = BEAD_RADII[Math.min(i, 39)] * 2;
             const exp = Math.max(0, ballDiam - LARGE_RADIUS * 2) / (LARGE_RADIUS * 2);
             seg.pressure = clamp(seg.pressure + (exp > 0 ? exp * 2 : 0.18), 0, LARGE_RUPTURE_PRESSURE);
             seg.sensitivity = clamp(seg.sensitivity + speedFactor * 0.005, 0, 100);
@@ -858,19 +873,36 @@ export function stepPhysics(state: PhysicsState) {
         }
         state.peristalsisSpeed = Math.max(state.peristalsisSpeed, 1 + (state.toolParam2 ?? 50) * 0.013);
       }
+      // Fast spring-back: release pressure when beads inactive or retracted
+      const BEADS_RECOVERY = 0.9;
+      if (!state.toolActive) {
+        for (let i = headIdx; i < state.largeSegs.length; i++) {
+          const seg = state.largeSegs[i];
+          if (seg && !seg.ruptured) seg.pressure = clamp(seg.pressure - BEADS_RECOVERY, 0, LARGE_RUPTURE_PRESSURE);
+        }
+        if (state.beadsInSmall) {
+          for (const seg of state.smallSegs) {
+            if (seg && !seg.ruptured) seg.pressure = clamp(seg.pressure - BEADS_RECOVERY, 0, 100);
+          }
+        }
+      }
+      for (let i = 0; i < headIdx && i < state.largeSegs.length; i++) {
+        const seg = state.largeSegs[i];
+        if (seg && !seg.ruptured) seg.pressure = clamp(seg.pressure - BEADS_RECOVERY * 0.5, 0, LARGE_RUPTURE_PRESSURE);
+      }
 
       // External chain physics — runs every tick (independent of toolActive)
       const anusNode = state.largeNodes[N_LARGE - 1];
       const internalCount = state.beadsInSmall
-        ? Math.min(20, N_LARGE)
-        : Math.min(20, Math.max(0, N_LARGE - headIdx));
-      const externalCount = Math.max(0, 20 - internalCount);
+        ? Math.min(40, N_LARGE)
+        : Math.min(40, Math.max(0, N_LARGE - headIdx));
+      const externalCount = Math.max(0, 40 - internalCount);
 
       if (externalCount > 0 && anusNode) {
         // Grow chain array if needed
-        while (state.beadsChain.length < 20) {
+        while (state.beadsChain.length < 40) {
           const j = state.beadsChain.length;
-          state.beadsChain.push({ x: anusNode.x, y: anusNode.y + (j + 1) * 14, vx: 0, vy: 0 });
+          state.beadsChain.push({ x: anusNode.x, y: anusNode.y + (j + 1) * 10, vx: 0, vy: 0 });
         }
         const chain = state.beadsChain;
         // Gravity + damping
@@ -902,8 +934,8 @@ export function stepPhysics(state: PhysicsState) {
           for (let i = 1; i < externalCount; i++) {
             const gA = internalCount + i - 1;
             const gB = internalCount + i;
-            const rA = BEAD_RADII[Math.min(gA, 19)] ?? 3;
-            const rB = BEAD_RADII[Math.min(gB, 19)] ?? 3;
+            const rA = BEAD_RADII[Math.min(gA, 39)] ?? 3;
+            const rB = BEAD_RADII[Math.min(gB, 39)] ?? 3;
             const tDist = rA + rB + 3;
             const dx = chain[i].x - chain[i - 1].x;
             const dy = chain[i].y - chain[i - 1].y;

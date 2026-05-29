@@ -372,11 +372,10 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
           setST({ largeIdx: idx });
           if (s.siliconeInSmall) setST({ inSmall: false });
         }
-        if (idx <= 2 && d < 65) {
-          const { idx: sIdx, dist: sDist } = findNearestSmallNodeIdx(pos);
-          if (sIdx >= 0 && sDist < 60) {
-            setST({ inSmall: true, smallIdx: sIdx });
-          }
+        // Small intestine: any nearby small node → enter (no cecum proximity requirement)
+        const { idx: sIdx, dist: sDist } = findNearestSmallNodeIdx(pos);
+        if (sIdx >= 0 && sDist < 88) {
+          setST({ inSmall: true, smallIdx: sIdx });
         }
         physicsRef.current.toolPos = pos;
         return;
@@ -394,9 +393,9 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
         // Check near pull ring (last external bead)
         const chain = physicsRef.current.beadsChain;
         const intCount = s.beadsInSmall
-          ? Math.min(20, physicsRef.current.largeNodes.length)
-          : Math.min(20, Math.max(0, physicsRef.current.largeNodes.length - s.beadsHeadIdx));
-        const extCount = Math.max(0, 20 - intCount);
+          ? Math.min(40, physicsRef.current.largeNodes.length)
+          : Math.min(40, Math.max(0, physicsRef.current.largeNodes.length - s.beadsHeadIdx));
+        const extCount = Math.max(0, 40 - intCount);
         if (extCount > 0 && chain.length >= extCount) {
           const pullRing = chain[extCount - 1];
           if (pullRing && Math.hypot(pullRing.x - pos.x, pullRing.y - pos.y) < 32) {
@@ -411,11 +410,10 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
           setBT({ largeIdx: idx });
           if (s.beadsInSmall) setBT({ inSmall: false });
         }
-        if (idx <= 2 && d < 65) {
-          const { idx: sIdx, dist: sDist } = findNearestSmallNodeIdx(pos);
-          if (sIdx >= 0 && sDist < 60) {
-            setBT({ inSmall: true, smallIdx: sIdx });
-          }
+        // Small intestine: any nearby small node → enter
+        const { idx: sIdx, dist: sDist } = findNearestSmallNodeIdx(pos);
+        if (sIdx >= 0 && sDist < 88) {
+          setBT({ inSmall: true, smallIdx: sIdx });
         }
         physicsRef.current.toolPos = pos;
         return;
@@ -482,11 +480,10 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
           setST({ largeIdx: idx });
           if (s.siliconeInSmall) setST({ inSmall: false });
         }
-        if (idx <= 2 && d < 65) {
-          const { idx: sIdx, dist: sDist } = findNearestSmallNodeIdx(pos);
-          if (sIdx >= 0 && sDist < 60) {
-            setST({ inSmall: true, smallIdx: sIdx });
-          }
+        // Small intestine: any nearby small node → enter
+        const { idx: sIdx, dist: sDist } = findNearestSmallNodeIdx(pos);
+        if (sIdx >= 0 && sDist < 88) {
+          setST({ inSmall: true, smallIdx: sIdx });
         }
         physicsRef.current.toolPos = pos;
         return;
@@ -526,11 +523,10 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
           setBT({ largeIdx: idx });
           if (s.beadsInSmall) setBT({ inSmall: false });
         }
-        if (idx <= 2 && d < 65) {
-          const { idx: sIdx, dist: sDist } = findNearestSmallNodeIdx(pos);
-          if (sIdx >= 0 && sDist < 60) {
-            setBT({ inSmall: true, smallIdx: sIdx });
-          }
+        // Small intestine: any nearby small node → enter
+        const { idx: sIdx, dist: sDist } = findNearestSmallNodeIdx(pos);
+        if (sIdx >= 0 && sDist < 88) {
+          setBT({ inSmall: true, smallIdx: sIdx });
         }
         physicsRef.current.toolPos = pos;
         return;
@@ -1343,11 +1339,11 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
           <G>
             <Path d={siliconePathLarge}
               stroke="rgba(100,40,180,0.78)"
-              strokeWidth={8 + state.toolParam1 * 0.14}
+              strokeWidth={18 + state.toolParam1 * 0.10}
               fill="none" strokeLinecap="round" />
             <Path d={siliconePathLarge}
               stroke="rgba(200,160,255,0.50)"
-              strokeWidth={3.5}
+              strokeWidth={4.5}
               fill="none" strokeLinecap="round" />
           </G>
         )}
@@ -1355,22 +1351,22 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
           <G>
             <Path d={siliconePathSmall}
               stroke="rgba(130,50,220,0.82)"
-              strokeWidth={6 + state.toolParam1 * 0.10}
+              strokeWidth={14 + state.toolParam1 * 0.08}
               fill="none" strokeLinecap="round" />
             <Path d={siliconePathSmall}
               stroke="rgba(210,180,255,0.45)"
-              strokeWidth={2.5}
+              strokeWidth={3.5}
               fill="none" strokeLinecap="round" />
           </G>
         )}
         {siliconeVisible && siliconeHead && (
           <G>
             <Circle cx={siliconeHead.x} cy={siliconeHead.y}
-              r={6 + state.toolParam1 * 0.07}
+              r={8 + state.toolParam1 * 0.06}
               fill="rgba(80,20,160,0.92)" stroke="rgba(160,100,255,0.9)" strokeWidth={1.5} />
             {state.toolActive && (
               <Circle cx={siliconeHead.x} cy={siliconeHead.y}
-                r={10 + state.toolParam1 * 0.08}
+                r={12 + state.toolParam1 * 0.07}
                 fill="none" stroke="rgba(180,130,255,0.38)" strokeWidth={1} />
             )}
           </G>
@@ -1378,12 +1374,12 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
 
         {/* Anal beads (拉珠) — independent beadsHeadIdx + external chain physics */}
         {state.activeTool === TOOLS.ANAL_BEADS && (() => {
-          const BEAD_R = (i: number) => 3 + i * 0.65;
+          const BEAD_R = (i: number) => Math.min(3 + i * 0.65, 16.0);
           const headIdx = Math.max(0, Math.min(renderLargeNodes.length - 1, state.beadsHeadIdx));
           const internalCount = state.beadsInSmall
-            ? Math.min(20, renderLargeNodes.length)
-            : Math.min(20, Math.max(0, renderLargeNodes.length - headIdx));
-          const externalCount = Math.max(0, 20 - internalCount);
+            ? Math.min(40, renderLargeNodes.length)
+            : Math.min(40, Math.max(0, renderLargeNodes.length - headIdx));
+          const externalCount = Math.max(0, 40 - internalCount);
           const chain = state.beadsChain ?? [];
 
           // Build internal bead node list (large intestine)
@@ -1398,7 +1394,7 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
           const sBeads: { x: number; y: number; r: number }[] = [];
           if (state.beadsInSmall && renderSmallNodes.length > 0) {
             const sHead = Math.max(0, Math.min(renderSmallNodes.length - 1, state.beadsSmallHeadIdx));
-            for (let i = 0; i < 12 && sHead + i < renderSmallNodes.length && sBeads.length + iBeads.length < 20; i++) {
+            for (let i = 0; i < 20 && sHead + i < renderSmallNodes.length && sBeads.length + iBeads.length < 40; i++) {
               sBeads.push({ ...renderSmallNodes[sHead + i], r: BEAD_R(i) });
             }
           }
@@ -1450,7 +1446,7 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
               {/* External beads — semi-transparent */}
               {chain.slice(0, externalCount).map((c, i) => {
                 const gIdx = internalCount + i;
-                const r = BEAD_R(Math.min(gIdx, 19));
+                const r = BEAD_R(Math.min(gIdx, 39));
                 const isPullRing = i === externalCount - 1;
                 return (
                   <G key={`eb-${i}`} opacity={0.48}>
