@@ -79,7 +79,7 @@ export function SettingsScreen({ onMenuPress }: Props) {
     setDebugMode, setShowCollisionBoxes,
     setPeriSpeed, setPeriWaveAmplitude, setPeriWaveSpeed,
     setBreathAmplitude, setExpansionScale, setPressureDiffusionRate,
-    setDrugDuration, setHatchDuration,
+    setDrugDuration, setHatchDuration, setParasiteDamageInterval, setParasitePerforationChance,
   } = useGame();
   const topPad = Platform.OS === 'web' ? 67 : insets.top;
   const bottomPad = Platform.OS === 'web' ? 34 : insets.bottom;
@@ -179,6 +179,24 @@ export function SettingsScreen({ onMenuPress }: Props) {
             min={3} max={60} step={1}
             onValueChange={setHatchDuration}
             trackColor="#88cc66"
+          />
+          <View style={[styles.divider, { backgroundColor: colors.border }]} />
+          <SliderRow
+            label="寄生虫造伤间隔"
+            value={state.parasiteDamageIntervalSec}
+            displayValue={`${Math.round(state.parasiteDamageIntervalSec)}秒`}
+            min={4} max={60} step={1}
+            onValueChange={setParasiteDamageInterval}
+            trackColor="#cc6644"
+          />
+          <View style={[styles.divider, { backgroundColor: colors.border }]} />
+          <SliderRow
+            label="肠穿孔概率"
+            value={state.parasitePerforationChance}
+            displayValue={`${Math.round(state.parasitePerforationChance * 100)}%`}
+            min={0} max={1} step={0.01}
+            onValueChange={setParasitePerforationChance}
+            trackColor="#cc4444"
           />
         </View>
 

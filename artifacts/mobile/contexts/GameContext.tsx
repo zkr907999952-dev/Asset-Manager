@@ -173,6 +173,8 @@ export interface GameUIState {
   parasites: ParasiteEntity[];
   hatchDurationSec: number;
   parasiteSurgeryPhase: 0 | 1 | 2 | 3;
+  parasiteDamageIntervalSec: number;
+  parasitePerforationChance: number;
 }
 
 interface GameContextType {
@@ -229,6 +231,8 @@ interface GameContextType {
   toggleMesenteryNode: (idx: number, isSmall?: boolean) => void;
   takeParasiteEgg: () => void;
   setHatchDuration: (v: number) => void;
+  setParasiteDamageInterval: (v: number) => void;
+  setParasitePerforationChance: (v: number) => void;
   performParasiteSurgery: () => void;
 }
 
@@ -298,6 +302,8 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
   const parasiteRef = useRef<ParasiteEntity[]>([]);
   const parasiteIdRef = useRef(0);
   const hatchDurationRef = useRef(9);
+  const parasiteDamageIntervalRef = useRef(12);
+  const parasitePerforationChanceRef = useRef(0.25);
   const parasiteSurgeryPhaseRef = useRef<0 | 1 | 2 | 3>(0);
   const lastAutoEggTimeRef = useRef<number>(0);
 
@@ -360,6 +366,8 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     parasites: [],
     hatchDurationSec: 9,
     parasiteSurgeryPhase: 0,
+    parasiteDamageIntervalSec: 12,
+    parasitePerforationChance: 0.25,
   });
 
   const syncFromPhysics = useCallback(() => {
@@ -668,15 +676,16 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
             par.lastGrowTime = now;
           }
 
-          // Adult damage every 4s
-          if (par.wormLength >= 6 && now - par.lastDamageTime >= 4000) {
+          // Adult damage — interval and perforation chance are configurable
+          const damageIntervalMs = parasiteDamageIntervalRef.current * 1000;
+          if (par.wormLength >= 2 && now - par.lastDamageTime >= damageIntervalMs) {
             par.lastDamageTime = now;
             const si = par.segIdx;
             const segList = par.intestine === 'small' ? p.smallSegs : p.largeSegs;
             if (si < segList.length) {
               segList[si].health = Math.max(0, segList[si].health - 10);
               segList[si].pain = Math.min(100, segList[si].pain + 15);
-              if (Math.random() < 0.3) {
+              if (Math.random() < parasitePerforationChanceRef.current) {
                 segList[si].perforated = true;
                 td('parasite_perforation');
               } else {
@@ -685,8 +694,8 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
             }
           }
 
-          // Free movement when fully grown (starts 3s after hatching)
-          if (par.wormLength >= 6) {
+          // Free movement starts at 2 segments (was 6)
+          if (par.wormLength >= 2) {
             if (!par.isFreeMoving && now >= par.freeMoveWaitUntil) {
               par.isFreeMoving = true;
               // Pick reachable random target — respect broken segments
@@ -1856,6 +1865,16 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     setState(prev => ({ ...prev, hatchDurationSec: v }));
   }, []);
 
+  const setParasiteDamageInterval = useCallback((v: number) => {
+    parasiteDamageIntervalRef.current = v;
+    setState(prev => ({ ...prev, parasiteDamageIntervalSec: v }));
+  }, []);
+
+  const setParasitePerforationChance = useCallback((v: number) => {
+    parasitePerforationChanceRef.current = v;
+    setState(prev => ({ ...prev, parasitePerforationChance: v }));
+  }, []);
+
   const performParasiteSurgery = useCallback(() => {
     if (parasiteSurgeryPhaseRef.current !== 0) return;
     if (parasiteRef.current.length === 0) return;
@@ -1991,7 +2010,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       transplantSmallIntestine, transplantLargeIntestine, transplantAllIntestines,
       enterMesenterySelection, executeMesenterySelection, cancelMesenterySelection,
       toggleMesenteryNode,
-      takeParasiteEgg, setHatchDuration, performParasiteSurgery,
+      takeParasiteEgg, setHatchDuration, setParasiteDamageInterval, setParasitePerforationChance, performParasiteSurgery,
     }}>
       {children}
     </GameContext.Provider>
