@@ -1248,8 +1248,9 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
               const midX = baseMidX + nx * latPx;
               const midY = baseMidY + ny * latPx;
 
+              const now = Date.now();
+
               if (parasite.phase === 'egg_traveling' || parasite.phase === 'egg_hatching') {
-                const now = Date.now();
                 const hatchProgress = parasite.phase === 'egg_hatching' && parasite.hatchDurationMs > 0
                   ? Math.min(1, (now - parasite.hatchStartTime) / parasite.hatchDurationMs)
                   : 0;
