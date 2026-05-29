@@ -4,6 +4,7 @@ import { useColors } from '@/hooks/useColors';
 import { useGame } from '@/contexts/GameContext';
 import { HeartRateMonitor } from './HeartRateMonitor';
 import { CharacterStatusBadges } from './CharacterStatusBadges';
+import type { RenderSegment } from '@/contexts/GameContext';
 
 interface StatRowProps {
   label: string;
@@ -38,6 +39,84 @@ function BarRow({ label, value, color, bgColor }: BarRowProps) {
         <View style={[styles.barFill, { width: `${Math.round(value)}%` as any, backgroundColor: color }]} />
       </View>
       <Text style={[styles.barNum, { color }]}>{Math.round(value)}</Text>
+    </View>
+  );
+}
+
+function healthColor(h: number): string {
+  if (h >= 80) return '#22cc55';
+  if (h >= 50) return '#ccaa22';
+  if (h >= 20) return '#cc5522';
+  return '#cc2222';
+}
+
+function segBgColor(seg: RenderSegment): string {
+  if (seg.broken) return '#cc2244';
+  if (seg.ruptured) return '#cc6622';
+  if (seg.perforated) return '#cc9922';
+  return healthColor(seg.health);
+}
+
+interface SegmentMapProps {
+  segs: RenderSegment[];
+  label: string;
+  accentColor: string;
+}
+
+function SegmentMap({ segs, label, accentColor }: SegmentMapProps) {
+  const colors = useColors();
+  const COLS = 16;
+  const rows: RenderSegment[][] = [];
+  for (let i = 0; i < segs.length; i += COLS) {
+    rows.push(segs.slice(i, i + COLS));
+  }
+
+  const avgHealth = segs.length > 0
+    ? Math.round(segs.reduce((a, s) => a + s.health, 0) / segs.length)
+    : 100;
+  const broken = segs.filter(s => s.broken).length;
+  const ruptured = segs.filter(s => s.ruptured && !s.broken).length;
+  const perforated = segs.filter(s => s.perforated && !s.ruptured && !s.broken).length;
+
+  return (
+    <View style={styles.segMapContainer}>
+      <View style={styles.segMapHeader}>
+        <Text style={[styles.segMapTitle, { color: accentColor }]}>{label}</Text>
+        <View style={styles.segMapMeta}>
+          <Text style={[styles.segMapAvg, { color: healthColor(avgHealth) }]}>均值 {avgHealth}</Text>
+          {broken > 0 && (
+            <Text style={[styles.segMapTag, { color: '#cc2244', borderColor: '#cc224455' }]}>断裂×{broken}</Text>
+          )}
+          {ruptured > 0 && (
+            <Text style={[styles.segMapTag, { color: '#cc6622', borderColor: '#cc662255' }]}>穿孔×{ruptured}</Text>
+          )}
+          {perforated > 0 && (
+            <Text style={[styles.segMapTag, { color: '#cc9922', borderColor: '#cc992255' }]}>针孔×{perforated}</Text>
+          )}
+        </View>
+      </View>
+
+      {rows.map((rowSegs, rowIdx) => (
+        <View key={rowIdx} style={styles.segMapRow}>
+          {rowSegs.map((seg, colIdx) => {
+            const globalIdx = rowIdx * COLS + colIdx;
+            const bg = segBgColor(seg);
+            const painAlpha = Math.round(seg.pain * 0.6).toString(16).padStart(2, '0');
+            return (
+              <View key={globalIdx} style={[styles.segCell, { backgroundColor: bg }]}>
+                <View style={[styles.segPainOverlay, { backgroundColor: `#cc0000${painAlpha}` }]} />
+                <View style={[styles.segHealthBar, {
+                  height: Math.round(seg.health / 100 * 10),
+                  backgroundColor: '#ffffff44',
+                }]} />
+              </View>
+            );
+          })}
+          <Text style={[styles.segRowNum, { color: colors.mutedForeground }]}>
+            {rowIdx * COLS + 1}–{Math.min((rowIdx + 1) * COLS, segs.length)}
+          </Text>
+        </View>
+      ))}
     </View>
   );
 }
@@ -117,17 +196,36 @@ export function AttributePanel() {
       <View style={[styles.divider, { backgroundColor: colors.border }]} />
       <Text style={[styles.sectionTitle, { color: colors.primary }]}>肠道健康</Text>
 
-      {state.renderSmallSegs.slice(0, 8).map((seg, i) => (
-        <View key={i} style={styles.segRow}>
-          <Text style={[styles.segLabel, { color: colors.mutedForeground }]}>小肠段 {i + 1}</Text>
-          <View style={styles.segBars}>
-            <View style={[styles.miniBar, { width: seg.health * 0.5, backgroundColor: '#00cc44' }]} />
-            <View style={[styles.miniBar, { width: seg.pain * 0.5, backgroundColor: '#cc2020', marginTop: 2 }]} />
+      <View style={[styles.legendRow]}>
+        {([
+          ['#22cc55', '健康'],
+          ['#ccaa22', '受损'],
+          ['#cc5522', '危险'],
+          ['#cc2244', '断裂'],
+          ['#cc6622', '穿孔'],
+        ] as [string, string][]).map(([c, l]) => (
+          <View key={l} style={styles.legendItem}>
+            <View style={[styles.legendDot, { backgroundColor: c }]} />
+            <Text style={[styles.legendText, { color: colors.mutedForeground }]}>{l}</Text>
           </View>
-          {seg.broken && <Text style={[styles.brokenTag, { color: colors.hp }]}>断裂</Text>}
-          {seg.ruptured && !seg.broken && <Text style={[styles.brokenTag, { color: colors.pleasure }]}>穿孔</Text>}
-        </View>
-      ))}
+        ))}
+      </View>
+
+      <SegmentMap
+        segs={state.renderSmallSegs}
+        label={`小肠  ${state.renderSmallSegs.length} 段`}
+        accentColor="#88ddaa"
+      />
+
+      <View style={{ height: 10 }} />
+
+      <SegmentMap
+        segs={state.renderLargeSegs}
+        label={`大肠  ${state.renderLargeSegs.length} 段`}
+        accentColor="#ddaa55"
+      />
+
+      <View style={{ height: 16 }} />
     </ScrollView>
   );
 }
@@ -169,18 +267,84 @@ const styles = StyleSheet.create({
   barBg: { flex: 1, height: 6, borderRadius: 3, overflow: 'hidden' },
   barFill: { height: '100%', borderRadius: 3, minWidth: 2 },
   barNum: { fontSize: 10, fontFamily: 'Inter_600SemiBold', width: 24, textAlign: 'right' },
-  segRow: {
+  legendRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginBottom: 10,
+  },
+  legendItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 3,
-    gap: 8,
+    gap: 3,
   },
-  segLabel: { fontSize: 10, fontFamily: 'Inter_400Regular', width: 52 },
-  segBars: { flex: 1, gap: 2 },
-  miniBar: { height: 3, borderRadius: 2, minWidth: 2 },
-  brokenTag: {
+  legendDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 2,
+  },
+  legendText: {
     fontSize: 9,
+    fontFamily: 'Inter_400Regular',
+  },
+  segMapContainer: {
+    marginBottom: 4,
+  },
+  segMapHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 5,
+  },
+  segMapTitle: {
+    fontSize: 10,
+    fontFamily: 'Inter_600SemiBold',
+  },
+  segMapMeta: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+  },
+  segMapAvg: {
+    fontSize: 9,
+    fontFamily: 'Inter_600SemiBold',
+  },
+  segMapTag: {
+    fontSize: 8,
     fontFamily: 'Inter_700Bold',
-    letterSpacing: 0.5,
+    borderWidth: 1,
+    borderRadius: 3,
+    paddingHorizontal: 3,
+    paddingVertical: 1,
+  },
+  segMapRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    marginBottom: 2,
+    gap: 2,
+  },
+  segCell: {
+    width: 14,
+    height: 14,
+    borderRadius: 2,
+    overflow: 'hidden',
+    justifyContent: 'flex-end',
+  },
+  segPainOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+  },
+  segHealthBar: {
+    width: '100%',
+    borderRadius: 1,
+  },
+  segRowNum: {
+    fontSize: 8,
+    fontFamily: 'Inter_400Regular',
+    marginLeft: 3,
+    opacity: 0.6,
   },
 });

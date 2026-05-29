@@ -5,7 +5,7 @@ export const CAVITY_CY = 248;
 export const CAVITY_RX = 148;
 export const CAVITY_RY = 175;
 
-export const N_SMALL = 56;
+export const N_SMALL = 66;
 export const N_LARGE = 32;
 export const SMALL_SEG_LENGTH = 20;
 export const LARGE_SEG_LENGTH = 22;

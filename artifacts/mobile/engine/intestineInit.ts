@@ -22,17 +22,17 @@ function scalePos(x: number, y: number): [number, number] {
   ];
 }
 
-// Small intestine: 56 nodes
+// Small intestine: 66 nodes
 // [0]         — Stomach/duodenum junction (pinned, top-center)
 // [1]         — Duodenal bridge (R transition)
-// [2–51]      — 10 serpentine rows × 5 nodes, denser jejunum/ileum coiling
+// [2–61]      — 10 serpentine rows × 6 nodes, filling the central abdominal area
 //               Even rows (0,2,4,6,8) R→L; Odd rows (1,3,5,7,9) L→R
-//               y spacing 18px, x range 110–228
-// [52–55]     — Terminal ileum curving down-left toward cecum
+//               y spacing 18px, x range 116–231 (6 equidistant columns, step=23)
+// [62–65]     — Terminal ileum curving left-down toward cecum
 //
-// Jejunum (rows 0–4, upper zone): wider loops, larger radius, more motility
-// Ileum (rows 5–9, lower zone): tighter loops, approaching cecum
-// Cavity: cx=170, cy=248, rx=148, ry=175
+// Column x positions (pre-scale): 116, 139, 162, 185, 208, 231
+// Post-scale x positions (approx): 111, 137, 162, 188, 214, 239
+// This fills the space between ascending (~x=82) and descending (~x=264) colon.
 export function buildSmallIntestineNodes(): PhysicsNode[] {
   const nodes: PhysicsNode[] = [];
 
@@ -42,48 +42,47 @@ export function buildSmallIntestineNodes(): PhysicsNode[] {
     nodes.push(makeNode(x, y, true));
   }
 
-  // [1] Duodenal bridge — curves right to reach row 0 start
+  // [1] Duodenal bridge — curves right toward row 0 start
   {
-    const [x, y] = scalePos(210, 148);
+    const [x, y] = scalePos(220, 148);
     nodes.push(makeNode(x, y));
   }
 
-  // [2–51] 10 serpentine rows through the abdominal center
-  // x-positions: xL=110, xM1=138, xC=166, xM2=194, xR=222
-  // y-positions: row i → y = 155 + i * 18
-  const xL = 110, xM1 = 138, xC = 166, xM2 = 194, xR = 222;
-  const rowXRight = [xR, xM2, xC, xM1, xL]; // even rows R→L
-  const rowXLeft  = [xL, xM1, xC, xM2, xR]; // odd rows L→R
+  // [2–61] 10 serpentine rows × 6 columns through the abdominal center
+  // Column x positions (pre-scale, step=23): 116, 139, 162, 185, 208, 231
+  const cols = [116, 139, 162, 185, 208, 231];
+  const colsR2L = [...cols].reverse(); // even rows: right → left
 
   for (let row = 0; row < 10; row++) {
     const y = 155 + row * 18;
-    const xs = (row % 2 === 0) ? rowXRight : rowXLeft;
+    const xs = (row % 2 === 0) ? colsR2L : cols;
     for (const x of xs) {
       const [sx, sy] = scalePos(x, y);
       nodes.push(makeNode(sx, sy));
     }
   }
-  // Indices [2..51]: 50 nodes across 10 rows
+  // Indices [2..61]: 60 nodes across 10 rows × 6 cols
 
-  // [52–55] Terminal ileum — turns left-down from row 9 end (xR, y=317) to approach cecum
-  // Row 9 is odd → L→R → ends at xR=222, y=317
+  // [62–65] Terminal ileum — from row 9 end (col xL=116, y=317) curving right-down to cecum
+  // Row 9 is odd (L→R), ends at xR=231, y=317 → need to curve left toward cecum at (100,340)
   const terminalIleum: [number, number][] = [
-    [196, 322], // curve starts going left
-    [162, 328], // continues left
-    [128, 336], // approaching cecum zone
-    [106, 346], // near cecum at (100, 340)
+    [199, 323],
+    [167, 329],
+    [135, 335],
+    [103, 341],
   ];
   for (const [x, y] of terminalIleum) {
     const [sx, sy] = scalePos(x, y);
     nodes.push(makeNode(sx, sy));
   }
 
-  return nodes; // 56 nodes total (N_SMALL = 56)
+  return nodes; // 66 nodes total (N_SMALL = 66)
 }
 
 // Large intestine: 32 nodes
 // Runs CLOCKWISE around the small intestine perimeter.
 // Cecum [0] is UNPINNED — uses strong mesentery spring to spring back after drag.
+// Transverse colon sags slightly downward at center for anatomical realism.
 // Rectum section (nodes 27–30) has two anatomical bends:
 //   sacral flexure (curving backward/left) and perineal flexure (curving forward/right)
 // Anus [31] is pinned.
@@ -113,9 +112,10 @@ export function buildLargeIntestineNodes(): PhysicsNode[] {
     nodes.push(makeNode(x, y));
   }
 
-  // [10–14] Transverse colon: top, slight downward sag at center
+  // [10–14] Transverse colon: top, with realistic downward sag at center
+  // The middle of the transverse colon naturally hangs slightly lower due to gravity.
   const transverse: [number, number][] = [
-    [116, 126], [140, 122], [170, 120], [200, 122], [228, 126],
+    [116, 126], [140, 130], [170, 136], [200, 130], [228, 126],
   ];
   for (const [x, y] of transverse) {
     const [sx, sy] = scalePos(x, y);
@@ -148,15 +148,11 @@ export function buildLargeIntestineNodes(): PhysicsNode[] {
   }
 
   // [27–30] Rectum: two anatomical bends (sacral + perineal flexure)
-  // [27] Rectum entry from sigmoid
-  // [28] Sacral flexure — curves backward (left/up)
-  // [29] Sacral apex — deepest backward point
-  // [30] Perineal flexure — curves forward-down before anus
   const rectum: [number, number][] = [
-    [168, 356], // entry
-    [158, 350], // sacral flexure — moved right toward center
-    [154, 364], // sacral apex — moved right toward center
-    [162, 377], // perineal flexure — moved right toward center
+    [168, 356],
+    [158, 350],
+    [154, 364],
+    [162, 377],
   ];
   for (const [x, y] of rectum) {
     const [sx, sy] = scalePos(x, y);
