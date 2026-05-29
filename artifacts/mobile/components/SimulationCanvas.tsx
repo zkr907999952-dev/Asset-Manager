@@ -220,7 +220,7 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
     state, physicsRef, triggerDialogue, addElectrode,
     insertViaNavel, retractTool, setNavelPierced, setEnemaHeadIdx,
     setEnemaInSmall, setEnemaSmallHeadIdx, setEnemaTarget,
-    setSiliconeTarget, setBeadsTarget,
+    setSiliconeTarget, setBeadsTarget, setEggTarget,
     toggleMesenteryNode,
   } = useGame();
   const lastDialogueTime = useRef(0);
@@ -251,6 +251,7 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
     setEnemaTarget,
     setSiliconeTarget,
     setBeadsTarget,
+    setEggTarget,
     insertViaNavel,
     setNavelPierced,
     triggerDialogue,
@@ -265,6 +266,7 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
   hrRef.current.setEnemaTarget = setEnemaTarget;
   hrRef.current.setSiliconeTarget = setSiliconeTarget;
   hrRef.current.setBeadsTarget = setBeadsTarget;
+  hrRef.current.setEggTarget = setEggTarget;
   hrRef.current.insertViaNavel = insertViaNavel;
   hrRef.current.setNavelPierced = setNavelPierced;
   hrRef.current.triggerDialogue = triggerDialogue;
@@ -451,6 +453,41 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
         }
         return;
       }
+      // 吞入跳蛋 — touch sets target position in small intestine or large intestine
+      if (s.activeTool === TOOLS.VIBRATING_EGG) {
+        const { setEggTarget: setET } = hrRef.current;
+        if (s.eggInLarge) {
+          // Egg is in large intestine
+          const { idx, dist: d } = findNearestLargeNodeIdx(pos);
+          if (idx >= 0 && d < 75) {
+            setET({ largeIdx: idx, inLarge: true });
+          }
+          // Near ileocecal junction — allow retracting back to small intestine
+          const cecum = physicsRef.current.largeNodes[0];
+          const ileocecal = physicsRef.current.smallNodes[physicsRef.current.smallNodes.length - 1];
+          const cDist = cecum ? Math.hypot(cecum.x - pos.x, cecum.y - pos.y) : 9999;
+          const iDist = ileocecal ? Math.hypot(ileocecal.x - pos.x, ileocecal.y - pos.y) : 9999;
+          if (Math.min(cDist, iDist) < 55) {
+            setET({ inLarge: false });
+          }
+        } else {
+          // Egg is in small intestine — touch near small intestine nodes sets target
+          const { idx: sIdx, dist: sDist } = findNearestSmallNodeIdx(pos);
+          if (sIdx >= 0 && sDist < 80) {
+            setET({ smallIdx: sIdx });
+          }
+          // Near ileocecal junction → allow entering large intestine
+          const terminalIleum = physicsRef.current.smallNodes[physicsRef.current.smallNodes.length - 1];
+          const cecum = physicsRef.current.largeNodes[0];
+          const tiDist = terminalIleum ? Math.hypot(terminalIleum.x - pos.x, terminalIleum.y - pos.y) : 9999;
+          const cDist = cecum ? Math.hypot(cecum.x - pos.x, cecum.y - pos.y) : 9999;
+          if (Math.min(tiDist, cDist) < 55) {
+            setET({ inLarge: true, largeIdx: 0 });
+          }
+        }
+        physicsRef.current.toolPos = pos;
+        return;
+      }
     },
     onPanResponderMove: (evt) => {
       const { state: s, toPhysicsCoords: tpc, triggerDialogue: td } = hrRef.current;
@@ -492,6 +529,50 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
           if (sIdx >= 0 && sDist < 88) {
             setST({ inSmall: true, smallIdx: sIdx });
           }
+        }
+        physicsRef.current.toolPos = pos;
+        return;
+      }
+      // 吞入跳蛋 move — drag shifts small intestine near egg head; updates target
+      if (s.activeTool === TOOLS.VIBRATING_EGG) {
+        const { setEggTarget: setET } = hrRef.current;
+        const prevPos = physicsRef.current.toolPos;
+        if (prevPos) {
+          const dragDx = pos.x - prevPos.x;
+          const dragDy = pos.y - prevPos.y;
+          const headNode = s.eggInLarge
+            ? physicsRef.current.largeNodes[s.eggLargeHeadIdx]
+            : physicsRef.current.smallNodes[s.eggSmallHeadIdx];
+          if (headNode) {
+            const pullR = 42;
+            const nodes = s.eggInLarge ? physicsRef.current.largeNodes : physicsRef.current.smallNodes;
+            nodes.forEach(n => {
+              if (n.pinned) return;
+              const nd = Math.hypot(n.x - headNode.x, n.y - headNode.y);
+              if (nd < pullR) {
+                const f = (1 - nd / pullR) * 0.18;
+                n.x += dragDx * f;
+                n.y += dragDy * f;
+              }
+            });
+          }
+        }
+        if (s.eggInLarge) {
+          const { idx, dist: d } = findNearestLargeNodeIdx(pos);
+          if (idx >= 0 && d < 75) setET({ largeIdx: idx, inLarge: true });
+          const cecum = physicsRef.current.largeNodes[0];
+          const ileocecal = physicsRef.current.smallNodes[physicsRef.current.smallNodes.length - 1];
+          const cDist = cecum ? Math.hypot(cecum.x - pos.x, cecum.y - pos.y) : 9999;
+          const iDist = ileocecal ? Math.hypot(ileocecal.x - pos.x, ileocecal.y - pos.y) : 9999;
+          if (Math.min(cDist, iDist) < 55) setET({ inLarge: false });
+        } else {
+          const { idx: sIdx, dist: sDist } = findNearestSmallNodeIdx(pos);
+          if (sIdx >= 0 && sDist < 80) setET({ smallIdx: sIdx });
+          const terminalIleum = physicsRef.current.smallNodes[physicsRef.current.smallNodes.length - 1];
+          const cecum = physicsRef.current.largeNodes[0];
+          const tiDist = terminalIleum ? Math.hypot(terminalIleum.x - pos.x, terminalIleum.y - pos.y) : 9999;
+          const cDist = cecum ? Math.hypot(cecum.x - pos.x, cecum.y - pos.y) : 9999;
+          if (Math.min(tiDist, cDist) < 55) setET({ inLarge: true, largeIdx: 0 });
         }
         physicsRef.current.toolPos = pos;
         return;
@@ -712,6 +793,49 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
         ? renderSmallNodes[Math.max(0, Math.min(renderSmallNodes.length - 1, state.siliconeSmallHeadIdx))]
         : renderLargeNodes[Math.max(0, Math.min(renderLargeNodes.length - 1, state.siliconeHeadIdx))])
     : null;
+
+  // Vibrating egg paths — control line runs from duodenum (node 0) to egg head
+  const eggVisible = state.activeTool === TOOLS.VIBRATING_EGG;
+  const eggHeadNode = (() => {
+    if (!eggVisible || renderSmallNodes.length === 0) return null;
+    if (state.eggInLarge && renderLargeNodes.length > 0) {
+      const idx = Math.max(0, Math.min(renderLargeNodes.length - 1, state.eggLargeHeadIdx));
+      return renderLargeNodes[idx];
+    }
+    const idx = Math.max(0, Math.min(renderSmallNodes.length - 1, state.eggSmallHeadIdx));
+    return renderSmallNodes[idx];
+  })();
+  const eggTangentAngle = (() => {
+    if (!eggVisible) return 0;
+    if (state.eggInLarge && renderLargeNodes.length > 1) {
+      const idx = Math.max(0, Math.min(renderLargeNodes.length - 1, state.eggLargeHeadIdx));
+      const prev = renderLargeNodes[Math.max(0, idx - 1)];
+      const next = renderLargeNodes[Math.min(renderLargeNodes.length - 1, idx + 1)];
+      return Math.atan2(next.y - prev.y, next.x - prev.x) * 180 / Math.PI;
+    }
+    if (renderSmallNodes.length > 1) {
+      const idx = Math.max(0, Math.min(renderSmallNodes.length - 1, state.eggSmallHeadIdx));
+      const prev = renderSmallNodes[Math.max(0, idx - 1)];
+      const next = renderSmallNodes[Math.min(renderSmallNodes.length - 1, idx + 1)];
+      return Math.atan2(next.y - prev.y, next.x - prev.x) * 180 / Math.PI;
+    }
+    return 0;
+  })();
+  // Control line: follows intestine path from duodenum (small node 0) to egg head
+  const eggControlLinePath = (() => {
+    if (!eggVisible || renderSmallNodes.length === 0) return '';
+    if (!state.eggInLarge) {
+      const idx = Math.max(0, Math.min(renderSmallNodes.length - 1, state.eggSmallHeadIdx));
+      if (idx < 1) return '';
+      return buildSmoothPath(renderSmallNodes.slice(0, idx + 1));
+    }
+    // In large intestine: full small intestine path + large intestine from 0 to egg
+    const smallPath = buildSmoothPath(renderSmallNodes);
+    const largeIdx = Math.max(0, Math.min(renderLargeNodes.length - 1, state.eggLargeHeadIdx));
+    if (largeIdx < 1) return smallPath;
+    const largePath = buildSmoothPath(renderLargeNodes.slice(0, largeIdx + 1));
+    return smallPath + ' ' + largePath;
+  })();
 
   // Suspended tools: active tools that are not the current tool, with stored positions
   const suspendedTools = Object.entries(state.toolStates ?? {}).filter(([id, ts]) => {
@@ -1480,6 +1604,71 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
                   </G>
                 );
               })}
+            </G>
+          );
+        })()}
+
+        {/* 吞入跳蛋 — control line + vibration rings + pink oval body */}
+        {eggVisible && eggControlLinePath !== '' && (
+          <Path d={eggControlLinePath}
+            stroke="rgba(244,160,184,0.55)"
+            strokeWidth={2.2}
+            fill="none" strokeLinecap="round" strokeDasharray="5 4" />
+        )}
+        {/* Thread going out of frame toward mouth — from duodenum (node 0) upward */}
+        {eggVisible && renderSmallNodes.length > 0 && (() => {
+          const duodenum = renderSmallNodes[0];
+          return (
+            <Line x1={duodenum.x} y1={duodenum.y}
+              x2={duodenum.x} y2={Math.max(0, duodenum.y - 32)}
+              stroke="rgba(244,160,184,0.40)" strokeWidth={1.8}
+              strokeLinecap="round" strokeDasharray="4 3" />
+          );
+        })()}
+        {/* Vibration rings — drawn behind egg body */}
+        {eggVisible && eggHeadNode && state.toolActive && (() => {
+          const vib = state.toolParam1 / 100;
+          const baseR = 14 + vib * 20;
+          const pulse = Math.sin(Date.now() / 120) * 0.5 + 0.5;
+          return (
+            <G>
+              <Circle cx={eggHeadNode.x} cy={eggHeadNode.y}
+                r={baseR * (0.85 + pulse * 0.15)}
+                fill="none"
+                stroke="rgba(244,130,168,0.28)"
+                strokeWidth={1.5} />
+              <Circle cx={eggHeadNode.x} cy={eggHeadNode.y}
+                r={(baseR + 8) * (0.9 + pulse * 0.1)}
+                fill="none"
+                stroke="rgba(244,160,184,0.15)"
+                strokeWidth={1} />
+            </G>
+          );
+        })()}
+        {/* Egg body — pink oval rotated along intestine tangent */}
+        {eggVisible && eggHeadNode && (() => {
+          const { x, y } = eggHeadNode;
+          const angle = eggTangentAngle;
+          const isActive = state.toolActive;
+          return (
+            <G transform={`translate(${x},${y}) rotate(${angle})`}>
+              {/* Back half (darker) */}
+              <Ellipse cx={0} cy={0} rx={9.5} ry={6.5}
+                fill="#e088a8" stroke="#c06080" strokeWidth={0.8} />
+              {/* Front half (lighter) */}
+              <Ellipse cx={-1.5} cy={0} rx={8} ry={5.5}
+                fill="#f4a0b8" stroke="none" />
+              {/* Midline seam */}
+              <Line x1={0} y1={-6} x2={0} y2={6}
+                stroke="rgba(200,80,120,0.30)" strokeWidth={0.8} />
+              {/* Highlight spot */}
+              <Ellipse cx={-3} cy={-2.5} rx={2.5} ry={1.8}
+                fill="rgba(255,255,255,0.55)" />
+              {/* Vibration indicator dot when active */}
+              {isActive && (
+                <Circle cx={0} cy={0} r={1.5}
+                  fill="rgba(255,160,200,0.85)" />
+              )}
             </G>
           );
         })()}

@@ -72,6 +72,10 @@ export interface GameUIState {
   beadsInSmall: boolean;
   beadsSmallHeadIdx: number;
   beadsChain: { x: number; y: number; vx: number; vy: number }[];
+  // === Vibrating egg — enters from duodenum (small node 0) ===
+  eggSmallHeadIdx: number;
+  eggInLarge: boolean;
+  eggLargeHeadIdx: number;
   hpBonus: number;
   repairMarks: number[];
   sutureMarks: number[];
@@ -126,6 +130,7 @@ interface GameContextType {
   setEnemaTarget: (params: { largeIdx?: number; smallIdx?: number; inSmall?: boolean }) => void;
   setSiliconeTarget: (params: { largeIdx?: number; inSmall?: boolean; smallIdx?: number }) => void;
   setBeadsTarget: (params: { largeIdx?: number; inSmall?: boolean; smallIdx?: number; fastPull?: boolean }) => void;
+  setEggTarget: (params: { smallIdx?: number; inLarge?: boolean; largeIdx?: number }) => void;
   resetPhysics: () => void;
   resetPositions: () => void;
   relaxAbdomen: () => void;
@@ -204,6 +209,13 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     fastPull: false,
   });
 
+  const eggAnimRef = useRef({
+    targetSmallIdx: 0,
+    targetInLarge: false,
+    targetLargeIdx: 0,
+    lastStepTime: 0,
+  });
+
   const [state, setState] = useState<GameUIState>({
     hp: 100, pleasure: 0, heartRate: 72,
     navelPierced: false, intestinalRuptures: 0, intestinalBreaks: 0,
@@ -237,6 +249,9 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     beadsInSmall: false,
     beadsSmallHeadIdx: physicsRef.current.beadsSmallHeadIdx,
     beadsChain: [],
+    eggSmallHeadIdx: 0,
+    eggInLarge: false,
+    eggLargeHeadIdx: 0,
     hpBonus: 0,
     repairMarks: [],
     sutureMarks: [],
@@ -623,6 +638,70 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     return () => clearInterval(timer);
   }, []);
 
+  // === 吞入跳蛋 animation loop — moves from duodenum (node 0) deeper into intestines ===
+  useEffect(() => {
+    const timer = setInterval(() => {
+      const p = physicsRef.current;
+      const anim = eggAnimRef.current;
+      if (p.toolType !== '吞入跳蛋') return;
+
+      const now = Date.now();
+      const speedMs = Math.max(100, 450 - (p.toolParam2 ?? 50) * 3.5);
+      if (now - anim.lastStepTime < speedMs) return;
+      anim.lastStepTime = now;
+
+      const curInLarge = p.eggInLarge;
+      const curSmall = p.eggSmallHeadIdx;
+      const curLarge = p.eggLargeHeadIdx;
+
+      if (!curInLarge && !anim.targetInLarge) {
+        // In small intestine, targeting small intestine position
+        if (curSmall === anim.targetSmallIdx) return;
+        const dir = anim.targetSmallIdx > curSmall ? 1 : -1;
+        const newIdx = Math.max(0, Math.min(N_SMALL - 1, curSmall + dir));
+        p.eggSmallHeadIdx = newIdx;
+        setState(prev => ({ ...prev, eggSmallHeadIdx: newIdx }));
+
+      } else if (!curInLarge && anim.targetInLarge) {
+        // Push egg through ileocecal junction into large intestine
+        if (curSmall < N_SMALL - 1) {
+          const newIdx = Math.min(N_SMALL - 1, curSmall + 1);
+          p.eggSmallHeadIdx = newIdx;
+          setState(prev => ({ ...prev, eggSmallHeadIdx: newIdx }));
+        } else {
+          // Cross junction
+          p.eggInLarge = true;
+          p.eggSmallHeadIdx = N_SMALL - 1;
+          p.eggLargeHeadIdx = 0;
+          setState(prev => ({ ...prev, eggInLarge: true, eggSmallHeadIdx: N_SMALL - 1, eggLargeHeadIdx: 0 }));
+        }
+
+      } else if (curInLarge && !anim.targetInLarge) {
+        // Retract egg back through ileocecal junction
+        if (curLarge > 0) {
+          const newIdx = Math.max(0, curLarge - 1);
+          p.eggLargeHeadIdx = newIdx;
+          setState(prev => ({ ...prev, eggLargeHeadIdx: newIdx }));
+        } else {
+          // Cross junction back to small intestine
+          p.eggInLarge = false;
+          p.eggLargeHeadIdx = 0;
+          p.eggSmallHeadIdx = N_SMALL - 1;
+          setState(prev => ({ ...prev, eggInLarge: false, eggLargeHeadIdx: 0, eggSmallHeadIdx: N_SMALL - 1 }));
+        }
+
+      } else if (curInLarge && anim.targetInLarge) {
+        // In large intestine, targeting large intestine position
+        if (curLarge === anim.targetLargeIdx) return;
+        const dir = anim.targetLargeIdx > curLarge ? 1 : -1;
+        const newIdx = Math.max(0, Math.min(N_LARGE - 1, curLarge + dir));
+        p.eggLargeHeadIdx = newIdx;
+        setState(prev => ({ ...prev, eggLargeHeadIdx: newIdx }));
+      }
+    }, 80);
+    return () => clearInterval(timer);
+  }, []);
+
   const setScreen = useCallback((screen: ScreenName) => {
     setState(prev => ({ ...prev, currentScreen: screen }));
   }, []);
@@ -910,6 +989,19 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     }
     if (params.inSmall !== undefined) {
       anim.targetInSmall = params.inSmall;
+    }
+  }, []);
+
+  const setEggTarget = useCallback((params: { smallIdx?: number; inLarge?: boolean; largeIdx?: number }) => {
+    const anim = eggAnimRef.current;
+    if (params.smallIdx !== undefined) {
+      anim.targetSmallIdx = Math.max(0, Math.min(N_SMALL - 1, params.smallIdx));
+    }
+    if (params.inLarge !== undefined) {
+      anim.targetInLarge = params.inLarge;
+    }
+    if (params.largeIdx !== undefined) {
+      anim.targetLargeIdx = Math.max(0, Math.min(N_LARGE - 1, params.largeIdx));
     }
   }, []);
 
@@ -1373,7 +1465,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       syncFromPhysics, triggerDialogue, addElectrode, clearElectrodes,
       insertViaNavel, retractTool, setNavelPierced, setEnemaHeadIdx,
       setEnemaInSmall, setEnemaSmallHeadIdx, setEnemaTarget,
-      setSiliconeTarget, setBeadsTarget,
+      setSiliconeTarget, setBeadsTarget, setEggTarget,
       resetPhysics, resetPositions,
       relaxAbdomen, takeLaxative, takeStimulant, takeSedative, clearComaByShock,
       setDrugDuration,

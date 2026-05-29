@@ -82,6 +82,10 @@ export interface PhysicsState {
   beadsInSmall: boolean;
   beadsSmallHeadIdx: number;
   beadsChain: { x: number; y: number; vx: number; vy: number }[];
+  // === Vibrating egg — enters from duodenum (small node 0), independent state ===
+  eggSmallHeadIdx: number;
+  eggInLarge: boolean;
+  eggLargeHeadIdx: number;
 }
 
 function clamp(v: number, min: number, max: number) {
@@ -222,6 +226,9 @@ export function stepPhysics(state: PhysicsState) {
   if (!state.smallMesenteryDisabled) (state as any).smallMesenteryDisabled = [];
   if (state.smallTransplantColor === undefined) (state as any).smallTransplantColor = null;
   if (state.largeTransplantColor === undefined) (state as any).largeTransplantColor = null;
+  if (state.eggSmallHeadIdx === undefined) (state as any).eggSmallHeadIdx = 0;
+  if (state.eggInLarge === undefined) (state as any).eggInLarge = false;
+  if (state.eggLargeHeadIdx === undefined) (state as any).eggLargeHeadIdx = 0;
 
   const relaxMultiplier = state.relaxFrames > 0 ? 0.15 : 1.0;
   if (state.relaxFrames > 0) state.relaxFrames--;
@@ -949,6 +956,112 @@ export function stepPhysics(state: PhysicsState) {
       }
     }
   }
+
+    // === 吞入跳蛋 — enters from duodenum (small node 0), completely independent state ===
+    if (state.toolType === '吞入跳蛋') {
+      const vibIntensity = state.toolParam1 / 100;
+      const speedFactor = 0.5 + (state.toolParam2 ?? 50) * 0.01;
+
+      if (!state.eggInLarge) {
+        const headIdx = clamp(state.eggSmallHeadIdx, 0, N_SMALL - 1);
+        const headNode = state.smallNodes[headIdx];
+
+        // Expansion effect — dynamic, recovers when egg moves on
+        for (let i = headIdx; i <= Math.min(headIdx + 1, N_SMALL - 2); i++) {
+          const seg = state.smallSegs[i];
+          if (!seg || seg.broken) continue;
+          const falloff = Math.max(0.3, 1.0 - (i - headIdx) * 0.6);
+          seg.pressure = clamp(seg.pressure + 2.2 * falloff, 0, 100);
+          seg.sensitivity = clamp(seg.sensitivity + 0.014 * falloff * speedFactor, 0, 100);
+        }
+        // Recovery for segments egg has passed through
+        for (let i = 0; i < headIdx && i < state.smallSegs.length; i++) {
+          const seg = state.smallSegs[i];
+          if (seg && !seg.ruptured) seg.pressure = clamp(seg.pressure - 0.9, 0, 100);
+        }
+
+        // Vibration when active
+        if (state.toolActive && headNode && !headNode.pinned) {
+          const vibRange = 16 + vibIntensity * 24;
+          const vibStrength = vibIntensity * 0.5;
+
+          // Sinusoidal wobble on egg node — softer than electric, rhythmic
+          headNode.x += Math.sin(state.time * 0.22 + headIdx * 0.5) * vibStrength * 2.5;
+          headNode.y += Math.cos(state.time * 0.18 + headIdx * 0.4) * vibStrength * 1.2;
+
+          // Stimulate surrounding nodes within vibration range
+          for (let i = 0; i < N_SMALL; i++) {
+            const d = dist(state.smallNodes[i].x, state.smallNodes[i].y, headNode.x, headNode.y);
+            if (d < vibRange) {
+              const f = (1 - d / vibRange) * vibIntensity;
+              const seg = state.smallSegs[Math.min(i, state.smallSegs.length - 1)];
+              if (seg && !seg.broken) {
+                seg.sensitivity = clamp(seg.sensitivity + 0.10 * f, 0, 100);
+                seg.pain = clamp(seg.pain + 0.015 * f, 0, 100);
+                seg.pressure = clamp(seg.pressure + 0.38 * f, 0, 100);
+              }
+              const n = state.smallNodes[i];
+              if (!n.pinned) {
+                n.x += Math.sin(state.time * 0.25 + i * 0.6) * vibStrength * 0.75 * f;
+                n.y += Math.cos(state.time * 0.20 + i * 0.5) * vibStrength * 0.38 * f;
+              }
+            }
+          }
+          state.peristalsisSpeed = Math.max(state.peristalsisSpeed, 1 + vibIntensity * 0.8);
+        }
+      } else {
+        // Egg in large intestine
+        const largeIdx = clamp(state.eggLargeHeadIdx, 0, N_LARGE - 1);
+        const headNode = state.largeNodes[largeIdx];
+
+        // Expansion in large intestine (slightly gentler)
+        for (let i = largeIdx; i <= Math.min(largeIdx + 1, N_LARGE - 2); i++) {
+          const seg = state.largeSegs[i];
+          if (!seg || seg.broken) continue;
+          const falloff = Math.max(0.3, 1.0 - (i - largeIdx) * 0.6);
+          seg.pressure = clamp(seg.pressure + 1.6 * falloff, 0, LARGE_RUPTURE_PRESSURE);
+          seg.sensitivity = clamp(seg.sensitivity + 0.010 * falloff * speedFactor, 0, 100);
+        }
+        // Recovery for passed large segments
+        for (let i = 0; i < largeIdx && i < state.largeSegs.length; i++) {
+          const seg = state.largeSegs[i];
+          if (seg && !seg.ruptured) seg.pressure = clamp(seg.pressure - 0.65, 0, LARGE_RUPTURE_PRESSURE);
+        }
+        // Small intestine pressure slowly recovers (egg passed through entirely)
+        for (let i = 0; i < state.smallSegs.length; i++) {
+          const seg = state.smallSegs[i];
+          if (seg && !seg.ruptured) seg.pressure = clamp(seg.pressure - 0.45, 0, 100);
+        }
+
+        // Vibration in large intestine
+        if (state.toolActive && headNode && !headNode.pinned) {
+          const vibRange = 20 + vibIntensity * 30;
+          const vibStrength = vibIntensity * 0.42;
+
+          headNode.x += Math.sin(state.time * 0.20 + largeIdx * 0.5) * vibStrength * 2.0;
+          headNode.y += Math.cos(state.time * 0.16 + largeIdx * 0.4) * vibStrength * 1.0;
+
+          for (let i = 0; i < state.largeNodes.length; i++) {
+            const d = dist(state.largeNodes[i].x, state.largeNodes[i].y, headNode.x, headNode.y);
+            if (d < vibRange) {
+              const f = (1 - d / vibRange) * vibIntensity;
+              const seg = state.largeSegs[Math.min(i, state.largeSegs.length - 1)];
+              if (seg && !seg.broken) {
+                seg.sensitivity = clamp(seg.sensitivity + 0.085 * f, 0, 100);
+                seg.pain = clamp(seg.pain + 0.012 * f, 0, 100);
+                seg.pressure = clamp(seg.pressure + 0.32 * f, 0, LARGE_RUPTURE_PRESSURE);
+              }
+              const n = state.largeNodes[i];
+              if (!n.pinned) {
+                n.x += Math.sin(state.time * 0.22 + i * 0.5) * vibStrength * 0.65 * f;
+                n.y += Math.cos(state.time * 0.18 + i * 0.4) * vibStrength * 0.32 * f;
+              }
+            }
+          }
+          state.peristalsisSpeed = Math.max(state.peristalsisSpeed, 1 + vibIntensity * 0.7);
+        }
+      }
+    }
 
   // === SECONDARY TOOL PHYSICS: tools that persist independently ===
   const ENEMA_KEY = '灌肠器';

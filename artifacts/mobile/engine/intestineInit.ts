@@ -220,5 +220,8 @@ export function createInitialPhysicsState(): PhysicsState {
     beadsInSmall: false,
     beadsSmallHeadIdx: N_SMALL - 1,
     beadsChain: [],
+    eggSmallHeadIdx: 0,
+    eggInLarge: false,
+    eggLargeHeadIdx: 0,
   };
 }

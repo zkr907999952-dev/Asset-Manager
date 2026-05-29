@@ -24,6 +24,7 @@ const TOOL_ICONS: Record<string, string> = {
   '刺刀':     'navigation',
   '长硅胶棒': 'bar-chart-2',
   '拉珠':     'more-horizontal',
+  '吞入跳蛋': 'circle',
 };
 
 const TABS: { id: TabId; icon: string; label: string }[] = [

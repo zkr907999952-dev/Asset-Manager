@@ -42,6 +42,7 @@ export const TOOLS = {
   BAYONET: '刺刀',
   SILICONE_ROD: '长硅胶棒',
   ANAL_BEADS: '拉珠',
+  VIBRATING_EGG: '吞入跳蛋',
 } as const;
 
 export type ToolType = typeof TOOLS[keyof typeof TOOLS];
@@ -57,6 +58,7 @@ export const TOOL_LIST: { id: ToolType; icon: string; desc: string }[] = [
   { id: TOOLS.BAYONET, icon: 'navigation', desc: '刺入破坏' },
   { id: TOOLS.SILICONE_ROD, icon: 'bar-chart-2', desc: '扩张插入' },
   { id: TOOLS.ANAL_BEADS, icon: 'more-horizontal', desc: '串珠刺激' },
+  { id: TOOLS.VIBRATING_EGG, icon: 'circle', desc: '吞入刺激' },
 ];
 
 export function createDefaultToolStates(): Record<string, { active: boolean; param1: number; param2: number }> {

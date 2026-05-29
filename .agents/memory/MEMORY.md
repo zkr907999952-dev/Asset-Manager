@@ -3,3 +3,4 @@
 - [Game colors hook](game-colors-hook.md) — all game-specific color tokens (hp, pleasure, toolColor, etc.) live in colors.light; useColors() always returns that palette since there's no dark key.
 - [Multi-tool coexistence + PhysicsState new fields](multi-tool-arch.md) — toolStates/pressureDiffusionRate added to PhysicsState; intestineInit.ts must initialize all new fields or stepPhysics crashes with "cannot read undefined".
 - [Drug/coma system architecture](drug-coma-arch.md) — drug modifiers live in drugRef (not physicsRef); comaStateRef mirrors UI comaState for use inside callbacks; triggerDialogue suppresses normal lines during coma.
+- [Vibrating egg architecture](vibrating-egg-arch.md) — egg enters at smallNodes[0] (duodenum), moves toward higher indices; egg physics block must sit OUTSIDE if(state.toolPos) block but still inside stepPhysics; extra closing brace is a common mistake when inserting after beads section.

@@ -17,6 +17,7 @@ const TOOL_PARAMS: Record<string, { p1Label: string; p1Max: number; p1Step: numb
   [TOOLS.BAYONET]:       { p1Label: '刺刀长度', p1Max: 100, p1Step: 1, p2Label: '刺刀宽度', p2Max: 100, p2Step: 1 },
   [TOOLS.SILICONE_ROD]:  { p1Label: '直径',     p1Max: 100, p1Step: 1, p2Label: '速度',     p2Max: 100, p2Step: 1 },
   [TOOLS.ANAL_BEADS]:    { p1Label: '插入深度', p1Max: 100, p1Step: 1, p2Label: '拉出速度', p2Max: 100, p2Step: 1 },
+  [TOOLS.VIBRATING_EGG]: { p1Label: '震动强度', p1Max: 100, p1Step: 1, p2Label: '移动速度', p2Max: 100, p2Step: 1 },
 };
 
 export function ToolControls() {
