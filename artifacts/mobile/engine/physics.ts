@@ -402,6 +402,33 @@ export function stepPhysics(state: PhysicsState) {
     }
   }
 
+  // --- Small intestine self-collision ---
+  // Skip pairs within ±4 indices to avoid fighting the chain constraint
+  for (let si = 0; si < state.smallNodes.length; si++) {
+    const a = state.smallNodes[si];
+    if (a.pinned) continue;
+    const aScale = state.periScaleSmall[si] ?? 1;
+    const aSeg = state.smallSegs[Math.min(si, state.smallSegs.length - 1)];
+    const aR = SMALL_RADIUS * aScale * (1 + (aSeg.pressure / 100) * state.expansionScale * 0.45);
+
+    for (let sj = si + 4; sj < state.smallNodes.length; sj++) {
+      const b = state.smallNodes[sj];
+      if (b.pinned) continue;
+      const bScale = state.periScaleSmall[sj] ?? 1;
+      const bSeg = state.smallSegs[Math.min(sj, state.smallSegs.length - 1)];
+      const bR = SMALL_RADIUS * bScale * (1 + (bSeg.pressure / 100) * state.expansionScale * 0.45);
+
+      const dx = a.x - b.x, dy = a.y - b.y;
+      const d = Math.sqrt(dx * dx + dy * dy);
+      const minDist = aR + bR;
+      if (d < minDist && d > 0.01) {
+        const push = (minDist - d) / d * 0.32;
+        a.x += dx * push * 0.5; a.y += dy * push * 0.5;
+        b.x -= dx * push * 0.5; b.y -= dy * push * 0.5;
+      }
+    }
+  }
+
   // --- Ileocecal junction spring ---
   {
     const terminalIleum = state.smallNodes[N_SMALL - 1];
