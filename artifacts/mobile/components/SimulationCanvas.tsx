@@ -987,6 +987,7 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
             {renderLargeSegs.map((seg, i) => {
               if (i >= renderLargeNodes.length - 1) return null;
               if (seg.broken) return null; // visual gap at break
+              if (seg.resected) return null; // surgically removed — hidden
               const d = buildSmoothSegPath(renderLargeNodes, i);
               if (!d) return null;
               const lPeriScale = (periScaleLarge?.[i] ?? 1);
@@ -1098,6 +1099,7 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
             {renderSmallSegs.map((seg, i) => {
               if (i >= renderSmallNodes.length - 1) return null;
               if (seg.broken) return null;
+              if (seg.resected) return null; // surgically removed — hidden
               const d = buildSmoothSegPath(renderSmallNodes, i);
               if (!d) return null;
               const sPeriScale = (periScaleSmall?.[i] ?? 1);
@@ -1114,6 +1116,7 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
             {renderSmallSegs.map((seg, i) => {
               if (i >= renderSmallNodes.length - 1) return null;
               if (seg.broken) return null; // visual gap at break
+              if (seg.resected) return null; // surgically removed — hidden
               const d = buildSmoothSegPath(renderSmallNodes, i);
               if (!d) return null;
               const sPeriScale = (periScaleSmall?.[i] ?? 1);
@@ -1551,39 +1554,99 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
               });
             })()}
 
-            {/* ===== ALREADY-RESECTED RANGES — faded ===== */}
-            {(resectedSmallRanges ?? []).map((range, ri) =>
-              renderSmallNodes.slice(range.start, range.end + 2).map((n, j) => {
-                const i = range.start + j;
-                const nA = renderSmallNodes[i];
-                const nB = renderSmallNodes[i + 1];
-                if (!nA || !nB || i > range.end) return null;
-                return (
-                  <Circle key={`rsec-sm-${ri}-${i}`}
-                    cx={(nA.x + nB.x) / 2} cy={(nA.y + nB.y) / 2}
-                    r={SMALL_RADIUS - 1}
-                    fill="rgba(0,0,0,0.50)"
-                    stroke="rgba(160,30,30,0.60)"
-                    strokeWidth={1} />
-                );
-              })
-            )}
-            {(resectedLargeRanges ?? []).map((range, ri) =>
-              renderLargeNodes.slice(range.start, range.end + 2).map((n, j) => {
-                const i = range.start + j;
-                const nA = renderLargeNodes[i];
-                const nB = renderLargeNodes[i + 1];
-                if (!nA || !nB || i > range.end) return null;
-                return (
-                  <Circle key={`rsec-lg-${ri}-${i}`}
-                    cx={(nA.x + nB.x) / 2} cy={(nA.y + nB.y) / 2}
-                    r={LARGE_RADIUS - 1}
-                    fill="rgba(0,0,0,0.50)"
-                    stroke="rgba(160,30,30,0.60)"
-                    strokeWidth={1} />
-                );
-              })
-            )}
+            {/* ===== RESECTION ANASTOMOSIS SUTURES — surgical stitch at reconnection point ===== */}
+            {(resectedSmallRanges ?? []).map((range, ri) => {
+              const nA = renderSmallNodes[range.start];
+              const nB = renderSmallNodes[range.end + 1];
+              if (!nA || !nB) return null;
+              const dx = nB.x - nA.x, dy = nB.y - nA.y;
+              const dist = Math.hypot(dx, dy) || 1;
+              const ux = dx / dist, uy = dy / dist;
+              const px = -uy, py = ux; // perpendicular
+              const mx = (nA.x + nB.x) / 2, my = (nA.y + nB.y) / 2;
+              const tubeW = SMALL_RADIUS * 1.6;
+              const scarCol = 'rgba(200,170,130,0.75)';
+              const stitchCol = 'rgba(230,210,160,0.90)';
+              return (
+                <G key={`anastsm-${ri}`}>
+                  {/* Scar tube bridge between the two reconnected ends */}
+                  <Line x1={nA.x} y1={nA.y} x2={nB.x} y2={nB.y}
+                    stroke="rgba(160,100,80,0.55)" strokeWidth={tubeW + 3} strokeLinecap="round" />
+                  <Line x1={nA.x} y1={nA.y} x2={nB.x} y2={nB.y}
+                    stroke={scarCol} strokeWidth={tubeW} strokeLinecap="round" />
+                  <Line x1={nA.x} y1={nA.y} x2={nB.x} y2={nB.y}
+                    stroke="rgba(255,230,190,0.20)" strokeWidth={tubeW * 0.5} strokeLinecap="round" />
+                  {/* Cross-stitch marks across the anastomosis */}
+                  {[-8, -4, 0, 4, 8].map(offset => {
+                    const cx2 = mx + ux * offset, cy2 = my + uy * offset;
+                    const hw = SMALL_RADIUS * 0.85;
+                    return (
+                      <G key={`stch-sm-${ri}-${offset}`}>
+                        <Line x1={cx2 - px * hw} y1={cy2 - py * hw}
+                          x2={cx2 + px * hw} y2={cy2 + py * hw}
+                          stroke={stitchCol} strokeWidth={1.4} strokeLinecap="round" />
+                      </G>
+                    );
+                  })}
+                  {/* Running suture thread line along the axis */}
+                  <Line x1={mx - ux * 10} y1={my - uy * 10}
+                    x2={mx + ux * 10} y2={my + uy * 10}
+                    stroke="rgba(220,200,150,0.45)" strokeWidth={0.8} strokeLinecap="round"
+                    strokeDasharray="3 2" />
+                  {/* End-cap knot dots */}
+                  <Circle cx={nA.x} cy={nA.y} r={SMALL_RADIUS * 0.7}
+                    fill="rgba(180,120,90,0.80)" stroke="rgba(220,180,130,0.70)" strokeWidth={1} />
+                  <Circle cx={nB.x} cy={nB.y} r={SMALL_RADIUS * 0.7}
+                    fill="rgba(180,120,90,0.80)" stroke="rgba(220,180,130,0.70)" strokeWidth={1} />
+                </G>
+              );
+            })}
+            {(resectedLargeRanges ?? []).map((range, ri) => {
+              const nA = renderLargeNodes[range.start];
+              const nB = renderLargeNodes[range.end + 1];
+              if (!nA || !nB) return null;
+              const dx = nB.x - nA.x, dy = nB.y - nA.y;
+              const dist = Math.hypot(dx, dy) || 1;
+              const ux = dx / dist, uy = dy / dist;
+              const px = -uy, py = ux;
+              const mx = (nA.x + nB.x) / 2, my = (nA.y + nB.y) / 2;
+              const tubeW = LARGE_RADIUS * 1.6;
+              const scarCol = 'rgba(200,165,125,0.75)';
+              const stitchCol = 'rgba(235,215,165,0.90)';
+              return (
+                <G key={`anastlg-${ri}`}>
+                  {/* Scar tube bridge */}
+                  <Line x1={nA.x} y1={nA.y} x2={nB.x} y2={nB.y}
+                    stroke="rgba(155,95,75,0.55)" strokeWidth={tubeW + 4} strokeLinecap="round" />
+                  <Line x1={nA.x} y1={nA.y} x2={nB.x} y2={nB.y}
+                    stroke={scarCol} strokeWidth={tubeW} strokeLinecap="round" />
+                  <Line x1={nA.x} y1={nA.y} x2={nB.x} y2={nB.y}
+                    stroke="rgba(255,230,190,0.18)" strokeWidth={tubeW * 0.5} strokeLinecap="round" />
+                  {/* Cross-stitch marks */}
+                  {[-10, -5, 0, 5, 10].map(offset => {
+                    const cx2 = mx + ux * offset, cy2 = my + uy * offset;
+                    const hw = LARGE_RADIUS * 0.85;
+                    return (
+                      <G key={`stch-lg-${ri}-${offset}`}>
+                        <Line x1={cx2 - px * hw} y1={cy2 - py * hw}
+                          x2={cx2 + px * hw} y2={cy2 + py * hw}
+                          stroke={stitchCol} strokeWidth={1.7} strokeLinecap="round" />
+                      </G>
+                    );
+                  })}
+                  {/* Running suture thread */}
+                  <Line x1={mx - ux * 12} y1={my - uy * 12}
+                    x2={mx + ux * 12} y2={my + uy * 12}
+                    stroke="rgba(220,200,150,0.45)" strokeWidth={0.9} strokeLinecap="round"
+                    strokeDasharray="3 2" />
+                  {/* End-cap knot dots */}
+                  <Circle cx={nA.x} cy={nA.y} r={LARGE_RADIUS * 0.7}
+                    fill="rgba(175,115,85,0.80)" stroke="rgba(220,175,125,0.70)" strokeWidth={1.2} />
+                  <Circle cx={nB.x} cy={nB.y} r={LARGE_RADIUS * 0.7}
+                    fill="rgba(175,115,85,0.80)" stroke="rgba(220,175,125,0.70)" strokeWidth={1.2} />
+                </G>
+              );
+            })}
 
             {/* Debug overlays — small intestine */}
             {state.debugMode && renderSmallSegs.map((seg, i) => {
