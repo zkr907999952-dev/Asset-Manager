@@ -10,7 +10,7 @@ function makeNode(x: number, y: number, pinned = false): PhysicsNode {
 }
 
 function makeSeg(): SegmentProps {
-  return { health: 100, sensitivity: 0, pain: 0, pressure: 0, ruptured: false, broken: false, perforated: false };
+  return { health: 100, sensitivity: 0, pain: 0, pressure: 0, ruptured: false, broken: false, perforated: false, resected: false };
 }
 
 // Scale factor applied to all initial node positions from cavity center.
@@ -219,5 +219,7 @@ export function createInitialPhysicsState(): PhysicsState {
     eggSmallHeadIdx: 0,
     eggInLarge: false,
     eggLargeHeadIdx: 0,
+    resectedSmallRanges: [],
+    resectedLargeRanges: [],
   };
 }

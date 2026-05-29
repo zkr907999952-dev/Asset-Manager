@@ -31,6 +31,8 @@ export const LARGE_RUPTURE_PRESSURE = 180;
 export const BREATH_AMPLITUDE_DEFAULT = 1.2;
 export const EXPANSION_SCALE_DEFAULT = 1.3;
 
+export const MAX_RESECTION_SEGMENTS_DEFAULT = 6;
+
 export const TOOLS = {
   METAL_ROD: '金属棒',
   GRAB: '抓握',

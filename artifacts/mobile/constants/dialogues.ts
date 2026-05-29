@@ -70,7 +70,11 @@ export type DialogueTrigger =
   | 'cmd_parasite_egg'
   | 'parasite_hatch'
   | 'parasite_damage'
-  | 'parasite_perforation';
+  | 'parasite_perforation'
+  | 'surg_resection_start'
+  | 'surg_resection_step1'
+  | 'surg_resection_step2'
+  | 'surg_resection_step3';
 
 export const DIALOGUES: Record<DialogueTrigger, string[]> = {
   idle: [
@@ -493,6 +497,26 @@ export const DIALOGUES: Record<DialogueTrigger, string[]> = {
     '呜……！里面……被咬出洞了……！不行……！',
     '不行不行……！虫子把肠子咬穿了……！好痛……！',
     '啊……！穿孔了……是……是虫子咬的……！',
+  ],
+  surg_resection_start: [
+    '呜……要……要切除肠子……好害怕……',
+    '嗯……准备……切除手术……请轻点……',
+    '啊……要动刀了……别让我太痛……',
+  ],
+  surg_resection_step1: [
+    '啊啊……！切开了……！好痛……！',
+    '呜……！两端……断开了……！疼死了……！',
+    '不行……！被切断了……太痛了……！',
+  ],
+  surg_resection_step2: [
+    '嗯……里面……在移位……好奇怪的感觉……',
+    '呜……肠系膜……被牵拉了……好难受……',
+    '啊……里面……在重新排列……好胀……',
+  ],
+  surg_resection_step3: [
+    '嗯……缝合了……好像少了一段……',
+    '呜……切掉的部分……已经取出来了……',
+    '啊……缝合好了……里面感觉怪怪的……少了一截……',
   ],
 };
 

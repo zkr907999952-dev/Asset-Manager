@@ -24,6 +24,7 @@ export interface SegmentProps {
   ruptured: boolean;
   broken: boolean;
   perforated: boolean; // needle puncture mark — leaks pressure slowly
+  resected: boolean;   // surgically removed — segment is hidden and skipped
 }
 
 export interface PhysicsState {
@@ -86,6 +87,9 @@ export interface PhysicsState {
   eggSmallHeadIdx: number;
   eggInLarge: boolean;
   eggLargeHeadIdx: number;
+  // === Resection ranges — surgically removed segments ===
+  resectedSmallRanges: { start: number; end: number }[];
+  resectedLargeRanges: { start: number; end: number }[];
 }
 
 function clamp(v: number, min: number, max: number) {
@@ -229,6 +233,11 @@ export function stepPhysics(state: PhysicsState) {
   if (state.eggSmallHeadIdx === undefined) (state as any).eggSmallHeadIdx = 0;
   if (state.eggInLarge === undefined) (state as any).eggInLarge = false;
   if (state.eggLargeHeadIdx === undefined) (state as any).eggLargeHeadIdx = 0;
+  if (!state.resectedSmallRanges) (state as any).resectedSmallRanges = [];
+  if (!state.resectedLargeRanges) (state as any).resectedLargeRanges = [];
+  // Guard: ensure resected field exists on all segments
+  for (const seg of state.smallSegs) { if (seg.resected === undefined) (seg as any).resected = false; }
+  for (const seg of state.largeSegs) { if (seg.resected === undefined) (seg as any).resected = false; }
 
   const relaxMultiplier = state.relaxFrames > 0 ? 0.15 : 1.0;
   if (state.relaxFrames > 0) state.relaxFrames--;
@@ -347,7 +356,7 @@ export function stepPhysics(state: PhysicsState) {
   ) => {
     for (let iter = 0; iter < PHYSICS_ITERATIONS; iter++) {
       for (let i = 0; i < nodes.length - 1; i++) {
-        if (breakBroken && segs[i] && segs[i].broken) continue;
+        if (breakBroken && segs[i] && (segs[i].broken || segs[i].resected)) continue;
         const a = nodes[i], b = nodes[i + 1];
         if (a.pinned && b.pinned) continue;
         const dx = b.x - a.x, dy = b.y - a.y;
@@ -363,6 +372,7 @@ export function stepPhysics(state: PhysicsState) {
     }
     const maxStretch = segLen * 2.5;
     for (let i = 0; i < nodes.length - 1; i++) {
+      if (segs[i]?.resected) continue;
       const a = nodes[i], b = nodes[i + 1];
       if (a.pinned && b.pinned) continue;
       const dx = b.x - a.x, dy = b.y - a.y;
@@ -376,6 +386,33 @@ export function stepPhysics(state: PhysicsState) {
   };
   satisfyChain(state.smallNodes, SMALL_SEG_LENGTH, true, state.smallSegs, 8);
   satisfyChain(state.largeNodes, LARGE_SEG_LENGTH, true, state.largeSegs, 2);
+
+  // --- Reconnection springs for resected ranges ---
+  const applyResectionSprings = (
+    nodes: PhysicsNode[], segLen: number,
+    ranges: { start: number; end: number }[],
+  ) => {
+    for (const range of ranges) {
+      const nodeA = nodes[range.start];
+      const nodeB = nodes[Math.min(nodes.length - 1, range.end + 1)];
+      if (!nodeA || !nodeB) continue;
+      const dx = nodeB.x - nodeA.x, dy = nodeB.y - nodeA.y;
+      const d = Math.sqrt(dx * dx + dy * dy) || 0.001;
+      const diff = (d - segLen) / d * SEGMENT_STIFFNESS * 0.35;
+      if (!nodeA.pinned) { nodeA.x += dx * diff; nodeA.y += dy * diff; }
+      if (!nodeB.pinned) { nodeB.x -= dx * diff; nodeB.y -= dy * diff; }
+      const mx = (nodeA.x + nodeB.x) / 2;
+      const my = (nodeA.y + nodeB.y) / 2;
+      for (let i = range.start + 1; i <= range.end && i < nodes.length; i++) {
+        const n = nodes[i];
+        if (!n || n.pinned) continue;
+        n.x += (mx - n.x) * 0.18;
+        n.y += (my - n.y) * 0.18;
+      }
+    }
+  };
+  applyResectionSprings(state.smallNodes, SMALL_SEG_LENGTH, state.resectedSmallRanges ?? []);
+  applyResectionSprings(state.largeNodes, LARGE_SEG_LENGTH, state.resectedLargeRanges ?? []);
 
   // --- Separation constraint between small and large intestine ---
   for (let si = 0; si < state.smallNodes.length; si++) {

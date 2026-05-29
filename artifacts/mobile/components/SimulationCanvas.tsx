@@ -222,7 +222,7 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
     insertViaNavel, retractTool, setNavelPierced, setEnemaHeadIdx,
     setEnemaInSmall, setEnemaSmallHeadIdx, setEnemaTarget,
     setSiliconeTarget, setBeadsTarget, setEggTarget,
-    toggleMesenteryNode,
+    toggleMesenteryNode, setResectionSelection,
   } = useGame();
   const lastDialogueTime = useRef(0);
   const isDragging = useRef(false);
@@ -257,6 +257,7 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
     setNavelPierced,
     triggerDialogue,
     toggleMesenteryNode,
+    setResectionSelection,
   });
   hrRef.current.state = state;
   hrRef.current.toPhysicsCoords = toPhysicsCoords;
@@ -272,6 +273,7 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
   hrRef.current.setNavelPierced = setNavelPierced;
   hrRef.current.triggerDialogue = triggerDialogue;
   hrRef.current.toggleMesenteryNode = toggleMesenteryNode;
+  hrRef.current.setResectionSelection = setResectionSelection;
 
   const findNearestLargeNodeIdx = (pos: { x: number; y: number }) => {
     let best = -1, bestD = 9999;
@@ -301,6 +303,30 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
       isDragging.current = true;
       const { locationX, locationY } = evt.nativeEvent;
       const pos = tpc(locationX, locationY);
+
+      // Resection selection mode: tapping near any intestine segment midpoint starts selection
+      if (s.resectionSelectionMode) {
+        const srs = hrRef.current.setResectionSelection;
+        const smallNodes = physicsRef.current.smallNodes;
+        let bestI = -1, bestD = 9999, bestType: 'small' | 'large' = 'small';
+        for (let i = 0; i < smallNodes.length - 1; i++) {
+          const mx = (smallNodes[i].x + smallNodes[i + 1].x) / 2;
+          const my = (smallNodes[i].y + smallNodes[i + 1].y) / 2;
+          const d = Math.hypot(mx - pos.x, my - pos.y);
+          if (d < bestD) { bestD = d; bestI = i; bestType = 'small'; }
+        }
+        const largeNodes = physicsRef.current.largeNodes;
+        for (let i = 0; i < largeNodes.length - 1; i++) {
+          const mx = (largeNodes[i].x + largeNodes[i + 1].x) / 2;
+          const my = (largeNodes[i].y + largeNodes[i + 1].y) / 2;
+          const d = Math.hypot(mx - pos.x, my - pos.y);
+          if (d < bestD) { bestD = d; bestI = i; bestType = 'large'; }
+        }
+        if (bestI >= 0 && bestD < 55) {
+          srs(bestType, bestI, bestI);
+        }
+        return;
+      }
 
       // Mesentery selection mode: tapping near any intestine node toggles selection
       if (s.mesenterySelectionMode) {
@@ -494,6 +520,25 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
       const { state: s, toPhysicsCoords: tpc, triggerDialogue: td } = hrRef.current;
       const { locationX, locationY } = evt.nativeEvent;
       const pos = tpc(locationX, locationY);
+
+      // Resection selection mode: dragging updates end segment
+      if (s.resectionSelectionMode && s.resectionIntestine && s.resectionStartSeg >= 0) {
+        const srs = hrRef.current.setResectionSelection;
+        const intestine = s.resectionIntestine;
+        const startSeg = s.resectionStartSeg;
+        const maxSeg = s.maxResectionSegments;
+        const nodes = intestine === 'small' ? physicsRef.current.smallNodes : physicsRef.current.largeNodes;
+        let bestI = startSeg, bestD = 9999;
+        for (let i = 0; i < nodes.length - 1; i++) {
+          const mx = (nodes[i].x + nodes[i + 1].x) / 2;
+          const my = (nodes[i].y + nodes[i + 1].y) / 2;
+          const d = Math.hypot(mx - pos.x, my - pos.y);
+          if (d < bestD) { bestD = d; bestI = i; }
+        }
+        const clampedEnd = Math.min(startSeg + maxSeg - 1, Math.max(startSeg, bestI));
+        srs(intestine, startSeg, clampedEnd);
+        return;
+      }
 
       // 长硅胶棒 move — drag shifts intestine near head; updates target
       if (s.activeTool === TOOLS.SILICONE_ROD) {
@@ -696,6 +741,8 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
     smallTransplantColor, largeTransplantColor,
     mesenterySelectionMode, mesenterySelectedNodes,
     parasites,
+    resectionSelectionMode, resectionIntestine, resectionStartSeg, resectionEndSeg,
+    resectedSmallRanges, resectedLargeRanges,
   } = state;
   const isInternal = state.viewMode === 'internal';
 
@@ -1461,6 +1508,82 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
                   strokeWidth={isSelected ? 1.2 : 0.7} />
               );
             })}
+
+            {/* ===== RESECTION SELECTION HIGHLIGHT ===== */}
+            {resectionSelectionMode && resectionIntestine === 'small' && resectionStartSeg >= 0 && (() => {
+              const startIdx = Math.min(resectionStartSeg, resectionEndSeg);
+              const endIdx = Math.max(resectionStartSeg, resectionEndSeg);
+              return renderSmallNodes.map((n, i) => {
+                if (i < startIdx || i > endIdx + 1) return null;
+                const nA = renderSmallNodes[i];
+                const nB = renderSmallNodes[i + 1];
+                if (!nA) return null;
+                const isEndpoint = i === startIdx || i === endIdx + 1;
+                return (
+                  <Circle key={`rsel-sm-${i}`}
+                    cx={nB ? (nA.x + nB.x) / 2 : nA.x}
+                    cy={nB ? (nA.y + nB.y) / 2 : nA.y}
+                    r={SMALL_RADIUS + 5}
+                    fill={isEndpoint ? 'rgba(220,60,60,0.30)' : 'rgba(220,60,60,0.18)'}
+                    stroke="rgba(220,60,60,0.80)"
+                    strokeWidth={isEndpoint ? 1.5 : 0.8} />
+                );
+              });
+            })()}
+            {resectionSelectionMode && resectionIntestine === 'large' && resectionStartSeg >= 0 && (() => {
+              const startIdx = Math.min(resectionStartSeg, resectionEndSeg);
+              const endIdx = Math.max(resectionStartSeg, resectionEndSeg);
+              return renderLargeNodes.map((n, i) => {
+                if (i < startIdx || i > endIdx + 1) return null;
+                const nA = renderLargeNodes[i];
+                const nB = renderLargeNodes[i + 1];
+                if (!nA) return null;
+                const isEndpoint = i === startIdx || i === endIdx + 1;
+                return (
+                  <Circle key={`rsel-lg-${i}`}
+                    cx={nB ? (nA.x + nB.x) / 2 : nA.x}
+                    cy={nB ? (nA.y + nB.y) / 2 : nA.y}
+                    r={LARGE_RADIUS + 6}
+                    fill={isEndpoint ? 'rgba(220,60,60,0.30)' : 'rgba(220,60,60,0.18)'}
+                    stroke="rgba(220,60,60,0.80)"
+                    strokeWidth={isEndpoint ? 1.5 : 0.8} />
+                );
+              });
+            })()}
+
+            {/* ===== ALREADY-RESECTED RANGES — faded ===== */}
+            {(resectedSmallRanges ?? []).map((range, ri) =>
+              renderSmallNodes.slice(range.start, range.end + 2).map((n, j) => {
+                const i = range.start + j;
+                const nA = renderSmallNodes[i];
+                const nB = renderSmallNodes[i + 1];
+                if (!nA || !nB || i > range.end) return null;
+                return (
+                  <Circle key={`rsec-sm-${ri}-${i}`}
+                    cx={(nA.x + nB.x) / 2} cy={(nA.y + nB.y) / 2}
+                    r={SMALL_RADIUS - 1}
+                    fill="rgba(0,0,0,0.50)"
+                    stroke="rgba(160,30,30,0.60)"
+                    strokeWidth={1} />
+                );
+              })
+            )}
+            {(resectedLargeRanges ?? []).map((range, ri) =>
+              renderLargeNodes.slice(range.start, range.end + 2).map((n, j) => {
+                const i = range.start + j;
+                const nA = renderLargeNodes[i];
+                const nB = renderLargeNodes[i + 1];
+                if (!nA || !nB || i > range.end) return null;
+                return (
+                  <Circle key={`rsec-lg-${ri}-${i}`}
+                    cx={(nA.x + nB.x) / 2} cy={(nA.y + nB.y) / 2}
+                    r={LARGE_RADIUS - 1}
+                    fill="rgba(0,0,0,0.50)"
+                    stroke="rgba(160,30,30,0.60)"
+                    strokeWidth={1} />
+                );
+              })
+            )}
 
             {/* Debug overlays — small intestine */}
             {state.debugMode && renderSmallSegs.map((seg, i) => {

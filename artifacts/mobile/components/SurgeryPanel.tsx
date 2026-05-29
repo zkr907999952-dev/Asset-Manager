@@ -10,6 +10,12 @@ const STEP_LABELS: Record<number, string> = {
   3: '第三步：缝合修复…',
 };
 
+const RESECTION_STEP_LABELS: Record<number, string> = {
+  1: '第一步：切断两端肠管…',
+  2: '第二步：拉拢肠系膜…',
+  3: '第三步：封闭切口缝合…',
+};
+
 interface SurgBtnProps {
   label: string;
   subLabel: string;
@@ -58,6 +64,7 @@ export function SurgeryPanel() {
     transplantSmallIntestine, transplantLargeIntestine, transplantAllIntestines,
     enterMesenterySelection, executeMesenterySelection, cancelMesenterySelection,
     performParasiteSurgery,
+    enterResectionSelection, cancelResectionSelection, performResectionSurgery,
   } = useGame();
 
   const inSelMode = state.mesenterySelectionMode;
@@ -120,6 +127,63 @@ export function SurgeryPanel() {
       <SurgButton icon="refresh-cw" label="小肠移植手术" subLabel="重置小肠（初始健康85%，随机色调）" onPress={transplantSmallIntestine} variant="danger" />
       <SurgButton icon="refresh-cw" label="大肠移植手术" subLabel="重置大肠（初始健康85%，随机色调）" onPress={transplantLargeIntestine} variant="danger" />
       <SurgButton icon="refresh-cw" label="全肠移植手术" subLabel="重置全部肠道（初始健康85%，随机色调）" onPress={transplantAllIntestines} variant="danger" />
+
+      <Text style={[styles.section, { color: colors.mutedForeground }]}>肠段切除</Text>
+      {state.resectionSurgeryPhase === 0 ? (
+        !state.resectionSelectionMode ? (
+          <SurgButton
+            icon="scissors"
+            label="肠段切除手术"
+            subLabel={state.resectedCount > 0
+              ? `已切除 ${state.resectedCount} 段 — 可继续切除更多`
+              : '拖拽选择需切除的肠段（最多6段）'}
+            onPress={enterResectionSelection}
+          />
+        ) : (
+          <View>
+            <View style={[styles.selBanner, { borderColor: '#e0505088', backgroundColor: '#e0505014' }]}>
+              <Feather name="scissors" size={12} color="#e05050" />
+              <Text style={[styles.selText, { color: '#e05050' }]}>
+                切除选区：{state.resectionIntestine === 'small' ? '小肠' : state.resectionIntestine === 'large' ? '大肠' : '—'}
+                {state.resectionStartSeg >= 0 && state.resectionEndSeg >= 0
+                  ? `  第 ${state.resectionStartSeg + 1}–${state.resectionEndSeg + 1} 段（共 ${state.resectionEndSeg - state.resectionStartSeg + 1} 段）`
+                  : '\n在模拟画面中拖拽选择肠段范围'}
+              </Text>
+            </View>
+            <SurgButton
+              icon="check-circle"
+              label="执行切除"
+              subLabel={state.resectionStartSeg >= 0
+                ? `切除选中 ${state.resectionEndSeg - state.resectionStartSeg + 1} 段肠管`
+                : '请先选择肠段'}
+              onPress={state.resectionStartSeg >= 0 ? performResectionSurgery : () => {}}
+              variant={state.resectionStartSeg >= 0 ? 'danger' : 'disabled'}
+            />
+            <SurgButton icon="x-circle" label="取消选区" subLabel="退出切除选区模式" onPress={cancelResectionSelection} variant="danger" />
+          </View>
+        )
+      ) : (
+        <View style={[styles.surgProgress, { borderColor: '#e0505088', backgroundColor: '#e0505014' }]}>
+          <Feather name="loader" size={12} color="#e05050" />
+          <View style={{ flex: 1, marginLeft: 8 }}>
+            <Text style={[styles.surgProgressTitle, { color: '#e05050' }]}>肠段切除手术进行中</Text>
+            <Text style={[styles.surgProgressSub, { color: colors.mutedForeground }]}>
+              {RESECTION_STEP_LABELS[state.resectionSurgeryPhase] ?? '手术中…'}
+            </Text>
+            <View style={[styles.stepDots, { marginTop: 5 }]}>
+              {[1, 2, 3].map(s => (
+                <View key={s} style={[
+                  styles.stepDot,
+                  {
+                    backgroundColor: s <= state.resectionSurgeryPhase ? '#e05050' : `${colors.mutedForeground}44`,
+                    borderColor: s === state.resectionSurgeryPhase ? '#e05050' : 'transparent',
+                  }
+                ]} />
+              ))}
+            </View>
+          </View>
+        </View>
+      )}
 
       <Text style={[styles.section, { color: colors.mutedForeground }]}>精细手术</Text>
       {!inSelMode ? (

@@ -9,6 +9,7 @@ import {
   BREATH_AMPLITUDE_DEFAULT, EXPANSION_SCALE_DEFAULT,
   PRESSURE_DIFFUSION_RATE_DEFAULT,
   PERISTALSIS_WAVE_AMPLITUDE_DEFAULT, PERISTALSIS_WAVE_SPEED_DEFAULT,
+  MAX_RESECTION_SEGMENTS_DEFAULT,
 } from '../constants/gameConfig';
 import { getRandomDialogue, type DialogueTrigger } from '../constants/dialogues';
 import type { ComaState } from '../components/HeartRateMonitor';
@@ -175,6 +176,16 @@ export interface GameUIState {
   parasiteSurgeryPhase: 0 | 1 | 2 | 3;
   parasiteDamageIntervalSec: number;
   parasitePerforationChance: number;
+  // Resection surgery
+  resectionSelectionMode: boolean;
+  resectionIntestine: 'small' | 'large' | null;
+  resectionStartSeg: number;
+  resectionEndSeg: number;
+  resectionSurgeryPhase: 0 | 1 | 2 | 3;
+  maxResectionSegments: number;
+  resectedSmallRanges: { start: number; end: number }[];
+  resectedLargeRanges: { start: number; end: number }[];
+  resectedCount: number;
 }
 
 interface GameContextType {
@@ -234,6 +245,11 @@ interface GameContextType {
   setParasiteDamageInterval: (v: number) => void;
   setParasitePerforationChance: (v: number) => void;
   performParasiteSurgery: () => void;
+  enterResectionSelection: () => void;
+  cancelResectionSelection: () => void;
+  performResectionSurgery: () => void;
+  setResectionSelection: (intestine: 'small' | 'large', startSeg: number, endSeg: number) => void;
+  setMaxResectionSegments: (v: number) => void;
 }
 
 const DEFAULT_TOOL_POS = { x: CAVITY_CX, y: CAVITY_CY - 40 };
@@ -305,6 +321,11 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
   const parasiteDamageIntervalRef = useRef(12);
   const parasitePerforationChanceRef = useRef(0.25);
   const parasiteSurgeryPhaseRef = useRef<0 | 1 | 2 | 3>(0);
+  const maxResectionSegmentsRef = useRef(MAX_RESECTION_SEGMENTS_DEFAULT);
+  const resectionSurgeryPhaseRef = useRef<0 | 1 | 2 | 3>(0);
+  const resectionIntestineRef = useRef<'small' | 'large' | null>(null);
+  const resectionStartSegRef = useRef(-1);
+  const resectionEndSegRef = useRef(-1);
   const lastAutoEggTimeRef = useRef<number>(0);
 
   const [state, setState] = useState<GameUIState>({
@@ -368,6 +389,15 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     parasiteSurgeryPhase: 0,
     parasiteDamageIntervalSec: 12,
     parasitePerforationChance: 0.25,
+    resectionSelectionMode: false,
+    resectionIntestine: null,
+    resectionStartSeg: -1,
+    resectionEndSeg: -1,
+    resectionSurgeryPhase: 0,
+    maxResectionSegments: MAX_RESECTION_SEGMENTS_DEFAULT,
+    resectedSmallRanges: [],
+    resectedLargeRanges: [],
+    resectedCount: 0,
   });
 
   const syncFromPhysics = useCallback(() => {
@@ -1678,17 +1708,23 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       b: Math.max(70, Math.min(180, 150 + Math.round((Math.random() - 0.5) * d * 2))),
     };
     p.smallTransplantColor = color;
-    setState(prev => ({
-      ...prev,
-      smallTransplantColor: color,
-      repairMarks: [],
-      sutureMarks: [],
-      smallMesenteryDisabled: [],
-      smallTransplantCount: prev.smallTransplantCount + 1,
-      renderSmallNodes: p.smallNodes.map(n => ({ x: n.x, y: n.y })),
-      renderSmallSegs: p.smallSegs.map(s => ({ ...s })),
-      parasites: [],
-    }));
+    p.resectedSmallRanges = [];
+    setState(prev => {
+      const newLarge = (p.resectedLargeRanges ?? []).reduce((a, r) => a + (r.end - r.start + 1), 0);
+      return {
+        ...prev,
+        smallTransplantColor: color,
+        repairMarks: [],
+        sutureMarks: [],
+        smallMesenteryDisabled: [],
+        smallTransplantCount: prev.smallTransplantCount + 1,
+        renderSmallNodes: p.smallNodes.map(n => ({ x: n.x, y: n.y })),
+        renderSmallSegs: p.smallSegs.map(s => ({ ...s })),
+        parasites: [],
+        resectedSmallRanges: [],
+        resectedCount: newLarge,
+      };
+    });
     triggerDialogueRef.current('surg_small_transplant');
   }, []);
 
@@ -1707,16 +1743,22 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       b: Math.max(50, Math.min(150, 92 + Math.round((Math.random() - 0.5) * d * 2))),
     };
     p.largeTransplantColor = color;
-    setState(prev => ({
-      ...prev,
-      largeTransplantColor: color,
-      largeRepairMarks: [],
-      largeSutureMarks: [],
-      mesenteryDisabled: [],
-      largeTransplantCount: prev.largeTransplantCount + 1,
-      renderLargeNodes: p.largeNodes.map(n => ({ x: n.x, y: n.y })),
-      renderLargeSegs: p.largeSegs.map(s => ({ ...s })),
-    }));
+    p.resectedLargeRanges = [];
+    setState(prev => {
+      const newSmall = (p.resectedSmallRanges ?? []).reduce((a, r) => a + (r.end - r.start + 1), 0);
+      return {
+        ...prev,
+        largeTransplantColor: color,
+        largeRepairMarks: [],
+        largeSutureMarks: [],
+        mesenteryDisabled: [],
+        largeTransplantCount: prev.largeTransplantCount + 1,
+        renderLargeNodes: p.largeNodes.map(n => ({ x: n.x, y: n.y })),
+        renderLargeSegs: p.largeSegs.map(s => ({ ...s })),
+        resectedLargeRanges: [],
+        resectedCount: newSmall,
+      };
+    });
     triggerDialogueRef.current('surg_large_transplant');
   }, []);
 
@@ -1744,6 +1786,8 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     };
     p.smallTransplantColor = sc;
     p.largeTransplantColor = lc;
+    p.resectedSmallRanges = [];
+    p.resectedLargeRanges = [];
     parasiteRef.current = [];
     setState(prev => ({
       ...prev,
@@ -1760,6 +1804,9 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       renderSmallSegs: p.smallSegs.map(s => ({ ...s })),
       renderLargeSegs: p.largeSegs.map(s => ({ ...s })),
       parasites: [],
+      resectedSmallRanges: [],
+      resectedLargeRanges: [],
+      resectedCount: 0,
     }));
     triggerDialogueRef.current('surg_full_transplant');
   }, []);
@@ -1985,9 +2032,146 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         setTimeout(() => {
           parasiteSurgeryPhaseRef.current = 0;
           setState(prev => ({ ...prev, parasiteSurgeryPhase: 0 }));
-        }, 2000);
-      }, 2000);
-    }, 2000);
+        }, 4000);
+      }, 4000);
+    }, 4000);
+  }, []);
+
+  const enterResectionSelection = useCallback(() => {
+    setState(prev => ({
+      ...prev,
+      resectionSelectionMode: true,
+      resectionStartSeg: -1,
+      resectionEndSeg: -1,
+      resectionIntestine: null,
+    }));
+    resectionIntestineRef.current = null;
+    resectionStartSegRef.current = -1;
+    resectionEndSegRef.current = -1;
+  }, []);
+
+  const cancelResectionSelection = useCallback(() => {
+    setState(prev => ({
+      ...prev,
+      resectionSelectionMode: false,
+      resectionStartSeg: -1,
+      resectionEndSeg: -1,
+      resectionIntestine: null,
+    }));
+    resectionIntestineRef.current = null;
+    resectionStartSegRef.current = -1;
+    resectionEndSegRef.current = -1;
+  }, []);
+
+  const setResectionSelection = useCallback((intestine: 'small' | 'large', startSeg: number, endSeg: number) => {
+    resectionIntestineRef.current = intestine;
+    resectionStartSegRef.current = startSeg;
+    resectionEndSegRef.current = endSeg;
+    setState(prev => ({
+      ...prev,
+      resectionIntestine: intestine,
+      resectionStartSeg: startSeg,
+      resectionEndSeg: endSeg,
+    }));
+  }, []);
+
+  const setMaxResectionSegments = useCallback((v: number) => {
+    maxResectionSegmentsRef.current = v;
+    setState(prev => ({ ...prev, maxResectionSegments: v }));
+  }, []);
+
+  const performResectionSurgery = useCallback(() => {
+    if (resectionSurgeryPhaseRef.current !== 0) return;
+    const intestine = resectionIntestineRef.current;
+    const startSeg = Math.min(resectionStartSegRef.current, resectionEndSegRef.current);
+    const endSeg = Math.max(resectionStartSegRef.current, resectionEndSegRef.current);
+    if (startSeg === -1 || endSeg === -1 || !intestine) return;
+
+    const p = physicsRef.current;
+    const td = triggerDialogueRef.current;
+    const segs = intestine === 'small' ? p.smallSegs : p.largeSegs;
+    const nodes = intestine === 'small' ? p.smallNodes : p.largeNodes;
+
+    resectionSurgeryPhaseRef.current = 1;
+    setState(prev => ({ ...prev, resectionSelectionMode: false, resectionSurgeryPhase: 1 }));
+    td('surg_resection_start');
+    td('surg_resection_step1');
+
+    // Step 1: mark break points, apply pain
+    if (startSeg > 0 && startSeg - 1 < segs.length) segs[startSeg - 1].broken = true;
+    if (endSeg < segs.length) segs[endSeg].broken = true;
+    for (let i = startSeg; i <= endSeg && i < segs.length; i++) {
+      segs[i].pain = Math.min(100, segs[i].pain + 25);
+      segs[i].health = Math.max(0, segs[i].health - 8);
+    }
+
+    setTimeout(() => {
+      if (resectionSurgeryPhaseRef.current !== 1) return;
+      resectionSurgeryPhaseRef.current = 2;
+      setState(prev => ({ ...prev, resectionSurgeryPhase: 2 }));
+      td('surg_resection_step2');
+
+      // Step 2: redistribute mesentery rest positions around the gap
+      const nBefore = 4;
+      const nAfter = 4;
+      const nodeA = nodes[Math.max(0, startSeg - 1)];
+      const nodeB = nodes[Math.min(nodes.length - 1, endSeg + 1)];
+      if (nodeA && nodeB) {
+        const mx = (nodeA.x + nodeB.x) / 2;
+        const my = (nodeA.y + nodeB.y) / 2;
+        for (let i = Math.max(0, startSeg - nBefore); i < startSeg; i++) {
+          nodes[i].rx = mx + (nodes[i].rx - mx) * 0.6;
+          nodes[i].ry = my + (nodes[i].ry - my) * 0.6;
+        }
+        for (let i = endSeg + 1; i <= Math.min(nodes.length - 1, endSeg + nAfter); i++) {
+          nodes[i].rx = mx + (nodes[i].rx - mx) * 0.6;
+          nodes[i].ry = my + (nodes[i].ry - my) * 0.6;
+        }
+      }
+
+      setTimeout(() => {
+        if (resectionSurgeryPhaseRef.current !== 2) return;
+        resectionSurgeryPhaseRef.current = 3;
+        setState(prev => ({ ...prev, resectionSurgeryPhase: 3 }));
+        td('surg_resection_step3');
+
+        // Step 3: mark segments resected, clear breaks, register resection range
+        for (let i = startSeg; i <= endSeg && i < segs.length; i++) {
+          segs[i].resected = true;
+          segs[i].broken = false;
+        }
+        if (startSeg > 0 && startSeg - 1 < segs.length) segs[startSeg - 1].broken = false;
+        if (endSeg < segs.length) segs[endSeg].broken = false;
+
+        const newRange = { start: startSeg, end: endSeg };
+        if (intestine === 'small') {
+          p.resectedSmallRanges = [...(p.resectedSmallRanges ?? []), newRange];
+        } else {
+          p.resectedLargeRanges = [...(p.resectedLargeRanges ?? []), newRange];
+        }
+        const allSmallResected = (p.resectedSmallRanges ?? []).reduce((a, r) => a + (r.end - r.start + 1), 0);
+        const allLargeResected = (p.resectedLargeRanges ?? []).reduce((a, r) => a + (r.end - r.start + 1), 0);
+
+        setState(prev => ({
+          ...prev,
+          resectionSurgeryPhase: 3,
+          resectionStartSeg: -1,
+          resectionEndSeg: -1,
+          resectionIntestine: null,
+          resectedSmallRanges: [...(p.resectedSmallRanges ?? [])],
+          resectedLargeRanges: [...(p.resectedLargeRanges ?? [])],
+          resectedCount: allSmallResected + allLargeResected,
+        }));
+        resectionStartSegRef.current = -1;
+        resectionEndSegRef.current = -1;
+        resectionIntestineRef.current = null;
+
+        setTimeout(() => {
+          resectionSurgeryPhaseRef.current = 0;
+          setState(prev => ({ ...prev, resectionSurgeryPhase: 0 }));
+        }, 4000);
+      }, 4000);
+    }, 4000);
   }, []);
 
   return (
@@ -2011,6 +2195,8 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       enterMesenterySelection, executeMesenterySelection, cancelMesenterySelection,
       toggleMesenteryNode,
       takeParasiteEgg, setHatchDuration, setParasiteDamageInterval, setParasitePerforationChance, performParasiteSurgery,
+      enterResectionSelection, cancelResectionSelection, performResectionSurgery,
+      setResectionSelection, setMaxResectionSegments,
     }}>
       {children}
     </GameContext.Provider>

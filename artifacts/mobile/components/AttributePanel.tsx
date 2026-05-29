@@ -51,6 +51,7 @@ function healthColor(h: number): string {
 }
 
 function segBgColor(seg: RenderSegment): string {
+  if ((seg as any).resected) return '#111111';
   if (seg.broken) return '#cc2244';
   if (seg.ruptured) return '#cc6622';
   if (seg.perforated) return '#cc9922';
@@ -100,15 +101,25 @@ function SegmentMap({ segs, label, accentColor }: SegmentMapProps) {
         <View key={rowIdx} style={styles.segMapRow}>
           {rowSegs.map((seg, colIdx) => {
             const globalIdx = rowIdx * COLS + colIdx;
+            const isResected = !!(seg as any).resected;
             const bg = segBgColor(seg);
             const painAlpha = Math.round(seg.pain * 0.6).toString(16).padStart(2, '0');
             return (
-              <View key={globalIdx} style={[styles.segCell, { backgroundColor: bg }]}>
-                <View style={[styles.segPainOverlay, { backgroundColor: `#cc0000${painAlpha}` }]} />
-                <View style={[styles.segHealthBar, {
-                  height: Math.round(seg.health / 100 * 10),
-                  backgroundColor: '#ffffff44',
-                }]} />
+              <View key={globalIdx} style={[styles.segCell, { backgroundColor: bg, overflow: 'hidden' }]}>
+                {isResected ? (
+                  <>
+                    <View style={styles.resectedDiagA} />
+                    <View style={styles.resectedDiagB} />
+                  </>
+                ) : (
+                  <>
+                    <View style={[styles.segPainOverlay, { backgroundColor: `#cc0000${painAlpha}` }]} />
+                    <View style={[styles.segHealthBar, {
+                      height: Math.round(seg.health / 100 * 10),
+                      backgroundColor: '#ffffff44',
+                    }]} />
+                  </>
+                )}
               </View>
             );
           })}
@@ -185,6 +196,9 @@ export function AttributePanel() {
         color={state.smallTransplantCount > 0 ? colors.pleasure : colors.mutedForeground} />
       <StatRow label="大肠移植次数" value={`${state.largeTransplantCount} 次`}
         color={state.largeTransplantCount > 0 ? colors.pleasure : colors.mutedForeground} />
+      <StatRow label="已切除肠段" value={`${state.resectedCount ?? 0} 段`}
+        color={(state.resectedCount ?? 0) > 0 ? '#cc3333' : colors.mutedForeground}
+        highlight={(state.resectedCount ?? 0) > 0} />
 
       <View style={[styles.divider, { backgroundColor: colors.border }]} />
       <Text style={[styles.sectionTitle, { color: colors.primary }]}>肠道平均状态</Text>
@@ -203,9 +217,10 @@ export function AttributePanel() {
           ['#cc5522', '危险'],
           ['#cc2244', '断裂'],
           ['#cc6622', '穿孔'],
+          ['#111111', '切除'],
         ] as [string, string][]).map(([c, l]) => (
           <View key={l} style={styles.legendItem}>
-            <View style={[styles.legendDot, { backgroundColor: c }]} />
+            <View style={[styles.legendDot, { backgroundColor: c, borderColor: l === '切除' ? '#cc3333' : 'transparent', borderWidth: l === '切除' ? 1 : 0 }]} />
             <Text style={[styles.legendText, { color: colors.mutedForeground }]}>{l}</Text>
           </View>
         ))}
@@ -329,6 +344,24 @@ const styles = StyleSheet.create({
     borderRadius: 2,
     overflow: 'hidden',
     justifyContent: 'flex-end',
+  },
+  resectedDiagA: {
+    position: 'absolute',
+    width: 20,
+    height: 1.5,
+    backgroundColor: '#cc3333',
+    top: 6,
+    left: -3,
+    transform: [{ rotate: '45deg' }],
+  },
+  resectedDiagB: {
+    position: 'absolute',
+    width: 20,
+    height: 1.5,
+    backgroundColor: '#cc3333',
+    top: 6,
+    left: -3,
+    transform: [{ rotate: '-45deg' }],
   },
   segPainOverlay: {
     position: 'absolute',

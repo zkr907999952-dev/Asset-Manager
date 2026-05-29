@@ -80,6 +80,7 @@ export function SettingsScreen({ onMenuPress }: Props) {
     setPeriSpeed, setPeriWaveAmplitude, setPeriWaveSpeed,
     setBreathAmplitude, setExpansionScale, setPressureDiffusionRate,
     setDrugDuration, setHatchDuration, setParasiteDamageInterval, setParasitePerforationChance,
+    setMaxResectionSegments,
   } = useGame();
   const topPad = Platform.OS === 'web' ? 67 : insets.top;
   const bottomPad = Platform.OS === 'web' ? 34 : insets.bottom;
@@ -197,6 +198,19 @@ export function SettingsScreen({ onMenuPress }: Props) {
             min={0} max={1} step={0.01}
             onValueChange={setParasitePerforationChance}
             trackColor="#cc4444"
+          />
+        </View>
+
+        {/* Resection system */}
+        <Text style={[styles.sectionTitle, { color: colors.primary }]}>肠段切除</Text>
+        <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
+          <SliderRow
+            label="最大切除段数"
+            value={state.maxResectionSegments}
+            displayValue={`${state.maxResectionSegments} 段`}
+            min={1} max={12} step={1}
+            onValueChange={setMaxResectionSegments}
+            trackColor="#cc3333"
           />
         </View>
 
