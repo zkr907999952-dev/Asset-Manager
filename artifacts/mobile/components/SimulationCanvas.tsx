@@ -1321,6 +1321,24 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
                 if (segments.length === 0) return null;
                 const head = segments[0];
 
+                // Compute true forward direction: from body toward head.
+                // This automatically reflects the actual movement direction,
+                // including reversals, so the head always faces the right way.
+                let rawFwdX: number, rawFwdY: number;
+                if (segments.length > 1) {
+                  rawFwdX = segments[0].x - segments[1].x;
+                  rawFwdY = segments[0].y - segments[1].y;
+                } else {
+                  // Single segment: use intestine tangent direction (ny, -nx)
+                  rawFwdX = head.ny;
+                  rawFwdY = -head.nx;
+                }
+                const fwdLen = Math.hypot(rawFwdX, rawFwdY) || 1;
+                const fdx = rawFwdX / fwdLen;  // forward unit vector
+                const fdy = rawFwdY / fwdLen;
+                const ldx = -fdy;              // lateral unit vector (perpendicular to forward)
+                const ldy = fdx;
+
                 return (
                   <G key={`parasite-${parasite.id}`}>
                     {/* Body connector lines */}
@@ -1357,15 +1375,15 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
                         stroke={`rgba(${Math.max(0,wr-30)},${Math.max(0,wg-30)},${Math.max(0,wb-25)},${0.25 * alpha})`}
                         strokeWidth={0.5} />
                     ))}
-                    {/* Eyes */}
-                    <Circle cx={head.x + head.nx * 1.8 - head.ny * 1.5}
-                      cy={head.y + head.ny * 1.8 + head.nx * 1.5} r={1.0}
+                    {/* Eyes — positioned in front of head, side by side along the lateral axis */}
+                    <Circle cx={head.x + fdx * 2.2 + ldx * 1.6}
+                      cy={head.y + fdy * 2.2 + ldy * 1.6} r={1.0}
                       fill="rgba(18,10,8,0.95)" />
-                    <Circle cx={head.x + head.nx * 1.8 + head.ny * 1.5}
-                      cy={head.y + head.ny * 1.8 - head.nx * 1.5} r={1.0}
+                    <Circle cx={head.x + fdx * 2.2 - ldx * 1.6}
+                      cy={head.y + fdy * 2.2 - ldy * 1.6} r={1.0}
                       fill="rgba(18,10,8,0.95)" />
-                    {/* Head highlight */}
-                    <Ellipse cx={head.x - head.nx * 1.5} cy={head.y - head.ny * 1.5}
+                    {/* Head highlight — in the forward direction */}
+                    <Ellipse cx={head.x + fdx * 1.8} cy={head.y + fdy * 1.8}
                       rx={2.2} ry={1.4}
                       fill={`rgba(255,255,255,0.22)`} />
                   </G>
