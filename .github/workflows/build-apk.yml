@@ -2,27 +2,23 @@ name: Build Android APK (Online)
 
 on:
   workflow_dispatch:
-  push:
-    branches: [ main, master ]
 
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout code
+      - name: Checkout
         uses: actions/checkout@v5
 
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v4
-        with:
-          version: 9
-          run_install: false
-
-      - name: Setup Node.js
+      - name: Setup Node.js 24
         uses: actions/setup-node@v5
         with:
-          node-version: 22
-          cache: 'pnpm'
+          node-version: 24
+
+      - name: Enable pnpm via Corepack
+        run: |
+          corepack enable
+          corepack prepare pnpm@9 --activate
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
@@ -33,7 +29,7 @@ jobs:
           eas-version: latest
           token: ${{ secrets.EXPO_TOKEN }}
 
-      - name: Build Android APK (Preview)
+      - name: Build Android APK
         working-directory: artifacts/mobile
         run: eas build -p android --profile preview --non-interactive
 
