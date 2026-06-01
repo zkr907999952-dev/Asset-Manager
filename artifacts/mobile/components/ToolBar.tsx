@@ -119,7 +119,7 @@ export function ToolBar() {
   const inSelMode = state.mesenterySelectionMode;
 
   return (
-    <View style={styles.wrapper} collapsable={false}>
+    <View style={[styles.wrapper, { pointerEvents: 'box-none' }]} collapsable={false}>
       {/* Tools panel */}
       <Animated.View
         style={[styles.panel, { top: 0, transform: [{ translateX: toolsX }], backgroundColor: PANEL_BG, borderColor: `${colors.border}cc`, pointerEvents: openTab === 'tools' ? 'auto' : 'none' }]}

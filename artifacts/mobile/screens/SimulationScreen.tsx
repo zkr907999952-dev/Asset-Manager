@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useCallback } from 'react';
+import React, { useEffect, useRef, useCallback, useState } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, Platform } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
@@ -27,7 +27,7 @@ export function SimulationScreen({ onMenuPress }: Props) {
   } = useGame();
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const frameCount = useRef(0);
-  const canvasLayout = useRef<{ x: number; y: number; width: number; height: number } | null>(null);
+  const [canvasLayout, setCanvasLayout] = useState<{ x: number; y: number; width: number; height: number } | null>(null);
   const lastDialogueTrigger = useRef<Record<string, number>>({});
 
   const avgPain = state.renderSmallSegs.length > 0
@@ -166,8 +166,8 @@ export function SimulationScreen({ onMenuPress }: Props) {
 
       <View style={styles.canvasArea}>
         <SimulationCanvas
-          canvasLayout={canvasLayout.current}
-          onLayout={layout => { canvasLayout.current = layout; }}
+          canvasLayout={canvasLayout}
+          onLayout={layout => { setCanvasLayout(layout); }}
         />
 
         {/* Status bars + ECG + status badges — transparent absolute overlay at top of canvas */}
