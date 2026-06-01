@@ -1,5 +1,5 @@
 import React, { useRef, useEffect } from 'react';
-import { View, Text, TouchableOpacity, Animated, StyleSheet, ScrollView } from 'react-native';
+import { View, Text, TouchableOpacity, Animated, StyleSheet, ScrollView, Platform } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { useColors } from '@/hooks/useColors';
 import { useGame } from '@/contexts/GameContext';
@@ -119,7 +119,10 @@ export function ToolBar() {
   const inSelMode = state.mesenterySelectionMode;
 
   return (
-    <View style={[styles.wrapper, { pointerEvents: 'box-none' }]} collapsable={false}>
+    <View
+      style={[styles.wrapper, Platform.select({ web: { pointerEvents: 'none' }, default: { pointerEvents: 'box-none' } }) as any]}
+      collapsable={false}
+    >
       {/* Tools panel */}
       <Animated.View
         style={[styles.panel, { top: 0, transform: [{ translateX: toolsX }], backgroundColor: PANEL_BG, borderColor: `${colors.border}cc`, pointerEvents: openTab === 'tools' ? 'auto' : 'none' }]}
@@ -160,6 +163,7 @@ export function ToolBar() {
                 backgroundColor: isOpen ? TAB_BG_OPEN : TAB_BG_CLOSED,
                 borderColor: isOpen ? `${colors.primary}cc` : `${colors.border}99`,
               },
+              Platform.OS === 'web' && { pointerEvents: 'auto' },
             ]}
             onPress={() => toggle(tab.id)}
             activeOpacity={0.7}
