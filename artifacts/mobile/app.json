@@ -24,11 +24,6 @@
       "package": "com.yufu.simulator",
       "versionCode": 1
     },
-    "plugins": [],
-    "extra": {
-      "eas": {
-        "projectId": "f982b32e-8b33-43bd-8c48-06795aa7122f"
-      }
-    }
+    "plugins": []
   }
 }
