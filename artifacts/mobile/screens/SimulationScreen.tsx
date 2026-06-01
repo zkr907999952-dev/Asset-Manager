@@ -171,7 +171,7 @@ export function SimulationScreen({ onMenuPress }: Props) {
         />
 
         {/* Status bars + ECG + status badges — transparent absolute overlay at top of canvas */}
-        <View style={styles.statusArea} pointerEvents="none">
+        <View style={[styles.statusArea, { pointerEvents: 'none' }]}>
           <StatusBars hp={state.hp} pleasure={state.pleasure} embedded />
           <View style={styles.ecgRow}>
             <HeartRateMonitor
@@ -197,7 +197,7 @@ export function SimulationScreen({ onMenuPress }: Props) {
 
         <ToolBar />
 
-        <View style={styles.bottomOverlay} pointerEvents="box-none">
+        <View style={[styles.bottomOverlay, { pointerEvents: 'box-none' }]}>
           <DialogueBox dialogue={state.currentDialogue} />
           <ToolControls />
         </View>

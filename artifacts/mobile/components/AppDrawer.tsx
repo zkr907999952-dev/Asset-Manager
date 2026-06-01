@@ -1,7 +1,7 @@
 import React, { useRef, useEffect } from 'react';
 import {
   View, Text, TouchableOpacity, Animated, StyleSheet,
-  Dimensions, TouchableWithoutFeedback, Platform,
+  Dimensions, Pressable, Platform,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useColors } from '@/hooks/useColors';
@@ -54,12 +54,14 @@ export function AppDrawer({ open, onClose }: Props) {
   return (
     <>
       {open && (
-        <TouchableWithoutFeedback onPress={onClose}>
+        <Pressable
+          onPress={onClose}
+          style={StyleSheet.absoluteFillObject}
+        >
           <Animated.View
             style={[styles.overlay, { opacity: overlayOpacity, backgroundColor: colors.overlay }]}
-            pointerEvents={open ? 'auto' : 'none'}
           />
-        </TouchableWithoutFeedback>
+        </Pressable>
       )}
       <Animated.View
         style={[
@@ -70,9 +72,9 @@ export function AppDrawer({ open, onClose }: Props) {
             borderRightColor: colors.drawerBorder,
             paddingTop: topPad + 16,
             paddingBottom: Platform.OS === 'web' ? 34 : insets.bottom + 16,
+            pointerEvents: open ? 'auto' : 'none',
           },
         ]}
-        pointerEvents={open ? 'auto' : 'none'}
       >
         <View style={styles.drawerHeader}>
           <Text style={[styles.appTitle, { color: colors.primary }]}>玉腹模拟器</Text>

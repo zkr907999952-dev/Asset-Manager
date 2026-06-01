@@ -295,7 +295,7 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
 
   const panResponder = useRef(PanResponder.create({
     onStartShouldSetPanResponder: () => true,
-    onMoveShouldSetPanResponder: () => true,
+    onMoveShouldSetPanResponder: () => isDragging.current,
     onPanResponderGrant: (evt) => {
       const { state: s, toPhysicsCoords: tpc, addElectrode: ae, setEnemaHeadIdx: sehi,
               insertViaNavel: ivn, setNavelPierced: snp, triggerDialogue: td,

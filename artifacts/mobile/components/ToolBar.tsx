@@ -10,6 +10,7 @@ import { SurgeryPanel } from './SurgeryPanel';
 const PANEL_WIDTH = 210;
 const TAB_WIDTH = 32;
 const PANEL_MAX_HEIGHT = 400;
+const WRAPPER_HEIGHT = 420;
 
 type TabId = 'tools' | 'commands' | 'surgery';
 
@@ -118,27 +119,24 @@ export function ToolBar() {
   const inSelMode = state.mesenterySelectionMode;
 
   return (
-    <View style={styles.wrapper} pointerEvents="box-none">
+    <View style={styles.wrapper} collapsable={false}>
       {/* Tools panel */}
       <Animated.View
-        style={[styles.panel, { top: 0, transform: [{ translateX: toolsX }], backgroundColor: PANEL_BG, borderColor: `${colors.border}cc` }]}
-        pointerEvents={openTab === 'tools' ? 'auto' : 'none'}
+        style={[styles.panel, { top: 0, transform: [{ translateX: toolsX }], backgroundColor: PANEL_BG, borderColor: `${colors.border}cc`, pointerEvents: openTab === 'tools' ? 'auto' : 'none' }]}
       >
         <ToolsContent onClose={() => setOpenTab(null)} />
       </Animated.View>
 
       {/* Commands panel */}
       <Animated.View
-        style={[styles.panel, { top: 0, transform: [{ translateX: commandsX }], backgroundColor: PANEL_BG, borderColor: `${colors.border}cc` }]}
-        pointerEvents={openTab === 'commands' ? 'auto' : 'none'}
+        style={[styles.panel, { top: 0, transform: [{ translateX: commandsX }], backgroundColor: PANEL_BG, borderColor: `${colors.border}cc`, pointerEvents: openTab === 'commands' ? 'auto' : 'none' }]}
       >
         <CommandPanel />
       </Animated.View>
 
       {/* Surgery panel */}
       <Animated.View
-        style={[styles.panel, { top: 0, transform: [{ translateX: surgeryX }], backgroundColor: PANEL_BG, borderColor: `${colors.border}cc` }]}
-        pointerEvents={openTab === 'surgery' ? 'auto' : 'none'}
+        style={[styles.panel, { top: 0, transform: [{ translateX: surgeryX }], backgroundColor: PANEL_BG, borderColor: `${colors.border}cc`, pointerEvents: openTab === 'surgery' ? 'auto' : 'none' }]}
       >
         <SurgeryPanel />
       </Animated.View>
@@ -189,6 +187,8 @@ const styles = StyleSheet.create({
     position: 'absolute',
     right: 0,
     top: 70,
+    width: PANEL_WIDTH + TAB_WIDTH,
+    height: WRAPPER_HEIGHT,
     zIndex: 5,
   },
   tab: {
