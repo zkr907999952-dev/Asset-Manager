@@ -10,18 +10,19 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: 'pnpm'
+        uses: actions/checkout@v5
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
         with:
           version: 9
+          run_install: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: 'pnpm'
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
@@ -32,7 +33,7 @@ jobs:
           eas-version: latest
           token: ${{ secrets.EXPO_TOKEN }}
 
-      - name: Build Android APK
+      - name: Build Android APK (Preview)
         working-directory: artifacts/mobile
         run: eas build -p android --profile preview --non-interactive
 
@@ -40,4 +41,4 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: Asset-Manager-APK
-          path: artifacts/mobile/app-build/*.apk
+          path: artifacts/mobile/*.apk
