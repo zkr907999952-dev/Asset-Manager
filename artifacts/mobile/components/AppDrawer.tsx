@@ -1,9 +1,10 @@
 import React, { useRef, useEffect } from 'react';
 import {
   View, Text, TouchableOpacity, Animated, StyleSheet,
-  Dimensions, Pressable, Platform,
+  Pressable, Platform,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Feather } from '@expo/vector-icons';
 import { useColors } from '@/hooks/useColors';
 import { useGame, type ScreenName } from '@/contexts/GameContext';
 
@@ -31,15 +32,15 @@ export function AppDrawer({ open, onClose }: Props) {
 
   useEffect(() => {
     Animated.parallel([
-      Animated.spring(translateX, {
+      Animated.timing(translateX, {
         toValue: open ? 0 : -DRAWER_WIDTH,
-        useNativeDriver: true,
-        tension: 80, friction: 14,
+        duration: open ? 260 : 200,
+        useNativeDriver: false,
       }),
       Animated.timing(overlayOpacity, {
         toValue: open ? 1 : 0,
-        duration: 220,
-        useNativeDriver: true,
+        duration: open ? 260 : 200,
+        useNativeDriver: false,
       }),
     ]).start();
   }, [open]);
@@ -53,16 +54,19 @@ export function AppDrawer({ open, onClose }: Props) {
 
   return (
     <>
-      {open && (
-        <Pressable
-          onPress={onClose}
-          style={StyleSheet.absoluteFillObject}
-        >
-          <Animated.View
-            style={[styles.overlay, { opacity: overlayOpacity, backgroundColor: colors.overlay }]}
-          />
-        </Pressable>
-      )}
+      <Animated.View
+        style={[
+          styles.overlay,
+          {
+            opacity: overlayOpacity,
+            backgroundColor: colors.overlay,
+            pointerEvents: open ? 'auto' : 'none',
+          },
+        ]}
+      >
+        <Pressable style={StyleSheet.absoluteFillObject} onPress={onClose} />
+      </Animated.View>
+
       <Animated.View
         style={[
           styles.drawer,
@@ -72,13 +76,19 @@ export function AppDrawer({ open, onClose }: Props) {
             borderRightColor: colors.drawerBorder,
             paddingTop: topPad + 16,
             paddingBottom: Platform.OS === 'web' ? 34 : insets.bottom + 16,
-            pointerEvents: open ? 'auto' : 'none',
           },
         ]}
       >
         <View style={styles.drawerHeader}>
-          <Text style={[styles.appTitle, { color: colors.primary }]}>玉腹模拟器</Text>
-          <Text style={[styles.appSubtitle, { color: colors.mutedForeground }]}>物理仿真系统</Text>
+          <View style={styles.drawerTitleRow}>
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.appTitle, { color: colors.primary }]}>玉腹模拟器</Text>
+              <Text style={[styles.appSubtitle, { color: colors.mutedForeground }]}>物理仿真系统</Text>
+            </View>
+            <TouchableOpacity onPress={onClose} style={styles.closeBtn} activeOpacity={0.7}>
+              <Feather name="x" size={18} color={colors.mutedForeground} />
+            </TouchableOpacity>
+          </View>
         </View>
 
         <View style={[styles.divider, { backgroundColor: colors.border }]} />
@@ -139,6 +149,14 @@ const styles = StyleSheet.create({
   drawerHeader: {
     paddingHorizontal: 20,
     paddingBottom: 16,
+  },
+  drawerTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+  },
+  closeBtn: {
+    padding: 4,
+    marginTop: 2,
   },
   appTitle: {
     fontSize: 20,
