@@ -21,7 +21,7 @@ jobs:
           corepack prepare pnpm@9 --activate
 
       - name: Install dependencies
-        run: pnpm install          # ← 已移除 --frozen-lockfile
+        run: pnpm install --no-frozen-lockfile     # ← 关键修改
 
       - name: Setup Expo & EAS
         uses: expo/expo-github-action@v8
