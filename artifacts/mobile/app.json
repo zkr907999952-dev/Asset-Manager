@@ -1,27 +1,27 @@
 {
   "expo": {
-    "name": "资产管理",
-    "slug": "asset-manager",
+    "name": "玉腹模拟器",
+    "slug": "yufu-simulator",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "userInterfaceStyle": "automatic",
+    "userInterfaceStyle": "dark",
     "splash": {
-      "image": "./assets/images/splash-icon.png",
+      "image": "./assets/images/icon.png",
       "resizeMode": "contain",
-      "backgroundColor": "#ffffff"
+      "backgroundColor": "#22091a"
     },
     "assetBundlePatterns": ["**/*"],
     "ios": {
-      "supportsTablet": true,
-      "bundleIdentifier": "com.assetmanager.app"
+      "supportsTablet": false,
+      "bundleIdentifier": "com.yufu.simulator"
     },
     "android": {
       "adaptiveIcon": {
-        "foregroundImage": "./assets/images/adaptive-icon.png",
-        "backgroundColor": "#ffffff"
+        "foregroundImage": "./assets/images/icon.png",
+        "backgroundColor": "#22091a"
       },
-      "package": "com.assetmanager.app",
+      "package": "com.yufu.simulator",
       "versionCode": 1
     },
     "plugins": [],
