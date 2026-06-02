@@ -136,21 +136,24 @@ export function ToolBar() {
     >
       {/* Tools panel */}
       <Animated.View
-        style={[styles.panel, { top: 0, transform: [{ translateX: toolsX }], backgroundColor: PANEL_BG, borderColor: `${colors.border}cc`, pointerEvents: openTab === 'tools' ? 'auto' : 'none' }]}
+        pointerEvents={openTab === 'tools' ? 'auto' : 'none'}
+        style={[styles.panel, { top: 0, transform: [{ translateX: toolsX }], backgroundColor: PANEL_BG, borderColor: `${colors.border}cc` }]}
       >
         <ToolsContent />
       </Animated.View>
 
       {/* Commands panel */}
       <Animated.View
-        style={[styles.panel, { top: 0, transform: [{ translateX: commandsX }], backgroundColor: PANEL_BG, borderColor: `${colors.border}cc`, pointerEvents: openTab === 'commands' ? 'auto' : 'none' }]}
+        pointerEvents={openTab === 'commands' ? 'auto' : 'none'}
+        style={[styles.panel, { top: 0, transform: [{ translateX: commandsX }], backgroundColor: PANEL_BG, borderColor: `${colors.border}cc` }]}
       >
         <CommandPanel />
       </Animated.View>
 
       {/* Surgery panel */}
       <Animated.View
-        style={[styles.panel, { top: 0, transform: [{ translateX: surgeryX }], backgroundColor: PANEL_BG, borderColor: `${colors.border}cc`, pointerEvents: openTab === 'surgery' ? 'auto' : 'none' }]}
+        pointerEvents={openTab === 'surgery' ? 'auto' : 'none'}
+        style={[styles.panel, { top: 0, transform: [{ translateX: surgeryX }], backgroundColor: PANEL_BG, borderColor: `${colors.border}cc` }]}
       >
         <SurgeryPanel />
       </Animated.View>
