@@ -49,6 +49,50 @@ export const TOOLS = {
 
 export type ToolType = typeof TOOLS[keyof typeof TOOLS];
 
+export const BELLY_STRIKE_TOOLS = {
+  FIST: '拳头',
+  BAT: '棒球棒',
+  HAMMER: '撞钟锤',
+} as const;
+
+export type BellyStrikeToolId = typeof BELLY_STRIKE_TOOLS[keyof typeof BELLY_STRIKE_TOOLS];
+
+export interface BellyStrikeToolDef {
+  id: BellyStrikeToolId;
+  desc: string;
+  rangeType: 'circle' | 'bat';
+  baseRangePx: number;
+  powerMult: number;
+  delayMs: number;
+}
+
+export const BELLY_STRIKE_TOOL_LIST: BellyStrikeToolDef[] = [
+  {
+    id: BELLY_STRIKE_TOOLS.FIST,
+    desc: '圆形范围，威力中等，0.4秒延迟',
+    rangeType: 'circle',
+    baseRangePx: 50,
+    powerMult: 1.0,
+    delayMs: 400,
+  },
+  {
+    id: BELLY_STRIKE_TOOLS.BAT,
+    desc: '棒状范围，端部威力递增，1秒延迟',
+    rangeType: 'bat',
+    baseRangePx: 80,
+    powerMult: 1.5,
+    delayMs: 1000,
+  },
+  {
+    id: BELLY_STRIKE_TOOLS.HAMMER,
+    desc: '大圆范围，威力巨大，2秒延迟',
+    rangeType: 'circle',
+    baseRangePx: 80,
+    powerMult: 2.5,
+    delayMs: 2000,
+  },
+];
+
 export const TOOL_LIST: { id: ToolType; icon: string; desc: string }[] = [
   { id: TOOLS.METAL_ROD, icon: 'minus', desc: '搅动肠道' },
   { id: TOOLS.GRAB, icon: 'anchor', desc: '抓握肠段' },

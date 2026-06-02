@@ -30,6 +30,24 @@ uri = "file://artifacts/mobile/assets/images/belly_external.png"
 type = "image"
 title = "demon character belly external"
 
+[[generated]]
+id = "QIbM6USZgk_TP3_PES8YT"
+uri = "file://artifacts/mobile/assets/images/strike_fist.png"
+type = "image"
+title = "strike fist tool"
+
+[[generated]]
+id = "jjrvzgp43boAMyUYwkpcS"
+uri = "file://artifacts/mobile/assets/images/strike_bat.png"
+type = "image"
+title = "baseball bat tool"
+
+[[generated]]
+id = "-WabusgCuRnOTkAIYXN2K"
+uri = "file://artifacts/mobile/assets/images/strike_hammer.png"
+type = "image"
+title = "bell hammer tool"
+
 [[outputs]]
 id = "EvFH6bgGV0eFpaLTc_px6"
 uri = "file://artifacts/mobile/assets/images/icon.png"

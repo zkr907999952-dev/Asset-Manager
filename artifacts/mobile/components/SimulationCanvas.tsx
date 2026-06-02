@@ -1,5 +1,5 @@
-import React, { useRef, useCallback } from 'react';
-import { View, PanResponder, StyleSheet } from 'react-native';
+import React, { useRef, useCallback, useState } from 'react';
+import { View, PanResponder, StyleSheet, Animated } from 'react-native';
 import { useBreathAnimation } from '@/hooks/useBreathAnimation';
 import Svg, {
   Ellipse, Circle, Line, Path, Rect, Defs, RadialGradient, LinearGradient, Stop, G,
@@ -13,6 +13,7 @@ import {
   CANVAS_W, CANVAS_H, CAVITY_CX, CAVITY_CY, CAVITY_RX, CAVITY_RY,
   SMALL_RADIUS, LARGE_RADIUS, LARGE_RUPTURE_PRESSURE,
   TOOLS, N_SMALL, N_LARGE,
+  BELLY_STRIKE_TOOL_LIST, type BellyStrikeToolId,
 } from '../constants/gameConfig';
 import { buildSmoothPath } from '../engine/physics';
 import { useGame } from '../contexts/GameContext';
@@ -223,9 +224,29 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
     setEnemaInSmall, setEnemaSmallHeadIdx, setEnemaTarget,
     setSiliconeTarget, setBeadsTarget, setEggTarget,
     toggleMesenteryNode, setResectionSelection,
+    applyBellyStrike,
   } = useGame();
   const lastDialogueTime = useRef(0);
   const isDragging = useRef(false);
+
+  // Belly strike drag state
+  const bellyStrikeDragRef = useRef<{
+    active: boolean;
+    physX: number;
+    physY: number;
+    screenX: number;
+    screenY: number;
+  }>({ active: false, physX: 0, physY: 0, screenX: 0, screenY: 0 });
+  const [strikeOverlay, setStrikeOverlay] = useState<{
+    physX: number; physY: number;
+    toolId: BellyStrikeToolId;
+    rangePx: number;
+    charging: boolean;
+    rangeType: 'circle' | 'bat';
+  } | null>(null);
+  const strikeChargeAnim = useRef(new Animated.Value(0)).current;
+  const strikeFlashAnim = useRef(new Animated.Value(0)).current;
+  const strikeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const toPhysicsCoords = useCallback((localX: number, localY: number) => {
     if (!canvasLayout) return { x: localX, y: localY };
@@ -258,6 +279,7 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
     triggerDialogue,
     toggleMesenteryNode,
     setResectionSelection,
+    applyBellyStrike,
   });
   hrRef.current.state = state;
   hrRef.current.toPhysicsCoords = toPhysicsCoords;
@@ -274,6 +296,7 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
   hrRef.current.triggerDialogue = triggerDialogue;
   hrRef.current.toggleMesenteryNode = toggleMesenteryNode;
   hrRef.current.setResectionSelection = setResectionSelection;
+  hrRef.current.applyBellyStrike = applyBellyStrike;
 
   const findNearestLargeNodeIdx = (pos: { x: number; y: number }) => {
     let best = -1, bestD = 9999;
@@ -303,6 +326,17 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
       isDragging.current = true;
       const { locationX, locationY } = evt.nativeEvent;
       const pos = tpc(locationX, locationY);
+
+      // Belly strike mode: capture position, show preview outline
+      if (s.bellyStrikeTool && !s.resectionSelectionMode && !s.mesenterySelectionMode) {
+        const toolDef = BELLY_STRIKE_TOOL_LIST.find(t => t.id === s.bellyStrikeTool);
+        if (toolDef) {
+          bellyStrikeDragRef.current = { active: true, physX: pos.x, physY: pos.y, screenX: locationX, screenY: locationY };
+          const rangePx = toolDef.baseRangePx * (0.5 + s.bellyStrikeRange * 0.005);
+          setStrikeOverlay({ physX: pos.x, physY: pos.y, toolId: s.bellyStrikeTool, rangePx, charging: false, rangeType: toolDef.rangeType });
+          return;
+        }
+      }
 
       // Resection selection mode: tapping near any intestine segment midpoint starts selection
       if (s.resectionSelectionMode) {
@@ -521,6 +555,18 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
       const { locationX, locationY } = evt.nativeEvent;
       const pos = tpc(locationX, locationY);
 
+      // Belly strike drag: update overlay position
+      if (bellyStrikeDragRef.current.active) {
+        bellyStrikeDragRef.current.physX = pos.x;
+        bellyStrikeDragRef.current.physY = pos.y;
+        const toolDef = BELLY_STRIKE_TOOL_LIST.find(t => t.id === s.bellyStrikeTool);
+        if (toolDef) {
+          const rangePx = toolDef.baseRangePx * (0.5 + s.bellyStrikeRange * 0.005);
+          setStrikeOverlay({ physX: pos.x, physY: pos.y, toolId: s.bellyStrikeTool!, rangePx, charging: false, rangeType: toolDef.rangeType });
+        }
+        return;
+      }
+
       // Resection selection mode: dragging updates end segment
       if (s.resectionSelectionMode && s.resectionIntestine && s.resectionStartSeg >= 0) {
         const srs = hrRef.current.setResectionSelection;
@@ -727,6 +773,32 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
     },
     onPanResponderRelease: () => {
       isDragging.current = false;
+
+      // Belly strike on release: start charge animation, then apply at delayMs
+      if (bellyStrikeDragRef.current.active) {
+        bellyStrikeDragRef.current.active = false;
+        const { physX, physY } = bellyStrikeDragRef.current;
+        const { state: s, applyBellyStrike: abs } = hrRef.current;
+        const toolDef = BELLY_STRIKE_TOOL_LIST.find(t => t.id === s.bellyStrikeTool);
+        if (toolDef && abs) {
+          const rangePx = toolDef.baseRangePx * (0.5 + s.bellyStrikeRange * 0.005);
+          setStrikeOverlay({ physX, physY, toolId: s.bellyStrikeTool!, rangePx, charging: true, rangeType: toolDef.rangeType });
+          strikeChargeAnim.setValue(0);
+          strikeFlashAnim.setValue(0);
+          Animated.timing(strikeChargeAnim, { toValue: 1, duration: toolDef.delayMs, useNativeDriver: false }).start();
+          if (strikeTimerRef.current) clearTimeout(strikeTimerRef.current);
+          strikeTimerRef.current = setTimeout(() => {
+            abs(physX, physY);
+            // Flash effect
+            strikeFlashAnim.setValue(1);
+            Animated.timing(strikeFlashAnim, { toValue: 0, duration: 350, useNativeDriver: false }).start(() => {
+              setStrikeOverlay(null);
+            });
+          }, toolDef.delayMs);
+        }
+        return;
+      }
+
       if (!physicsRef.current.toolInserted) {
         physicsRef.current.toolPos = null;
       }
@@ -2182,7 +2254,55 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
             )}
           </G>
         )}
+        {/* Belly strike range overlay */}
+        {strikeOverlay && (() => {
+          const { physX, physY, rangePx, charging, rangeType } = strikeOverlay;
+          const strokeColor = charging ? '#ff8844' : '#ff884488';
+          const fillColor = charging ? 'rgba(255,136,68,0.12)' : 'rgba(255,136,68,0.06)';
+          if (rangeType === 'circle') {
+            return (
+              <G>
+                <Circle cx={physX} cy={physY} r={rangePx}
+                  fill={fillColor}
+                  stroke={strokeColor}
+                  strokeWidth={charging ? 2.5 : 1.5}
+                  strokeDasharray={charging ? '0' : '5,4'} />
+                <Circle cx={physX} cy={physY} r={3}
+                  fill={strokeColor} />
+              </G>
+            );
+          } else {
+            // Bat shape: horizontal oval from physX to physX + rangePx*2
+            const batW = rangePx * 2;
+            const batH = rangePx * 0.35;
+            return (
+              <G>
+                <Ellipse cx={physX + batW * 0.45} cy={physY} rx={batW * 0.55} ry={batH}
+                  fill={fillColor}
+                  stroke={strokeColor}
+                  strokeWidth={charging ? 2.5 : 1.5}
+                  strokeDasharray={charging ? '0' : '5,4'} />
+                <Line x1={physX - batW * 0.15} y1={physY} x2={physX} y2={physY}
+                  stroke={strokeColor} strokeWidth={charging ? 2 : 1.2} />
+                <Circle cx={physX} cy={physY} r={3} fill={strokeColor} />
+              </G>
+            );
+          }
+        })()}
       </Svg>
+
+      {/* Flash overlay on strike impact */}
+      {strikeOverlay?.charging && (
+        <Animated.View
+          pointerEvents="none"
+          style={{
+            position: 'absolute',
+            top: 0, left: 0, right: 0, bottom: 0,
+            backgroundColor: 'rgba(255,150,50,0.22)',
+            opacity: strikeFlashAnim,
+          }}
+        />
+      )}
     </View>
   );
 }

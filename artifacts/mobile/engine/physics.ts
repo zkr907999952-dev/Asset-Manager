@@ -1281,6 +1281,60 @@ export function stepPhysics(state: PhysicsState) {
   for (const n of state.largeNodes) { if (!n.pinned) clampToCavity(n, 2); }
 }
 
+export function applyBellyStrikePhysics(
+  state: PhysicsState,
+  physX: number,
+  physY: number,
+  rangeType: 'circle' | 'bat',
+  rangePx: number,
+  baseDamage: number,
+) {
+  const applyToNodes = (nodes: { x: number; y: number; pinned?: boolean; vx?: number; vy?: number }[], segs: { pain: number; sensitivity: number; health: number; broken?: boolean; ruptured?: boolean }[]) => {
+    for (let i = 0; i < nodes.length; i++) {
+      const n = nodes[i];
+      if (n.pinned) continue;
+      const dx = n.x - physX;
+      const dy = n.y - physY;
+      let factor = 0;
+      if (rangeType === 'circle') {
+        const d = Math.hypot(dx, dy);
+        if (d < rangePx) factor = 1 - d / rangePx;
+      } else {
+        // Bat: horizontal oval — extends rangePx*2 right, rangePx*0.35 vertically
+        const bx = n.x - physX;
+        const by = n.y - physY;
+        const batW = rangePx * 2;
+        const batH = rangePx * 0.35;
+        if (bx >= -batW * 0.15 && bx <= batW && Math.abs(by) <= batH) {
+          const tipFactor = bx / batW;
+          factor = Math.max(0, tipFactor);
+        }
+      }
+      if (factor <= 0) continue;
+      const dmg = baseDamage * factor;
+      const seg = segs[i];
+      if (seg && !seg.broken) {
+        seg.pain = clamp(seg.pain + dmg * 0.5, 0, 100);
+        seg.sensitivity = clamp(seg.sensitivity + dmg * 0.3, 0, 100);
+        seg.health = clamp(seg.health - dmg * 0.4, 0, 100);
+        if (seg.health < 15) seg.ruptured = true;
+      }
+      // Push outward
+      const dist = Math.hypot(dx, dy);
+      const pushMult = dmg * 0.25;
+      if (dist > 0.1) {
+        (n as any).vx = ((n as any).vx ?? 0) + (dx / dist) * pushMult;
+        (n as any).vy = ((n as any).vy ?? 0) + (dy / dist) * pushMult;
+      } else {
+        (n as any).vx = ((n as any).vx ?? 0) + (Math.random() - 0.5) * pushMult;
+        (n as any).vy = ((n as any).vy ?? 0) + (Math.random() - 0.5) * pushMult;
+      }
+    }
+  };
+  applyToNodes(state.smallNodes as any, state.smallSegs);
+  applyToNodes(state.largeNodes as any, state.largeSegs);
+}
+
 export function buildSmoothPath(nodes: { x: number; y: number }[]): string {
   if (nodes.length < 2) return '';
   let d = `M ${nodes[0].x.toFixed(1)} ${nodes[0].y.toFixed(1)}`;

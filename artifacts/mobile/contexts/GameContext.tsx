@@ -3,14 +3,16 @@ import React, {
 } from 'react';
 import { createInitialPhysicsState } from '../engine/intestineInit';
 import type { PhysicsState } from '../engine/physics';
+import { applyBellyStrikePhysics as applyBellyStrikePhysicsFunc } from '../engine/physics';
 import {
   TOOLS, N_LARGE, N_SMALL, CAVITY_CX, CAVITY_CY,
   BREATH_AMPLITUDE_DEFAULT, EXPANSION_SCALE_DEFAULT,
   PRESSURE_DIFFUSION_RATE_DEFAULT,
   PERISTALSIS_WAVE_AMPLITUDE_DEFAULT, PERISTALSIS_WAVE_SPEED_DEFAULT,
   MAX_RESECTION_SEGMENTS_DEFAULT, PHYSICS_FPS,
+  BELLY_STRIKE_TOOL_LIST,
 } from '../constants/gameConfig';
-import type { ToolType } from '../constants/gameConfig';
+import type { ToolType, BellyStrikeToolId } from '../constants/gameConfig';
 import { getRandomDialogue, type DialogueTrigger } from '../constants/dialogues';
 import { initDialoguesFromExcel } from '../constants/dialogueLoader';
 import type { ComaState } from '../components/HeartRateMonitor';
@@ -190,6 +192,10 @@ export interface GameUIState {
   resectedLargeRanges: { start: number; end: number }[];
   resectedCount: number;
   renderVersion: number;
+  // Belly strike
+  bellyStrikeTool: BellyStrikeToolId | null;
+  bellyStrikeForce: number;
+  bellyStrikeRange: number;
 }
 
 interface GameContextType {
@@ -256,6 +262,10 @@ interface GameContextType {
   performResectionSurgery: () => void;
   setResectionSelection: (intestine: 'small' | 'large', startSeg: number, endSeg: number) => void;
   setMaxResectionSegments: (v: number) => void;
+  setBellyStrikeTool: (tool: BellyStrikeToolId | null) => void;
+  setBellyStrikeForce: (v: number) => void;
+  setBellyStrikeRange: (v: number) => void;
+  applyBellyStrike: (physX: number, physY: number) => void;
 }
 
 const DEFAULT_TOOL_POS = { x: CAVITY_CX, y: CAVITY_CY - 40 };
@@ -408,6 +418,9 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     resectionEndSeg: -1,
     resectionSurgeryPhase: 0,
     maxResectionSegments: MAX_RESECTION_SEGMENTS_DEFAULT,
+    bellyStrikeTool: null,
+    bellyStrikeForce: 50,
+    bellyStrikeRange: 50,
     resectedSmallRanges: [],
     resectedLargeRanges: [],
     resectedCount: 0,
@@ -2277,6 +2290,40 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     }, 4000);
   }, []);
 
+  const bellyStrikeRef = useRef<{ tool: BellyStrikeToolId | null; force: number; range: number }>({
+    tool: null, force: 50, range: 50,
+  });
+
+  const setBellyStrikeTool = useCallback((tool: BellyStrikeToolId | null) => {
+    bellyStrikeRef.current.tool = tool;
+    setState(prev => ({ ...prev, bellyStrikeTool: tool }));
+  }, []);
+
+  const setBellyStrikeForce = useCallback((v: number) => {
+    bellyStrikeRef.current.force = v;
+    setState(prev => ({ ...prev, bellyStrikeForce: v }));
+  }, []);
+
+  const setBellyStrikeRange = useCallback((v: number) => {
+    bellyStrikeRef.current.range = v;
+    setState(prev => ({ ...prev, bellyStrikeRange: v }));
+  }, []);
+
+  const applyBellyStrike = useCallback((physX: number, physY: number) => {
+    const { tool, force, range: rangePct } = bellyStrikeRef.current;
+    if (!tool) return;
+    const toolDef = BELLY_STRIKE_TOOL_LIST.find(t => t.id === tool);
+    if (!toolDef) return;
+    const forceMult = 0.3 + force * 0.007;
+    const rangePx = toolDef.baseRangePx * (0.5 + rangePct * 0.005);
+    const baseDamage = 25 * forceMult * toolDef.powerMult;
+    applyBellyStrikePhysicsFunc(physicsRef.current, physX, physY, toolDef.rangeType, rangePx, baseDamage);
+    const forceLevel = force < 34 ? 'low' : force < 67 ? 'mid' : 'high';
+    const toolKey = tool === '拳头' ? 'fist' : tool === '棒球棒' ? 'bat' : 'hammer';
+    const trigger = `strike_${toolKey}_${forceLevel}` as DialogueTrigger;
+    triggerDialogue(trigger);
+  }, [triggerDialogue]);
+
   return (
     <GameContext.Provider value={{
       state, physicsRef,
@@ -2300,6 +2347,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       takeParasiteEgg, setHatchDuration, setParasiteDamageInterval, setParasitePerforationChance, performParasiteSurgery,
       enterResectionSelection, cancelResectionSelection, performResectionSurgery,
       setResectionSelection, setMaxResectionSegments,
+      setBellyStrikeTool, setBellyStrikeForce, setBellyStrikeRange, applyBellyStrike,
     }}>
       {children}
     </GameContext.Provider>

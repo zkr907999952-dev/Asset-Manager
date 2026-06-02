@@ -6,13 +6,15 @@ import { useGame } from '@/contexts/GameContext';
 import { TOOL_LIST, type ToolType } from '../constants/gameConfig';
 import { CommandPanel } from './CommandPanel';
 import { SurgeryPanel } from './SurgeryPanel';
+import { BellyStrikePanel } from './BellyStrikePanel';
 
 const PANEL_WIDTH = 210;
 const TAB_WIDTH = 32;
 const PANEL_MAX_HEIGHT = 400;
-const WRAPPER_HEIGHT = 420;
+const WRAPPER_HEIGHT = 440;
+const TAB_SPACING = 72;
 
-type TabId = 'tools' | 'commands' | 'surgery';
+type TabId = 'tools' | 'commands' | 'surgery' | 'strike';
 
 const TOOL_ICONS: Record<string, string> = {
   '金属棒':   'minus',
@@ -32,6 +34,7 @@ const TABS: { id: TabId; icon: string; label: string }[] = [
   { id: 'tools', icon: 'tool', label: '工具' },
   { id: 'commands', icon: 'command', label: '命令' },
   { id: 'surgery', icon: 'scissors', label: '手术' },
+  { id: 'strike', icon: 'target', label: '腹击' },
 ];
 
 const PANEL_BG = 'rgba(34,9,26,0.88)';
@@ -110,7 +113,8 @@ export function ToolBar() {
   const toolsX = useRef(new Animated.Value(PANEL_WIDTH + TAB_WIDTH)).current;
   const commandsX = useRef(new Animated.Value(PANEL_WIDTH + TAB_WIDTH)).current;
   const surgeryX = useRef(new Animated.Value(PANEL_WIDTH + TAB_WIDTH)).current;
-  const animMap: Record<TabId, Animated.Value> = { tools: toolsX, commands: commandsX, surgery: surgeryX };
+  const strikeX = useRef(new Animated.Value(PANEL_WIDTH + TAB_WIDTH)).current;
+  const animMap: Record<TabId, Animated.Value> = { tools: toolsX, commands: commandsX, surgery: surgeryX, strike: strikeX };
 
   useEffect(() => {
     const target = PANEL_WIDTH + TAB_WIDTH;
@@ -165,14 +169,26 @@ export function ToolBar() {
         <SurgeryPanel />
       </Animated.View>
 
-      {/* 3 tab buttons — always interactive */}
+      {/* Belly Strike panel */}
+      <Animated.View
+        style={[styles.panel, { top: 0, transform: [{ translateX: strikeX }], backgroundColor: PANEL_BG, borderColor: `${colors.border}cc` },
+          Platform.OS === 'web' && { pointerEvents: openTab === 'strike' ? 'auto' : 'none' } as any,
+        ]}
+      >
+        <BellyStrikePanel />
+      </Animated.View>
+
+      {/* 4 tab buttons — always interactive, evenly spaced */}
       {TABS.map((tab, i) => {
         const isOpen = openTab === tab.id;
         const hasDot = tab.id === 'tools' && (anyToolEnabled || anyToolRunning);
         const hasSel = tab.id === 'surgery' && inSelMode;
+        const hasStrike = tab.id === 'strike' && !!state.bellyStrikeTool;
         const dotColor = tab.id === 'tools'
           ? (anyToolRunning ? colors.primary : `${colors.primary}88`)
-          : hasSel ? '#e05050' : colors.primary;
+          : hasSel ? '#e05050'
+          : hasStrike ? '#ff8844'
+          : colors.primary;
 
         return (
           <TouchableOpacity
@@ -180,9 +196,11 @@ export function ToolBar() {
             style={[
               styles.tab,
               {
-                top: i * 70,
+                top: i * TAB_SPACING,
                 backgroundColor: isOpen ? TAB_BG_OPEN : TAB_BG_CLOSED,
-                borderColor: isOpen ? `${colors.primary}cc` : `${colors.border}99`,
+                borderColor: isOpen
+                  ? (tab.id === 'strike' ? '#ff884488' : `${colors.primary}cc`)
+                  : `${colors.border}99`,
               },
               Platform.OS === 'web' && { pointerEvents: 'auto' },
             ]}
@@ -192,12 +210,16 @@ export function ToolBar() {
             <Feather
               name={isOpen ? 'chevron-right' : (tab.icon as any)}
               size={15}
-              color={isOpen ? colors.primary : colors.mutedForeground}
+              color={isOpen
+                ? (tab.id === 'strike' ? '#ff8844' : colors.primary)
+                : colors.mutedForeground}
             />
-            <Text style={[styles.tabLabel, { color: isOpen ? colors.primary : colors.mutedForeground }]}>
+            <Text style={[styles.tabLabel, { color: isOpen
+              ? (tab.id === 'strike' ? '#ff8844' : colors.primary)
+              : colors.mutedForeground }]}>
               {tab.label}
             </Text>
-            {(hasDot || hasSel) && (
+            {(hasDot || hasSel || hasStrike) && (
               <View style={[styles.tabDot, { backgroundColor: dotColor }]} />
             )}
           </TouchableOpacity>
