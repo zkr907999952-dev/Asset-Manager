@@ -9,10 +9,17 @@
  *   B~G列（对话内容列）：最多6条同一触发条件下的随机对话备选文本
  *   程序初始化时读取该文件，触发对话时从非空格中随机选一条显示。
  *
- * 维护说明：
- *   新增对话时，在 A 列填写触发条件说明，B~G 列填写对话备选文本。
- *   修改对话只需修改本 Excel 文件，无需改动代码。
- *   修改后重新运行 `node chat/generate-dialogues.js` 同步到移动端 assets。
+ * 日常维护说明（只需两步）：
+ *   1. 直接编辑 /chat/dialogues.xlsx（增删改对话）
+ *   2. 刷新/重启游戏即可生效
+ *
+ *   assets/dialogues.xlsx 是指向 /chat/dialogues.xlsx 的软链接，无需单独同步。
+ *   本脚本仅用于从零重新生成 Excel 文件（例如从代码中批量初始化）。
+ *
+ * 新增对话触发类型时：
+ *   1. 在 artifacts/mobile/constants/dialogues.ts 的 DialogueTrigger 类型和 DIALOGUES 对象中新增 key
+ *   2. 在 /chat/dialogues.xlsx 中新增一行，A列格式为 [新key] 触发条件说明，B~G列填写备选对话
+ *   3. 刷新游戏即可
  */
 
 const XLSX = require('xlsx');
@@ -434,9 +441,7 @@ function buildExcel() {
   XLSX.writeFile(wb, outputPath);
   console.log(`✅ 生成成功: ${outputPath}`);
 
-  const assetPath = path.join(__dirname, '../artifacts/mobile/assets/dialogues.xlsx');
-  fs.copyFileSync(outputPath, assetPath);
-  console.log(`✅ 已同步到移动端 assets: ${assetPath}`);
+  console.log('ℹ️  assets/dialogues.xlsx 是指向本文件的软链接，无需单独同步。');
 }
 
 buildExcel();

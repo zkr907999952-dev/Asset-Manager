@@ -8,8 +8,9 @@
  *   A列（说明列）：格式为 "[trigger_key] 触发条件描述"
  *   B~G列（对话内容列）：最多6条对话备选文本，空单元格忽略
  *
- * 如需新增或修改对话，只需编辑 /chat/dialogues.xlsx，
- * 然后运行 `node chat/generate-dialogues.js` 将文件同步到 assets。
+ * 修改对话只需两步：
+ *   1. 编辑 /chat/dialogues.xlsx
+ *   2. 刷新/重启游戏（assets/dialogues.xlsx 是指向 /chat/ 的软链接，无需同步脚本）
  */
 
 import { Platform } from 'react-native';

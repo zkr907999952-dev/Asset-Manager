@@ -16,16 +16,16 @@
 - B~G列（对话内容列）：最多6条同一触发下的随机备选对话，空单元格自动忽略
 - 触发时系统随机从非空单元格中选一条显示
 
-**修改对话流程：**
-1. 用 Excel 打开 `/chat/dialogues.xlsx` 编辑
-2. 在项目根目录运行：`node chat/generate-dialogues.js`
-3. 脚本会自动把 Excel 同步到 `artifacts/mobile/assets/dialogues.xlsx`
-4. 重启游戏即可生效（程序初始化时会重新读取 Excel）
+**修改对话只需两步：**
+1. 用 Excel 打开 `/chat/dialogues.xlsx` 编辑（直接保存即可）
+2. 刷新/重启游戏生效
 
-**新增对话触发类型流程：**
-1. 在 `artifacts/mobile/constants/dialogues.ts` 的 `DialogueTrigger` 类型中添加新 key，并在 `DIALOGUES` 对象中添加默认值
+> `/chat/dialogues.xlsx` 是软链接，直接指向游戏读取的真实文件 `artifacts/mobile/assets/dialogues.xlsx`，无需任何同步脚本。
+
+**新增对话触发类型时：**
+1. 在 `artifacts/mobile/constants/dialogues.ts` 的 `DialogueTrigger` 类型和 `DIALOGUES` 对象中新增 key（作为 fallback）
 2. 在 `/chat/dialogues.xlsx` 中新增一行，A列格式为 `[新key] 触发条件说明`，B~G列填写备选对话
-3. 运行 `node chat/generate-dialogues.js` 同步
+3. 刷新游戏即可
 
 ## Stack
 
