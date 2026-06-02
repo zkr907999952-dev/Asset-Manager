@@ -25,7 +25,11 @@ const TOOL_PARAMS: Record<string, {
 
 function ToolSection({ toolId, isActive }: { toolId: string; isActive: boolean }) {
   const colors = useColors();
-  const { state, setToolState, clearElectrodes } = useGame();
+  const { state, setToolState, setActiveTool, clearElectrodes } = useGame();
+
+  const focusTool = () => {
+    if (!isActive) setActiveTool(toolId as any);
+  };
   const ts = state.toolStates[toolId];
   const params = TOOL_PARAMS[toolId];
   if (!ts || !params) return null;
@@ -68,7 +72,7 @@ function ToolSection({ toolId, isActive }: { toolId: string; isActive: boolean }
           {toolId === TOOLS.ELECTRIC && (
             <TouchableOpacity
               style={[styles.extraBtn, { borderColor: `${colors.border}66` }]}
-              onPress={clearElectrodes}
+              onPress={() => { focusTool(); clearElectrodes(); }}
             >
               <Feather name="trash-2" size={10} color={colors.mutedForeground} />
               <Text style={[styles.extraBtnText, { color: colors.mutedForeground }]}>清除电极</Text>
@@ -82,7 +86,7 @@ function ToolSection({ toolId, isActive }: { toolId: string; isActive: boolean }
                 borderColor: active ? `${colors.primary}88` : `${colors.border}55`,
               },
             ]}
-            onPress={() => setToolState(toolId, { active: !active })}
+            onPress={() => { focusTool(); setToolState(toolId, { active: !active }); }}
             activeOpacity={0.8}
           >
             <Feather
@@ -109,7 +113,7 @@ function ToolSection({ toolId, isActive }: { toolId: string; isActive: boolean }
             maximumValue={params.p1Max}
             step={params.p1Step}
             value={p1}
-            onValueChange={v => setToolState(toolId, { param1: v })}
+            onValueChange={v => { focusTool(); setToolState(toolId, { param1: v }); }}
             minimumTrackTintColor={colors.primary}
             maximumTrackTintColor={colors.secondary}
             thumbTintColor={colors.primary}
@@ -124,7 +128,7 @@ function ToolSection({ toolId, isActive }: { toolId: string; isActive: boolean }
             maximumValue={params.p2Max}
             step={params.p2Step}
             value={p2}
-            onValueChange={v => setToolState(toolId, { param2: v })}
+            onValueChange={v => { focusTool(); setToolState(toolId, { param2: v }); }}
             minimumTrackTintColor={colors.accent}
             maximumTrackTintColor={colors.secondary}
             thumbTintColor={colors.accent}
