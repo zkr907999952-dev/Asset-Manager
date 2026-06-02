@@ -131,31 +131,31 @@ export function ToolBar() {
 
   return (
     <View
-      style={[styles.wrapper, { pointerEvents: 'box-none' }]}
+      style={[styles.wrapper, { pointerEvents: 'none' }]}
       collapsable={false}
     >
-      {/* Tools panel — no pointerEvents needed: panel is off-screen (translateX) when closed */}
+      {/* Panels — only interactive when open */}
       <Animated.View
-        style={[styles.panel, { top: 0, transform: [{ translateX: toolsX }], backgroundColor: PANEL_BG, borderColor: `${colors.border}cc` }]}
+        style={[styles.panel, { top: 0, transform: [{ translateX: toolsX }], backgroundColor: PANEL_BG, borderColor: `${colors.border}cc`, pointerEvents: openTab === 'tools' ? 'auto' : 'none' }]}
       >
         <ToolsContent />
       </Animated.View>
 
       {/* Commands panel */}
       <Animated.View
-        style={[styles.panel, { top: 0, transform: [{ translateX: commandsX }], backgroundColor: PANEL_BG, borderColor: `${colors.border}cc` }]}
+        style={[styles.panel, { top: 0, transform: [{ translateX: commandsX }], backgroundColor: PANEL_BG, borderColor: `${colors.border}cc`, pointerEvents: openTab === 'commands' ? 'auto' : 'none' }]}
       >
         <CommandPanel />
       </Animated.View>
 
       {/* Surgery panel */}
       <Animated.View
-        style={[styles.panel, { top: 0, transform: [{ translateX: surgeryX }], backgroundColor: PANEL_BG, borderColor: `${colors.border}cc` }]}
+        style={[styles.panel, { top: 0, transform: [{ translateX: surgeryX }], backgroundColor: PANEL_BG, borderColor: `${colors.border}cc`, pointerEvents: openTab === 'surgery' ? 'auto' : 'none' }]}
       >
         <SurgeryPanel />
       </Animated.View>
 
-      {/* 3 tab buttons stacked vertically */}
+      {/* 3 tab buttons stacked vertically — always interactive */}
       {TABS.map((tab, i) => {
         const isOpen = openTab === tab.id;
         const hasDot = tab.id === 'tools' && (anyToolEnabled || anyToolRunning);
@@ -174,7 +174,7 @@ export function ToolBar() {
                 backgroundColor: isOpen ? TAB_BG_OPEN : TAB_BG_CLOSED,
                 borderColor: isOpen ? `${colors.primary}cc` : `${colors.border}99`,
               },
-              Platform.OS === 'web' && { pointerEvents: 'auto' },
+              { pointerEvents: 'auto' },
             ]}
             onPress={() => toggle(tab.id)}
             activeOpacity={0.7}
