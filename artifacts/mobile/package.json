@@ -56,6 +56,9 @@
     "zod-validation-error": "^3.4.0"
   },
   "dependencies": {
-    "@react-native-community/slider": "^5.2.0"
+    "@react-native-community/slider": "^5.2.0",
+    "expo-asset": "^12.0.13",
+    "expo-file-system": "^19.0.23",
+    "xlsx": "^0.18.5"
   }
 }

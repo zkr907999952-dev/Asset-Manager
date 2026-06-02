@@ -12,6 +12,7 @@ import {
   MAX_RESECTION_SEGMENTS_DEFAULT,
 } from '../constants/gameConfig';
 import { getRandomDialogue, type DialogueTrigger } from '../constants/dialogues';
+import { initDialoguesFromExcel } from '../constants/dialogueLoader';
 import type { ComaState } from '../components/HeartRateMonitor';
 
 export interface ParasiteEntity {
@@ -260,6 +261,12 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
   const physicsRef = useRef<PhysicsState>(createInitialPhysicsState());
   const dialogueTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const comaStateRef = useRef<ComaState>('none');
+
+  // 程序初始化时从 Excel 文件加载对话文本（/chat/dialogues.xlsx -> assets/dialogues.xlsx）
+  // 如需修改对话，编辑 /chat/dialogues.xlsx 后运行 `node chat/generate-dialogues.js` 同步
+  useEffect(() => {
+    initDialoguesFromExcel();
+  }, []);
 
   // Drug system state (ref for timestamp logs, modifier values mirrored to UI state)
   const drugRef = useRef({
