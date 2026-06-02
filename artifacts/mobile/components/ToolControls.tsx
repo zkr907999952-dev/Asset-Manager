@@ -46,11 +46,14 @@ function ToolSection({ toolId, isActive }: { toolId: string; isActive: boolean }
   };
 
   return (
-    <View style={[
-      styles.toolSection,
-      { borderColor: isActive ? `${colors.primary}55` : `${colors.border}33` },
-      isActive && { backgroundColor: `${colors.primary}0a` },
-    ]}>
+    <View
+      style={[
+        styles.toolSection,
+        { borderColor: isActive ? `${colors.primary}55` : `${colors.border}33` },
+        isActive && { backgroundColor: `${colors.primary}0a` },
+      ]}
+      onStartShouldSetResponder={() => { focusTool(); return false; }}
+    >
       <View style={styles.sectionHeader}>
         <View style={styles.sectionHeaderLeft}>
           <View style={[
