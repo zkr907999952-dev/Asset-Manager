@@ -109,6 +109,7 @@ export interface GameUIState {
   intestinalRuptures: number;
   intestinalBreaks: number;
   activeTool: ToolType | null;
+  enabledTools: ToolType[];
   toolActive: boolean;
   toolParam1: number;
   toolParam2: number;
@@ -196,6 +197,7 @@ interface GameContextType {
   setScreen: (screen: ScreenName) => void;
   setViewMode: (mode: 'external' | 'internal') => void;
   setActiveTool: (tool: ToolType | null) => void;
+  toggleToolEnabled: (tool: ToolType) => void;
   setToolActive: (active: boolean) => void;
   setToolParam1: (v: number) => void;
   setToolParam2: (v: number) => void;
@@ -336,11 +338,12 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
   const resectionStartSegRef = useRef(-1);
   const resectionEndSegRef = useRef(-1);
   const lastAutoEggTimeRef = useRef<number>(0);
+  const enabledToolsRef = useRef<ToolType[]>([]);
 
   const [state, setState] = useState<GameUIState>({
     hp: 100, pleasure: 0, heartRate: 72,
     navelPierced: false, intestinalRuptures: 0, intestinalBreaks: 0,
-    activeTool: null, toolActive: false, toolParam1: 50, toolParam2: 50,
+    activeTool: null, enabledTools: [], toolActive: false, toolParam1: 50, toolParam2: 50,
     toolStates: physicsRef.current.toolStates,
     pressureDiffusionRate: physicsRef.current.pressureDiffusionRate,
     viewMode: 'internal', currentScreen: 'simulation',
@@ -1116,6 +1119,9 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     p.toolAnchor = null;
     p.toolInserted = false;
     if (tool) {
+      if (!enabledToolsRef.current.includes(tool)) {
+        enabledToolsRef.current = [...enabledToolsRef.current, tool];
+      }
       const ts = p.toolStates[tool] ?? { active: false, param1: 50, param2: 50 };
       p.toolActive = ts.active;
       p.toolParam1 = ts.param1;
@@ -1128,6 +1134,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       setState(prev => ({
         ...prev,
         activeTool: tool,
+        enabledTools: [...enabledToolsRef.current],
         toolActive: ts.active,
         toolParam1: ts.param1,
         toolParam2: ts.param2,
@@ -1137,13 +1144,98 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         enemaHeadIdx: p.enemaHeadIdx,
       }));
     } else {
+      enabledToolsRef.current = [];
       p.toolActive = false;
       setState(prev => ({
         ...prev,
         activeTool: null,
+        enabledTools: [],
         toolActive: false,
         toolAnchor: null,
         toolInserted: false,
+      }));
+    }
+  }, []);
+
+  const toggleToolEnabled = useCallback((tool: ToolType) => {
+    const p = physicsRef.current;
+    const isEnabled = enabledToolsRef.current.includes(tool);
+
+    if (isEnabled) {
+      // — Disable: remove from enabled set —
+      if (p.toolStates[tool]) p.toolStates[tool].pos = p.toolPos ? { ...p.toolPos } : null;
+      enabledToolsRef.current = enabledToolsRef.current.filter(t => t !== tool);
+      const newEnabled = enabledToolsRef.current;
+
+      if (p.toolType === tool) {
+        // Switch activeTool to last remaining enabled
+        const newActive = newEnabled.length > 0 ? newEnabled[newEnabled.length - 1] : null;
+        p.toolType = newActive;
+        p.grabbedNode = null;
+        p.toolAnchor = null;
+        p.toolInserted = false;
+        if (newActive) {
+          const ts = p.toolStates[newActive] ?? { active: false, param1: 50, param2: 50 };
+          p.toolActive = ts.active;
+          p.toolParam1 = ts.param1;
+          p.toolParam2 = ts.param2;
+          if (ts.pos) p.toolPos = { ...ts.pos };
+          setState(prev => ({
+            ...prev,
+            enabledTools: [...newEnabled],
+            activeTool: newActive,
+            toolActive: ts.active,
+            toolParam1: ts.param1,
+            toolParam2: ts.param2,
+            toolPos: p.toolPos ? { ...p.toolPos } : null,
+            toolAnchor: null,
+            toolInserted: false,
+          }));
+        } else {
+          p.toolActive = false;
+          setState(prev => ({
+            ...prev,
+            enabledTools: [],
+            activeTool: null,
+            toolActive: false,
+            toolAnchor: null,
+            toolInserted: false,
+          }));
+        }
+      } else {
+        setState(prev => ({ ...prev, enabledTools: [...newEnabled] }));
+      }
+    } else {
+      // — Enable: add to set, set as activeTool —
+      const prevTool = p.toolType;
+      if (prevTool && p.toolStates[prevTool]) {
+        p.toolStates[prevTool].pos = p.toolPos ? { ...p.toolPos } : null;
+      }
+      enabledToolsRef.current = [...enabledToolsRef.current, tool];
+      p.toolType = tool;
+      p.grabbedNode = null;
+      p.toolAnchor = null;
+      p.toolInserted = false;
+      const ts = p.toolStates[tool] ?? { active: false, param1: 50, param2: 50 };
+      p.toolActive = ts.active;
+      p.toolParam1 = ts.param1;
+      p.toolParam2 = ts.param2;
+      if (ts.pos) {
+        p.toolPos = { ...ts.pos };
+      } else if (!p.toolPos) {
+        p.toolPos = { ...DEFAULT_TOOL_POS };
+      }
+      setState(prev => ({
+        ...prev,
+        enabledTools: [...enabledToolsRef.current],
+        activeTool: tool,
+        toolActive: ts.active,
+        toolParam1: ts.param1,
+        toolParam2: ts.param2,
+        toolPos: p.toolPos ? { ...p.toolPos } : null,
+        toolAnchor: null,
+        toolInserted: false,
+        enemaHeadIdx: p.enemaHeadIdx,
       }));
     }
   }, []);
@@ -1536,7 +1628,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       ...prev,
       hp: 100, pleasure: 0, heartRate: 72,
       navelPierced: false, intestinalRuptures: 0, intestinalBreaks: 0,
-      activeTool: null, toolActive: false, toolParam1: 50, toolParam2: 50,
+      activeTool: null, enabledTools: [], toolActive: false, toolParam1: 50, toolParam2: 50,
       toolStates: fresh.toolStates,
       pressureDiffusionRate: fresh.pressureDiffusionRate,
       currentDialogue: null, peristalsisSpeed: 1.5,
@@ -2190,7 +2282,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
   return (
     <GameContext.Provider value={{
       state, physicsRef,
-      setScreen, setViewMode, setActiveTool, setToolActive,
+      setScreen, setViewMode, setActiveTool, toggleToolEnabled, setToolActive,
       setToolParam1, setToolParam2, setToolState, setPeriSpeed,
       setPeriWaveAmplitude, setPeriWaveSpeed,
       setBreathAmplitude, setExpansionScale, setPressureDiffusionRate,

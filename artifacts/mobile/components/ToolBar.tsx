@@ -38,14 +38,9 @@ const PANEL_BG = 'rgba(34,9,26,0.88)';
 const TAB_BG_OPEN = 'rgba(232,121,160,0.18)';
 const TAB_BG_CLOSED = 'rgba(34,9,26,0.78)';
 
-function ToolsContent({ onClose }: { onClose: () => void }) {
+function ToolsContent() {
   const colors = useColors();
-  const { state, setActiveTool } = useGame();
-
-  const handleSelect = (tool: ToolType) => {
-    setActiveTool(state.activeTool === tool ? null : tool);
-    onClose();
-  };
+  const { state, toggleToolEnabled } = useGame();
 
   return (
     <ScrollView
@@ -55,35 +50,50 @@ function ToolsContent({ onClose }: { onClose: () => void }) {
     >
       <Text style={[styles.panelTitle, { color: colors.mutedForeground }]}>工具选择</Text>
       {TOOL_LIST.map(tool => {
-        const isSelected = state.activeTool === tool.id;
+        const isEnabled = (state.enabledTools ?? []).includes(tool.id);
+        const isActive = state.activeTool === tool.id;
         const isRunning = state.toolStates?.[tool.id]?.active === true;
+
         return (
           <TouchableOpacity
             key={tool.id}
             style={[
               styles.toolItem,
-              { borderColor: isSelected ? colors.primary : isRunning ? `${colors.primary}66` : colors.border },
-              isSelected && { backgroundColor: `${colors.primary}22` },
-              isRunning && !isSelected && { backgroundColor: `${colors.primary}11` },
+              {
+                borderColor: isEnabled
+                  ? (isRunning ? colors.primary : `${colors.primary}88`)
+                  : colors.border,
+              },
+              isEnabled && { backgroundColor: isActive ? `${colors.primary}22` : `${colors.primary}10` },
             ]}
-            onPress={() => handleSelect(tool.id)}
+            onPress={() => toggleToolEnabled(tool.id)}
             activeOpacity={0.75}
           >
             <Feather
               name={TOOL_ICONS[tool.id] as any || 'circle'}
               size={14}
-              color={isSelected ? colors.primary : isRunning ? `${colors.primary}aa` : colors.mutedForeground}
+              color={
+                isEnabled
+                  ? (isRunning ? colors.primary : `${colors.primary}cc`)
+                  : colors.mutedForeground
+              }
             />
             <View style={styles.toolText}>
               <Text style={[styles.toolName, {
-                color: isSelected ? colors.primary : isRunning ? `${colors.primary}cc` : colors.foreground,
+                color: isEnabled
+                  ? (isRunning ? colors.primary : `${colors.primary}dd`)
+                  : colors.foreground,
               }]}>
                 {tool.id}
               </Text>
               <Text style={[styles.toolDesc, { color: colors.mutedForeground }]}>{tool.desc}</Text>
             </View>
-            {isRunning && <View style={[styles.runningDot, { backgroundColor: colors.primary }]} />}
-            {isSelected && !isRunning && <View style={[styles.activeDot, { backgroundColor: colors.mutedForeground }]} />}
+            {isRunning && (
+              <View style={[styles.runningDot, { backgroundColor: colors.primary }]} />
+            )}
+            {isEnabled && !isRunning && (
+              <View style={[styles.activeDot, { backgroundColor: `${colors.primary}88` }]} />
+            )}
           </TouchableOpacity>
         );
       })}
@@ -115,6 +125,7 @@ export function ToolBar() {
 
   const toggle = (tab: TabId) => setOpenTab(prev => prev === tab ? null : tab);
 
+  const anyToolEnabled = (state.enabledTools ?? []).length > 0;
   const anyToolRunning = Object.values(state.toolStates ?? {}).some(ts => ts.active);
   const inSelMode = state.mesenterySelectionMode;
 
@@ -127,7 +138,7 @@ export function ToolBar() {
       <Animated.View
         style={[styles.panel, { top: 0, transform: [{ translateX: toolsX }], backgroundColor: PANEL_BG, borderColor: `${colors.border}cc`, pointerEvents: openTab === 'tools' ? 'auto' : 'none' }]}
       >
-        <ToolsContent onClose={() => setOpenTab(null)} />
+        <ToolsContent />
       </Animated.View>
 
       {/* Commands panel */}
@@ -147,10 +158,10 @@ export function ToolBar() {
       {/* 3 tab buttons stacked vertically */}
       {TABS.map((tab, i) => {
         const isOpen = openTab === tab.id;
-        const hasDot = tab.id === 'tools' && (state.activeTool || anyToolRunning);
+        const hasDot = tab.id === 'tools' && (anyToolEnabled || anyToolRunning);
         const hasSel = tab.id === 'surgery' && inSelMode;
         const dotColor = tab.id === 'tools'
-          ? (anyToolRunning ? colors.primary : colors.mutedForeground)
+          ? (anyToolRunning ? colors.primary : `${colors.primary}88`)
           : hasSel ? '#e05050' : colors.primary;
 
         return (

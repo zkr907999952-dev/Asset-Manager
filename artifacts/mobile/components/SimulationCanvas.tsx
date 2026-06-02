@@ -765,7 +765,7 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
   const handlePos = state.toolPos;
   const renderTime = Date.now() / 33;
 
-  const enemaVisible = state.activeTool === TOOLS.ENEMA || state.toolStates?.[TOOLS.ENEMA]?.active === true;
+  const enemaVisible = (state.enabledTools ?? []).includes(TOOLS.ENEMA) || state.toolStates?.[TOOLS.ENEMA]?.active === true;
   const electricIndepActive = state.toolStates?.[TOOLS.ELECTRIC]?.active === true;
 
   // Tube path: from head position outward toward anus (entry point)
@@ -826,7 +826,7 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
   })();
 
   // Silicone rod paths — use siliconeHeadIdx (independent from enema)
-  const siliconeVisible = state.activeTool === TOOLS.SILICONE_ROD;
+  const siliconeVisible = (state.enabledTools ?? []).includes(TOOLS.SILICONE_ROD);
   const siliconePathLarge = (() => {
     if (!siliconeVisible || renderLargeNodes.length === 0) return '';
     const headIdx = Math.max(0, Math.min(renderLargeNodes.length - 1, state.siliconeHeadIdx));
@@ -844,7 +844,7 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
     : null;
 
   // Vibrating egg paths — control line runs from duodenum (node 0) to egg head
-  const eggVisible = state.activeTool === TOOLS.VIBRATING_EGG;
+  const eggVisible = (state.enabledTools ?? []).includes(TOOLS.VIBRATING_EGG);
   const eggHeadNode = (() => {
     if (!eggVisible || renderSmallNodes.length === 0) return null;
     if (state.eggInLarge && renderLargeNodes.length > 0) {
@@ -886,10 +886,10 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
     return smallPath + ' ' + largePath;
   })();
 
-  // Suspended tools: active tools that are not the current tool, with stored positions
+  // Suspended tools: enabled tools that are not the current activeTool, rendered at their last position
   const suspendedTools = Object.entries(state.toolStates ?? {}).filter(([id, ts]) => {
     if (id === state.activeTool) return false;
-    return ts.active && ts.pos != null;
+    return (state.enabledTools ?? []).includes(id as any) && ts.pos != null;
   });
 
   return (

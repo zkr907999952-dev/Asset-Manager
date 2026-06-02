@@ -1,12 +1,15 @@
-import React, { useState, useRef } from 'react';
-import { View, Text, TouchableOpacity, Animated, StyleSheet } from 'react-native';
+import React, { useState } from 'react';
+import { View, Text, TouchableOpacity, ScrollView, StyleSheet } from 'react-native';
 import { GameSlider } from './GameSlider';
 import { Feather } from '@expo/vector-icons';
 import { useColors } from '@/hooks/useColors';
 import { useGame } from '@/contexts/GameContext';
 import { TOOLS } from '../constants/gameConfig';
 
-const TOOL_PARAMS: Record<string, { p1Label: string; p1Max: number; p1Step: number; p2Label: string; p2Max: number; p2Step: number }> = {
+const TOOL_PARAMS: Record<string, {
+  p1Label: string; p1Max: number; p1Step: number;
+  p2Label: string; p2Max: number; p2Step: number;
+}> = {
   [TOOLS.METAL_ROD]:     { p1Label: '杆长',    p1Max: 100, p1Step: 1, p2Label: '搅动强度', p2Max: 100, p2Step: 1 },
   [TOOLS.GRAB]:          { p1Label: '抓取范围', p1Max: 100, p1Step: 1, p2Label: '抓取力度', p2Max: 100, p2Step: 1 },
   [TOOLS.VIBRATOR]:      { p1Label: '震动强度', p1Max: 100, p1Step: 1, p2Label: '震动范围', p2Max: 100, p2Step: 1 },
@@ -20,98 +23,78 @@ const TOOL_PARAMS: Record<string, { p1Label: string; p1Max: number; p1Step: numb
   [TOOLS.VIBRATING_EGG]: { p1Label: '震动强度', p1Max: 100, p1Step: 1, p2Label: '移动速度', p2Max: 100, p2Step: 1 },
 };
 
-export function ToolControls() {
+function ToolSection({ toolId, isActive }: { toolId: string; isActive: boolean }) {
   const colors = useColors();
-  const { state, setToolActive, setToolParam1, setToolParam2, setActiveTool, clearElectrodes } = useGame();
-  const { activeTool, toolActive, toolParam1, toolParam2 } = state;
-  const [collapsed, setCollapsed] = useState(false);
-  const animH = useRef(new Animated.Value(1)).current;
+  const { state, setToolState, clearElectrodes } = useGame();
+  const ts = state.toolStates[toolId];
+  const params = TOOL_PARAMS[toolId];
+  if (!ts || !params) return null;
 
-  if (!activeTool) return null;
-  const params = TOOL_PARAMS[activeTool];
-  if (!params) return null;
+  const active = ts.active;
+  const p1 = ts.param1;
+  const p2 = ts.param2;
 
-  const handleCollapse = () => {
-    Animated.timing(animH, {
-      toValue: collapsed ? 1 : 0,
-      duration: 200,
-      useNativeDriver: false,
-    }).start();
-    setCollapsed(c => !c);
+  const startStopLabel = () => {
+    if (toolId === TOOLS.SILICONE_ROD || toolId === TOOLS.ANAL_BEADS) {
+      return active ? '停振' : '震动';
+    }
+    return active ? '停止' : '启动';
   };
 
-  if (collapsed) {
-    return (
-      <TouchableOpacity
-        style={[styles.collapsedTab, {
-          backgroundColor: 'rgba(19,8,16,0.92)',
-          borderColor: `${colors.border}88`,
-          borderTopColor: toolActive ? `${colors.primary}88` : `${colors.border}88`,
-        }]}
-        onPress={handleCollapse}
-        activeOpacity={0.85}
-      >
-        <View style={styles.collapsedLeft}>
-          <View style={[styles.collapsedDot, { backgroundColor: toolActive ? colors.primary : colors.mutedForeground }]} />
-          <Text style={[styles.collapsedName, { color: toolActive ? colors.primary : colors.foreground }]}>
-            {activeTool}
-          </Text>
-          <Text style={[styles.collapsedStatus, { color: colors.mutedForeground }]}>
-            {toolActive ? '运行中' : '已暂停'}
-          </Text>
-        </View>
-        <View style={styles.collapsedRight}>
-          <Text style={[styles.collapsedParams, { color: colors.mutedForeground }]}>
-            {params.p1Label} {Math.round(toolParam1)}  {params.p2Label} {Math.round(toolParam2)}
-          </Text>
-          <Feather name="chevron-up" size={14} color={colors.mutedForeground} />
-        </View>
-      </TouchableOpacity>
-    );
-  }
-
   return (
-    <View style={[styles.container, { borderTopColor: `${colors.border}66` }]}>
-      <View style={styles.header}>
-        <Text style={[styles.toolName, { color: colors.primary }]}>{activeTool}</Text>
-        <View style={styles.headerRight}>
-          {activeTool === TOOLS.ELECTRIC && (
+    <View style={[
+      styles.toolSection,
+      { borderColor: isActive ? `${colors.primary}55` : `${colors.border}33` },
+      isActive && { backgroundColor: `${colors.primary}0a` },
+    ]}>
+      <View style={styles.sectionHeader}>
+        <View style={styles.sectionHeaderLeft}>
+          <View style={[
+            styles.statusDot,
+            { backgroundColor: active ? colors.primary : `${colors.mutedForeground}55` },
+          ]} />
+          <Text style={[styles.sectionTitle, {
+            color: isActive ? colors.primary : colors.foreground,
+          }]}>
+            {toolId}
+          </Text>
+          {isActive && (
+            <Text style={[styles.activeTag, { color: `${colors.primary}99`, borderColor: `${colors.primary}44` }]}>
+              控制中
+            </Text>
+          )}
+        </View>
+        <View style={styles.sectionHeaderRight}>
+          {toolId === TOOLS.ELECTRIC && (
             <TouchableOpacity
-              style={[styles.clearBtn, { borderColor: `${colors.border}88` }]}
+              style={[styles.extraBtn, { borderColor: `${colors.border}66` }]}
               onPress={clearElectrodes}
             >
-              <Feather name="trash-2" size={12} color={colors.mutedForeground} />
-              <Text style={[styles.clearText, { color: colors.mutedForeground }]}>清除电极</Text>
+              <Feather name="trash-2" size={10} color={colors.mutedForeground} />
+              <Text style={[styles.extraBtnText, { color: colors.mutedForeground }]}>清除电极</Text>
             </TouchableOpacity>
           )}
           <TouchableOpacity
             style={[
               styles.toggleBtn,
-              { backgroundColor: toolActive ? `${colors.primary}cc` : `${colors.secondary}cc`,
-                borderColor: toolActive ? `${colors.primary}88` : `${colors.border}66` },
+              {
+                backgroundColor: active ? `${colors.primary}cc` : `${colors.secondary}cc`,
+                borderColor: active ? `${colors.primary}88` : `${colors.border}55`,
+              },
             ]}
-            onPress={() => setToolActive(!toolActive)}
+            onPress={() => setToolState(toolId, { active: !active })}
             activeOpacity={0.8}
           >
-            <Feather name={toolActive ? 'pause' : 'play'} size={13} color={toolActive ? colors.primaryForeground : colors.foreground} />
-            <Text style={[styles.toggleText, { color: toolActive ? colors.primaryForeground : colors.foreground }]}>
-              {(activeTool === TOOLS.SILICONE_ROD || activeTool === TOOLS.ANAL_BEADS)
-                ? (toolActive ? '停振' : '震动')
-                : (toolActive ? '停止' : '启动')}
+            <Feather
+              name={active ? 'pause' : 'play'}
+              size={11}
+              color={active ? colors.primaryForeground : colors.foreground}
+            />
+            <Text style={[styles.toggleText, {
+              color: active ? colors.primaryForeground : colors.foreground,
+            }]}>
+              {startStopLabel()}
             </Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.iconBtn, { borderColor: `${colors.border}66` }]}
-            onPress={handleCollapse}
-            activeOpacity={0.7}
-          >
-            <Feather name="chevron-down" size={14} color={colors.mutedForeground} />
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.iconBtn, { borderColor: `${colors.border}66` }]}
-            onPress={() => setActiveTool(null)}
-          >
-            <Feather name="x" size={14} color={colors.mutedForeground} />
           </TouchableOpacity>
         </View>
       </View>
@@ -119,14 +102,14 @@ export function ToolControls() {
       <View style={styles.sliders}>
         <View style={styles.sliderRow}>
           <Text style={[styles.sliderLabel, { color: colors.mutedForeground }]}>
-            {params.p1Label}: <Text style={{ color: colors.foreground }}>{Math.round(toolParam1)}</Text>
+            {params.p1Label}：<Text style={{ color: colors.foreground }}>{Math.round(p1)}</Text>
           </Text>
           <GameSlider
             minimumValue={0}
             maximumValue={params.p1Max}
             step={params.p1Step}
-            value={toolParam1}
-            onValueChange={setToolParam1}
+            value={p1}
+            onValueChange={v => setToolState(toolId, { param1: v })}
             minimumTrackTintColor={colors.primary}
             maximumTrackTintColor={colors.secondary}
             thumbTintColor={colors.primary}
@@ -134,14 +117,14 @@ export function ToolControls() {
         </View>
         <View style={styles.sliderRow}>
           <Text style={[styles.sliderLabel, { color: colors.mutedForeground }]}>
-            {params.p2Label}: <Text style={{ color: colors.foreground }}>{Math.round(toolParam2)}</Text>
+            {params.p2Label}：<Text style={{ color: colors.foreground }}>{Math.round(p2)}</Text>
           </Text>
           <GameSlider
             minimumValue={0}
             maximumValue={params.p2Max}
             step={params.p2Step}
-            value={toolParam2}
-            onValueChange={setToolParam2}
+            value={p2}
+            onValueChange={v => setToolState(toolId, { param2: v })}
             minimumTrackTintColor={colors.accent}
             maximumTrackTintColor={colors.secondary}
             thumbTintColor={colors.accent}
@@ -152,63 +135,182 @@ export function ToolControls() {
   );
 }
 
+export function ToolControls() {
+  const colors = useColors();
+  const { state } = useGame();
+  const [collapsed, setCollapsed] = useState(false);
+
+  const { enabledTools, activeTool } = state;
+  if (!enabledTools || enabledTools.length === 0) return null;
+
+  const anyRunning = enabledTools.some(id => state.toolStates[id]?.active);
+
+  if (collapsed) {
+    return (
+      <TouchableOpacity
+        style={[styles.collapsedTab, {
+          backgroundColor: 'rgba(19,8,16,0.92)',
+          borderColor: `${colors.border}88`,
+          borderTopColor: anyRunning ? `${colors.primary}88` : `${colors.border}88`,
+        }]}
+        onPress={() => setCollapsed(false)}
+        activeOpacity={0.85}
+      >
+        <View style={styles.collapsedLeft}>
+          <View style={[styles.statusDot, {
+            backgroundColor: anyRunning ? colors.primary : colors.mutedForeground,
+          }]} />
+          <Text style={[styles.collapsedName, { color: anyRunning ? colors.primary : colors.foreground }]}>
+            {enabledTools.length} 个工具已激活
+          </Text>
+          <Text style={[styles.collapsedStatus, { color: colors.mutedForeground }]}>
+            {anyRunning ? '运行中' : '已暂停'}
+          </Text>
+        </View>
+        <Feather name="chevron-up" size={14} color={colors.mutedForeground} />
+      </TouchableOpacity>
+    );
+  }
+
+  return (
+    <View style={[styles.container, { borderTopColor: `${colors.border}55` }]}>
+      <View style={[styles.panelHeader, { borderBottomColor: `${colors.border}33` }]}>
+        <Text style={[styles.panelTitle, { color: colors.mutedForeground }]}>工具控制</Text>
+        <TouchableOpacity
+          style={[styles.iconBtn, { borderColor: `${colors.border}55` }]}
+          onPress={() => setCollapsed(true)}
+          activeOpacity={0.7}
+        >
+          <Feather name="chevron-down" size={13} color={colors.mutedForeground} />
+        </TouchableOpacity>
+      </View>
+
+      <ScrollView
+        style={styles.scroll}
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+        nestedScrollEnabled
+        keyboardShouldPersistTaps="handled"
+      >
+        {enabledTools.map(toolId => (
+          <ToolSection
+            key={toolId}
+            toolId={toolId}
+            isActive={toolId === activeTool}
+          />
+        ))}
+      </ScrollView>
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
   container: {
-    paddingHorizontal: 14,
-    paddingVertical: 10,
+    maxHeight: 260,
     borderTopWidth: 1,
-    backgroundColor: 'rgba(19,8,16,0.88)',
+    backgroundColor: 'rgba(19,8,16,0.92)',
   },
-  header: {
+  panelHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+    borderBottomWidth: 1,
   },
-  toolName: {
-    fontSize: 14,
-    fontFamily: 'Inter_700Bold',
+  panelTitle: {
+    flex: 1,
+    fontSize: 10,
+    fontFamily: 'Inter_600SemiBold',
+    letterSpacing: 1,
+    textTransform: 'uppercase',
+  },
+  iconBtn: {
+    padding: 4,
+    borderRadius: 5,
+    borderWidth: 1,
+  },
+  scroll: {
     flex: 1,
   },
-  headerRight: {
+  scrollContent: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    gap: 6,
+  },
+  toolSection: {
+    borderRadius: 8,
+    borderWidth: 1,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    gap: 6,
+  },
+  sectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  sectionHeaderLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 7,
+    flex: 1,
+  },
+  sectionHeaderRight: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
   },
+  statusDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+  },
+  sectionTitle: {
+    fontSize: 12,
+    fontFamily: 'Inter_700Bold',
+  },
+  activeTag: {
+    fontSize: 9,
+    fontFamily: 'Inter_400Regular',
+    borderWidth: 1,
+    borderRadius: 3,
+    paddingHorizontal: 4,
+    paddingVertical: 1,
+  },
   toggleBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 12,
-    paddingVertical: 5,
-    borderRadius: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 5,
     borderWidth: 1,
     gap: 4,
   },
   toggleText: {
-    fontSize: 12,
+    fontSize: 11,
     fontFamily: 'Inter_600SemiBold',
   },
-  clearBtn: {
+  extraBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 8,
-    paddingVertical: 5,
-    borderRadius: 6,
+    paddingHorizontal: 7,
+    paddingVertical: 4,
+    borderRadius: 5,
     borderWidth: 1,
-    gap: 4,
+    gap: 3,
   },
-  clearText: {
-    fontSize: 11,
+  extraBtnText: {
+    fontSize: 10,
     fontFamily: 'Inter_400Regular',
   },
-  iconBtn: {
-    padding: 5,
-    borderRadius: 6,
-    borderWidth: 1,
+  sliders: {
+    gap: 3,
   },
-  sliders: { gap: 4 },
-  sliderRow: { gap: 2 },
+  sliderRow: {
+    gap: 1,
+  },
   sliderLabel: {
-    fontSize: 11,
+    fontSize: 10,
     fontFamily: 'Inter_400Regular',
   },
   collapsedTab: {
@@ -218,36 +320,20 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 8,
     borderTopWidth: 2,
-    borderLeftWidth: 1,
-    borderRightWidth: 1,
+    borderLeftWidth: 0,
+    borderRightWidth: 0,
     borderBottomWidth: 0,
-    borderTopLeftRadius: 8,
-    borderTopRightRadius: 8,
   },
   collapsedLeft: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
   },
-  collapsedDot: {
-    width: 7,
-    height: 7,
-    borderRadius: 4,
-  },
   collapsedName: {
-    fontSize: 13,
-    fontFamily: 'Inter_700Bold',
+    fontSize: 12,
+    fontFamily: 'Inter_600SemiBold',
   },
   collapsedStatus: {
-    fontSize: 10,
-    fontFamily: 'Inter_400Regular',
-  },
-  collapsedRight: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-  },
-  collapsedParams: {
     fontSize: 10,
     fontFamily: 'Inter_400Regular',
   },
