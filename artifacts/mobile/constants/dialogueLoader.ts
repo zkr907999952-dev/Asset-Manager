@@ -1,16 +1,30 @@
 /**
- * 对话文本加载器
+ * 角色对话加载器
  *
- * 程序初始化时从 assets/dialogues.xlsx 读取所有角色对话文本，
- * 覆盖 dialogues.ts 中的默认值。
+ * ─── 如何修改对话文本 ───────────────────────────────────────────────
+ *  1. 用 Excel 打开  artifacts/mobile/assets/dialogues.xlsx  并编辑
+ *  2. 保存文件后刷新/重启游戏，新对话立即生效
+ *  （程序每次启动时会从该文件重新读取，无需修改任何代码）
  *
- * Excel 格式说明：
- *   A列（说明列）：格式为 "[trigger_key] 触发条件描述"
- *   B~G列（对话内容列）：最多6条对话备选文本，空单元格忽略
+ * ─── Excel 格式说明 ─────────────────────────────────────────────────
+ *  A列（说明列）：[trigger_key] + 该对话的触发条件描述，仅供人工阅读
+ *  B~G列（对话列）：同一触发下最多 6 条备选文本，触发时随机选一条显示
+ *                  空单元格自动忽略，填了几条就从几条里随机
  *
- * 修改对话只需两步：
- *   1. 编辑 /chat/dialogues.xlsx
- *   2. 刷新/重启游戏（assets/dialogues.xlsx 是指向 /chat/ 的软链接，无需同步脚本）
+ * ─── 新增触发类型 ───────────────────────────────────────────────────
+ *  1. 在 constants/dialogues.ts 的 DialogueTrigger 联合类型中追加新 key
+ *  2. 在 dialogues.ts 的 DIALOGUES 对象中为该 key 添加默认值（作为
+ *     Excel 未读取到时的兜底文本）
+ *  3. 在 assets/dialogues.xlsx 新增一行：
+ *       A列：[新key] 触发条件描述
+ *       B~G列：对话备选文本
+ *  4. 在游戏逻辑中调用 triggerDialogue('新key') 即可
+ *
+ * ─── 运行原理 ───────────────────────────────────────────────────────
+ *  GameProvider 挂载时调用 initDialoguesFromExcel()，异步解析 Excel
+ *  并将结果写入 constants/dialogues.ts 导出的 DIALOGUES 对象。
+ *  之后 getRandomDialogue(trigger) 的随机选取逻辑不变。
+ *  若 Excel 读取失败，自动回退到 dialogues.ts 中的硬编码默认值。
  */
 
 import { Platform } from 'react-native';
@@ -54,6 +68,7 @@ export async function initDialoguesFromExcel(): Promise<void> {
       const row = rows[i];
       if (!row || row.length === 0) continue;
       const desc = String(row[0] ?? '').trim();
+      // A列格式：[trigger_key] 描述文字
       const match = desc.match(/^\[(\w+)\]/);
       if (!match) continue;
       const key = match[1] as DialogueTrigger;

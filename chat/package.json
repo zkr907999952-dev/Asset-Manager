@@ -1,7 +1,0 @@
-{
-  "name": "chat-dialogues",
-  "description": "角色对话文本管理脚本。编辑 dialogues.xlsx 后运行 `npm run generate` 同步到游戏。",
-  "scripts": {
-    "generate": "NODE_PATH=../artifacts/mobile/node_modules node generate-dialogues.js"
-  }
-}

@@ -5,27 +5,23 @@
 ## Run & Operate
 
 - `pnpm --filter @workspace/mobile run dev` — 启动移动端游戏（Expo Web）
-- `node chat/generate-dialogues.js` — 从 Excel 重新生成对话文本并同步到 assets
 
 ## 角色对话集中管理
 
-所有角色对话文本统一存放在 `/chat/dialogues.xlsx`，程序启动时自动读取。
-
-**Excel 格式：**
-- A列（说明列）：格式为 `[trigger_key] 触发条件的详细说明`
-- B~G列（对话内容列）：最多6条同一触发下的随机备选对话，空单元格自动忽略
-- 触发时系统随机从非空单元格中选一条显示
+**唯一的对话文件：** `artifacts/mobile/assets/dialogues.xlsx`
 
 **修改对话只需两步：**
-1. 用 Excel 打开 `/chat/dialogues.xlsx` 编辑（直接保存即可）
+1. 用 Excel 打开 `artifacts/mobile/assets/dialogues.xlsx` 编辑并保存
 2. 刷新/重启游戏生效
 
-> `/chat/dialogues.xlsx` 是软链接，直接指向游戏读取的真实文件 `artifacts/mobile/assets/dialogues.xlsx`，无需任何同步脚本。
+**Excel 格式：**
+- A列：`[trigger_key] 触发条件说明`（仅供阅读，程序用 `[key]` 前缀识别触发类型）
+- B~G列：最多6条备选对话文本，触发时随机选一条，空单元格自动忽略
 
-**新增对话触发类型时：**
-1. 在 `artifacts/mobile/constants/dialogues.ts` 的 `DialogueTrigger` 类型和 `DIALOGUES` 对象中新增 key（作为 fallback）
-2. 在 `/chat/dialogues.xlsx` 中新增一行，A列格式为 `[新key] 触发条件说明`，B~G列填写备选对话
-3. 刷新游戏即可
+**新增触发类型：**
+1. 在 `constants/dialogues.ts` 的 `DialogueTrigger` 类型和 `DIALOGUES` 对象中追加新 key（默认兜底文本）
+2. 在 `assets/dialogues.xlsx` 新增一行，格式同上
+3. 在游戏逻辑中调用 `triggerDialogue('新key')`，刷新游戏即可
 
 ## Stack
 

@@ -1,3 +1,21 @@
+/**
+ * 角色对话类型定义与默认兜底文本
+ *
+ * ⚠️  日常维护请勿在此文件修改对话文本。
+ *    所有对话文本统一在 assets/dialogues.xlsx 中管理：
+ *      - 直接用 Excel 打开该文件编辑并保存
+ *      - 刷新/重启游戏即可生效
+ *
+ *  此文件只有两个职责：
+ *    1. DialogueTrigger  — 所有触发类型的 TypeScript 联合类型
+ *    2. DIALOGUES        — 每个触发类型的兜底文本（Excel 读取失败时使用）
+ *
+ *  新增触发类型时：
+ *    1. 在下方 DialogueTrigger 联合类型中追加新 key
+ *    2. 在 DIALOGUES 对象中为该 key 添加兜底文本数组
+ *    3. 在 assets/dialogues.xlsx 新增对应行（A列格式：[key] 说明）
+ *    4. 在游戏逻辑中调用 triggerDialogue('新key')
+ */
 export type DialogueTrigger =
   | 'idle'
   | 'low_pressure'
