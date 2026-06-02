@@ -131,8 +131,7 @@ export function ToolBar() {
 
   return (
     <View
-      pointerEvents={Platform.OS === 'web' ? 'none' : 'box-none'}
-      style={styles.wrapper}
+      style={[styles.wrapper, { pointerEvents: 'box-none' }]}
       collapsable={false}
     >
       {/* Tools panel — no pointerEvents needed: panel is off-screen (translateX) when closed */}
