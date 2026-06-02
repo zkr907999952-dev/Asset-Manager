@@ -129,33 +129,43 @@ export function ToolBar() {
   const anyToolRunning = Object.values(state.toolStates ?? {}).some(ts => ts.active);
   const inSelMode = state.mesenterySelectionMode;
 
+  // On native: wrapper uses "box-none" prop — wrapper itself ignores events, children receive them normally.
+  // On web: wrapper uses style "none" (CSS pointer-events: none), then each interactive child
+  //   explicitly overrides with style "auto" — CSS children can override parent's none.
+  const wrapperProps = Platform.OS === 'web'
+    ? { style: [styles.wrapper, { pointerEvents: 'none' as const }] }
+    : { pointerEvents: 'box-none' as const, style: styles.wrapper };
+
   return (
-    <View
-      style={[styles.wrapper, { pointerEvents: 'none' }]}
-      collapsable={false}
-    >
-      {/* Panels — only interactive when open */}
+    <View {...wrapperProps} collapsable={false}>
+      {/* Panels — on web only interactive when open; on native always passthrough (off-screen when closed) */}
       <Animated.View
-        style={[styles.panel, { top: 0, transform: [{ translateX: toolsX }], backgroundColor: PANEL_BG, borderColor: `${colors.border}cc`, pointerEvents: openTab === 'tools' ? 'auto' : 'none' }]}
+        style={[styles.panel, { top: 0, transform: [{ translateX: toolsX }], backgroundColor: PANEL_BG, borderColor: `${colors.border}cc` },
+          Platform.OS === 'web' && { pointerEvents: openTab === 'tools' ? 'auto' : 'none' } as any,
+        ]}
       >
         <ToolsContent />
       </Animated.View>
 
       {/* Commands panel */}
       <Animated.View
-        style={[styles.panel, { top: 0, transform: [{ translateX: commandsX }], backgroundColor: PANEL_BG, borderColor: `${colors.border}cc`, pointerEvents: openTab === 'commands' ? 'auto' : 'none' }]}
+        style={[styles.panel, { top: 0, transform: [{ translateX: commandsX }], backgroundColor: PANEL_BG, borderColor: `${colors.border}cc` },
+          Platform.OS === 'web' && { pointerEvents: openTab === 'commands' ? 'auto' : 'none' } as any,
+        ]}
       >
         <CommandPanel />
       </Animated.View>
 
       {/* Surgery panel */}
       <Animated.View
-        style={[styles.panel, { top: 0, transform: [{ translateX: surgeryX }], backgroundColor: PANEL_BG, borderColor: `${colors.border}cc`, pointerEvents: openTab === 'surgery' ? 'auto' : 'none' }]}
+        style={[styles.panel, { top: 0, transform: [{ translateX: surgeryX }], backgroundColor: PANEL_BG, borderColor: `${colors.border}cc` },
+          Platform.OS === 'web' && { pointerEvents: openTab === 'surgery' ? 'auto' : 'none' } as any,
+        ]}
       >
         <SurgeryPanel />
       </Animated.View>
 
-      {/* 3 tab buttons stacked vertically — always interactive */}
+      {/* 3 tab buttons — always interactive */}
       {TABS.map((tab, i) => {
         const isOpen = openTab === tab.id;
         const hasDot = tab.id === 'tools' && (anyToolEnabled || anyToolRunning);
@@ -174,7 +184,7 @@ export function ToolBar() {
                 backgroundColor: isOpen ? TAB_BG_OPEN : TAB_BG_CLOSED,
                 borderColor: isOpen ? `${colors.primary}cc` : `${colors.border}99`,
               },
-              { pointerEvents: 'auto' },
+              Platform.OS === 'web' && { pointerEvents: 'auto' },
             ]}
             onPress={() => toggle(tab.id)}
             activeOpacity={0.7}
