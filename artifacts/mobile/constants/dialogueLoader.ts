@@ -32,8 +32,6 @@ import * as XLSX from 'xlsx';
 
 import { DIALOGUES, type DialogueTrigger } from './dialogues';
 
-let _initialized = false;
-
 async function loadWorkbook(): Promise<XLSX.WorkBook> {
   if (Platform.OS === 'web') {
     const uri = require('../assets/dialogues.xlsx') as string;
@@ -54,7 +52,6 @@ async function loadWorkbook(): Promise<XLSX.WorkBook> {
 }
 
 export async function initDialoguesFromExcel(): Promise<void> {
-  if (_initialized) return;
   try {
     const wb = await loadWorkbook();
     const ws = wb.Sheets[wb.SheetNames[0]];
@@ -81,7 +78,6 @@ export async function initDialoguesFromExcel(): Promise<void> {
         loaded++;
       }
     }
-    _initialized = true;
     console.log(`[dialogueLoader] 已从 Excel 加载 ${loaded} 条对话触发项`);
   } catch (e) {
     console.warn('[dialogueLoader] 加载 Excel 失败，使用默认对话文本:', e);
