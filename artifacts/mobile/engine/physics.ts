@@ -209,36 +209,6 @@ function largeNodeMesentery(idx: number): { stiffness: number; deadZone: number 
 }
 
 export function stepPhysics(state: PhysicsState) {
-  // Guard: ensure new fields exist on legacy state objects
-  if (!state.toolStates) (state as any).toolStates = {};
-  if (state.pressureDiffusionRate === undefined) (state as any).pressureDiffusionRate = 0.004;
-  if (!state.periScaleSmall || state.periScaleSmall.length !== N_SMALL)
-    (state as any).periScaleSmall = new Array(N_SMALL).fill(1);
-  if (!state.periScaleLarge || state.periScaleLarge.length !== N_LARGE)
-    (state as any).periScaleLarge = new Array(N_LARGE).fill(1);
-  if (state.peristalsisWaveAmplitude === undefined) (state as any).peristalsisWaveAmplitude = PERISTALSIS_WAVE_AMPLITUDE_DEFAULT;
-  if (state.peristalsisWaveSpeed === undefined) (state as any).peristalsisWaveSpeed = PERISTALSIS_WAVE_SPEED_DEFAULT;
-  if (state.relaxFrames === undefined) (state as any).relaxFrames = 0;
-  if (state.laxativeFrames === undefined) (state as any).laxativeFrames = 0;
-  if (state.hpBonus === undefined) (state as any).hpBonus = 0;
-  if (state.transfusionFrames === undefined) (state as any).transfusionFrames = 0;
-  if (!state.repairMarks) (state as any).repairMarks = [];
-  if (!state.sutureMarks) (state as any).sutureMarks = [];
-  if (!state.largeRepairMarks) (state as any).largeRepairMarks = [];
-  if (!state.largeSutureMarks) (state as any).largeSutureMarks = [];
-  if (!state.mesenteryDisabled) (state as any).mesenteryDisabled = [];
-  if (!state.smallMesenteryDisabled) (state as any).smallMesenteryDisabled = [];
-  if (state.smallTransplantColor === undefined) (state as any).smallTransplantColor = null;
-  if (state.largeTransplantColor === undefined) (state as any).largeTransplantColor = null;
-  if (state.eggSmallHeadIdx === undefined) (state as any).eggSmallHeadIdx = 0;
-  if (state.eggInLarge === undefined) (state as any).eggInLarge = false;
-  if (state.eggLargeHeadIdx === undefined) (state as any).eggLargeHeadIdx = 0;
-  if (!state.resectedSmallRanges) (state as any).resectedSmallRanges = [];
-  if (!state.resectedLargeRanges) (state as any).resectedLargeRanges = [];
-  // Guard: ensure resected field exists on all segments
-  for (const seg of state.smallSegs) { if (seg.resected === undefined) (seg as any).resected = false; }
-  for (const seg of state.largeSegs) { if (seg.resected === undefined) (seg as any).resected = false; }
-
   const relaxMultiplier = state.relaxFrames > 0 ? 0.15 : 1.0;
   if (state.relaxFrames > 0) state.relaxFrames--;
   const laxativeActive = state.laxativeFrames > 0;
@@ -250,6 +220,8 @@ export function stepPhysics(state: PhysicsState) {
 
   state.time += 1;
   const t = state.time;
+  const largeMesDisSet = new Set(state.mesenteryDisabled);
+  const smallMesDisSet = new Set(state.smallMesenteryDisabled);
   state.peristalsisSpeed = state.peristalsisBase;
   const periSpeed = state.peristalsisSpeed * PERISTALSIS_BASE_SPEED;
 
@@ -291,7 +263,7 @@ export function stepPhysics(state: PhysicsState) {
       n.x += vx;
       n.y += vy;
       // Small intestine: uniform mesentery with small dead zone
-      const smallMesDis = (state.smallMesenteryDisabled ?? []).includes(idx);
+      const smallMesDis = smallMesDisSet.has(idx);
       if (!smallMesDis) {
         const dx = n.rx - n.x, dy = n.ry - n.y;
         const disp = Math.sqrt(dx * dx + dy * dy);
@@ -315,7 +287,7 @@ export function stepPhysics(state: PhysicsState) {
       n.x += vx;
       n.y += vy;
       // Per-node mesentery with dead zone for large intestine
-      const mesDis = (state.mesenteryDisabled ?? []).includes(idx);
+      const mesDis = largeMesDisSet.has(idx);
       const { stiffness: rawStiff, deadZone } = mesDis ? { stiffness: 0, deadZone: 999 } : largeNodeMesentery(idx);
       const stiffness = rawStiff * relaxMultiplier;
       const dx = n.rx - n.x, dy = n.ry - n.y;
@@ -414,54 +386,57 @@ export function stepPhysics(state: PhysicsState) {
   applyResectionSprings(state.smallNodes, SMALL_SEG_LENGTH, state.resectedSmallRanges ?? []);
   applyResectionSprings(state.largeNodes, LARGE_SEG_LENGTH, state.resectedLargeRanges ?? []);
 
-  // --- Separation constraint between small and large intestine ---
-  for (let si = 0; si < state.smallNodes.length; si++) {
-    const sn = state.smallNodes[si];
-    const sSeg = state.smallSegs[Math.min(si, state.smallSegs.length - 1)];
-    const sPeriScale = state.periScaleSmall[si] ?? 1;
-    // Peristalsis wave scales the base radius; pressure expansion adds on top
-    const sExpR = SMALL_RADIUS * sPeriScale * (1 + (sSeg.pressure / 100) * state.expansionScale * 0.45);
+  // --- Separation constraint between small and large intestine (even frames) ---
+  if (t % 2 === 0) {
+    for (let si = 0; si < state.smallNodes.length; si++) {
+      const sn = state.smallNodes[si];
+      const sSeg = state.smallSegs[Math.min(si, state.smallSegs.length - 1)];
+      const sPeriScale = state.periScaleSmall[si] ?? 1;
+      const sExpR = SMALL_RADIUS * sPeriScale * (1 + (sSeg.pressure / 100) * state.expansionScale * 0.45);
 
-    for (let li = 0; li < state.largeNodes.length; li++) {
-      const ln = state.largeNodes[li];
-      const lSeg = state.largeSegs[Math.min(li, state.largeSegs.length - 1)];
-      const lPeriScale = state.periScaleLarge[li] ?? 1;
-      const lExpR = LARGE_RADIUS * lPeriScale * (1 + (lSeg.pressure / LARGE_RUPTURE_PRESSURE) * state.expansionScale * 0.45);
+      for (let li = 0; li < state.largeNodes.length; li++) {
+        const ln = state.largeNodes[li];
+        const lSeg = state.largeSegs[Math.min(li, state.largeSegs.length - 1)];
+        const lPeriScale = state.periScaleLarge[li] ?? 1;
+        const lExpR = LARGE_RADIUS * lPeriScale * (1 + (lSeg.pressure / LARGE_RUPTURE_PRESSURE) * state.expansionScale * 0.45);
 
-      const dx = sn.x - ln.x, dy = sn.y - ln.y;
-      const d = Math.sqrt(dx * dx + dy * dy);
-      const minDist = sExpR + lExpR;
-      if (d < minDist && d > 0.01) {
-        const push = (minDist - d) / d * 0.55;
-        sn.x += dx * push * 0.6;
-        sn.y += dy * push * 0.6;
+        const dx = sn.x - ln.x, dy = sn.y - ln.y;
+        const d = Math.sqrt(dx * dx + dy * dy);
+        const minDist = sExpR + lExpR;
+        if (d < minDist && d > 0.01) {
+          const push = (minDist - d) / d * 0.55;
+          sn.x += dx * push * 0.6;
+          sn.y += dy * push * 0.6;
+        }
       }
     }
   }
 
-  // --- Small intestine self-collision ---
+  // --- Small intestine self-collision (odd frames, alternates with cross-collision) ---
   // Skip pairs within ±4 indices to avoid fighting the chain constraint
-  for (let si = 0; si < state.smallNodes.length; si++) {
-    const a = state.smallNodes[si];
-    if (a.pinned) continue;
-    const aScale = state.periScaleSmall[si] ?? 1;
-    const aSeg = state.smallSegs[Math.min(si, state.smallSegs.length - 1)];
-    const aR = SMALL_RADIUS * aScale * (1 + (aSeg.pressure / 100) * state.expansionScale * 0.45);
+  if (t % 2 !== 0) {
+    for (let si = 0; si < state.smallNodes.length; si++) {
+      const a = state.smallNodes[si];
+      if (a.pinned) continue;
+      const aScale = state.periScaleSmall[si] ?? 1;
+      const aSeg = state.smallSegs[Math.min(si, state.smallSegs.length - 1)];
+      const aR = SMALL_RADIUS * aScale * (1 + (aSeg.pressure / 100) * state.expansionScale * 0.45);
 
-    for (let sj = si + 4; sj < state.smallNodes.length; sj++) {
-      const b = state.smallNodes[sj];
-      if (b.pinned) continue;
-      const bScale = state.periScaleSmall[sj] ?? 1;
-      const bSeg = state.smallSegs[Math.min(sj, state.smallSegs.length - 1)];
-      const bR = SMALL_RADIUS * bScale * (1 + (bSeg.pressure / 100) * state.expansionScale * 0.45);
+      for (let sj = si + 4; sj < state.smallNodes.length; sj++) {
+        const b = state.smallNodes[sj];
+        if (b.pinned) continue;
+        const bScale = state.periScaleSmall[sj] ?? 1;
+        const bSeg = state.smallSegs[Math.min(sj, state.smallSegs.length - 1)];
+        const bR = SMALL_RADIUS * bScale * (1 + (bSeg.pressure / 100) * state.expansionScale * 0.45);
 
-      const dx = a.x - b.x, dy = a.y - b.y;
-      const d = Math.sqrt(dx * dx + dy * dy);
-      const minDist = aR + bR;
-      if (d < minDist && d > 0.01) {
-        const push = (minDist - d) / d * 0.32;
-        a.x += dx * push * 0.5; a.y += dy * push * 0.5;
-        b.x -= dx * push * 0.5; b.y -= dy * push * 0.5;
+        const dx = a.x - b.x, dy = a.y - b.y;
+        const d = Math.sqrt(dx * dx + dy * dy);
+        const minDist = aR + bR;
+        if (d < minDist && d > 0.01) {
+          const push = (minDist - d) / d * 0.32;
+          a.x += dx * push * 0.5; a.y += dy * push * 0.5;
+          b.x -= dx * push * 0.5; b.y -= dy * push * 0.5;
+        }
       }
     }
   }

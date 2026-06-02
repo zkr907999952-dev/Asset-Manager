@@ -189,6 +189,7 @@ export interface GameUIState {
   resectedSmallRanges: { start: number; end: number }[];
   resectedLargeRanges: { start: number; end: number }[];
   resectedCount: number;
+  renderVersion: number;
 }
 
 interface GameContextType {
@@ -410,6 +411,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     resectedSmallRanges: [],
     resectedLargeRanges: [],
     resectedCount: 0,
+    renderVersion: 0,
   });
 
   const syncFromPhysics = useCallback(() => {
@@ -486,6 +488,9 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       beadsHeadIdx: p.beadsHeadIdx,
       beadsInSmall: p.beadsInSmall,
       beadsSmallHeadIdx: p.beadsSmallHeadIdx,
+      eggSmallHeadIdx: p.eggSmallHeadIdx,
+      eggInLarge: p.eggInLarge,
+      eggLargeHeadIdx: p.eggLargeHeadIdx,
       beadsChain: [...p.beadsChain],
       electrodes: [...p.electrodes],
       hpBonus: p.hpBonus ?? 0,
@@ -493,6 +498,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       peristalsisModifier: drug.peristalsisModifier,
       stimulantTimeLeft: stimTL,
       sedativeTimeLeft: sedTL,
+      renderVersion: prev.renderVersion + 1,
     }));
   }, []);
 
@@ -878,223 +884,215 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     return () => clearInterval(timer);
   }, []);
 
-  // === 长硅胶棒 animation loop — completely independent from enema ===
+  // === Merged animation loop: 长硅胶棒 + 拉珠 + 吞入跳蛋 (single 80ms interval, batched setState) ===
   useEffect(() => {
     const timer = setInterval(() => {
       const p = physicsRef.current;
-      if (p.toolType !== '长硅胶棒') return;
-
-      const anim = siliconeAnimRef.current;
-      const td = triggerDialogueRef.current;
       const now = Date.now();
-      const curInSmall = p.siliconeInSmall;
-      // Speed: param2=50→280ms/node in large, 520ms in small; faster at higher param2
-      const speedMs = curInSmall
-        ? Math.max(280, 520 - (p.toolParam2 ?? 50) * 2.4)
-        : Math.max(180, 380 - (p.toolParam2 ?? 50) * 2);
-      if (now - anim.lastStepTime < speedMs) return;
-      anim.lastStepTime = now;
-
-      const curLarge = p.siliconeHeadIdx;
-      const curSmall = p.siliconeSmallHeadIdx;
-
-      if (!curInSmall && !anim.targetInSmall) {
-        if (curLarge === anim.targetLargeIdx) return;
-        const dir = anim.targetLargeIdx < curLarge ? -1 : 1;
-        const newIdx = Math.max(0, Math.min(N_LARGE - 1, curLarge + dir));
-        const depth = N_LARGE - 1 - newIdx;
-        if (Math.abs(depth - anim.lastDialogueLargeDepth) >= 3) {
-          anim.lastDialogueLargeDepth = depth;
-          if (dir === -1) {
-            if (depth <= 10) td('silicone_large_shallow');
-            else td('silicone_large_deep');
-          }
-          if (depth >= 4 && p.toolParam1 > 35) td('silicone_expand');
-        }
-        p.siliconeHeadIdx = newIdx;
-        setState(prev => ({ ...prev, siliconeHeadIdx: newIdx }));
-
-      } else if (!curInSmall && anim.targetInSmall) {
-        if (curLarge > 0) {
-          const newIdx = curLarge - 1;
-          p.siliconeHeadIdx = newIdx;
-          setState(prev => ({ ...prev, siliconeHeadIdx: newIdx }));
-        } else {
-          p.siliconeInSmall = true;
-          p.siliconeSmallHeadIdx = N_SMALL - 1;
-          anim.lastDialogueSmallDepth = -99;
-          td('silicone_small_enter');
-          setState(prev => ({ ...prev, siliconeInSmall: true, siliconeSmallHeadIdx: N_SMALL - 1 }));
-        }
-
-      } else if (curInSmall && !anim.targetInSmall) {
-        if (curSmall < N_SMALL - 1) {
-          const newIdx = curSmall + 1;
-          p.siliconeSmallHeadIdx = newIdx;
-          setState(prev => ({ ...prev, siliconeSmallHeadIdx: newIdx }));
-        } else {
-          p.siliconeInSmall = false;
-          p.siliconeSmallHeadIdx = N_SMALL - 1;
-          p.siliconeHeadIdx = 0;
-          setState(prev => ({ ...prev, siliconeInSmall: false, siliconeSmallHeadIdx: N_SMALL - 1, siliconeHeadIdx: 0 }));
-        }
-
-      } else if (curInSmall && anim.targetInSmall) {
-        if (curSmall === anim.targetSmallIdx) return;
-        const dir = anim.targetSmallIdx < curSmall ? -1 : 1;
-        const newIdx = Math.max(0, Math.min(N_SMALL - 1, curSmall + dir));
-        const depth = N_SMALL - 1 - newIdx;
-        if (Math.abs(depth - anim.lastDialogueSmallDepth) >= 4) {
-          anim.lastDialogueSmallDepth = depth;
-          if (dir === -1) td('silicone_small_enter');
-        }
-        p.siliconeSmallHeadIdx = newIdx;
-        setState(prev => ({ ...prev, siliconeSmallHeadIdx: newIdx }));
-      }
-    }, 80);
-    return () => clearInterval(timer);
-  }, []);
-
-  // === 拉珠 animation loop — completely independent from enema and silicone ===
-  useEffect(() => {
-    const timer = setInterval(() => {
-      const p = physicsRef.current;
-      if (p.toolType !== '拉珠') return;
-
-      const anim = beadsAnimRef.current;
       const td = triggerDialogueRef.current;
-      const now = Date.now();
-      const curInSmall = p.beadsInSmall;
-      // Fast pull = rapid retraction; normal = param2-controlled speed
-      const speedMs = anim.fastPull
-        ? 95
-        : (curInSmall
-            ? Math.max(300, 560 - (p.toolParam2 ?? 50) * 2.6)
-            : Math.max(200, 420 - (p.toolParam2 ?? 50) * 2.2));
-      if (now - anim.lastStepTime < speedMs) return;
-      anim.lastStepTime = now;
+      type UpdType = {
+        siliconeHeadIdx?: number; siliconeInSmall?: boolean; siliconeSmallHeadIdx?: number;
+        beadsHeadIdx?: number; beadsInSmall?: boolean; beadsSmallHeadIdx?: number;
+        eggSmallHeadIdx?: number; eggInLarge?: boolean; eggLargeHeadIdx?: number;
+      };
+      const upd: UpdType = {};
 
-      const curLarge = p.beadsHeadIdx;
-      const curSmall = p.beadsSmallHeadIdx;
-
-      if (!curInSmall && !anim.targetInSmall) {
-        if (curLarge === anim.targetLargeIdx) {
-          anim.fastPull = false;
-          return;
-        }
-        const dir = anim.targetLargeIdx < curLarge ? -1 : 1;
-        const newIdx = Math.max(0, Math.min(N_LARGE - 1, curLarge + dir));
-        const depth = N_LARGE - 1 - newIdx;
-        if (Math.abs(depth - anim.lastDialogueLargeDepth) >= 3) {
-          anim.lastDialogueLargeDepth = depth;
-          if (dir === -1) {
-            if (depth <= 10) td('beads_large_shallow');
-            else td('beads_large_deep');
-          } else {
-            td('beads_pullout');
+      // --- 长硅胶棒 ---
+      if (p.toolType === '长硅胶棒') {
+        const anim = siliconeAnimRef.current;
+        const curInSmall = p.siliconeInSmall;
+        const speedMs = curInSmall
+          ? Math.max(280, 520 - (p.toolParam2 ?? 50) * 2.4)
+          : Math.max(180, 380 - (p.toolParam2 ?? 50) * 2);
+        if (now - anim.lastStepTime >= speedMs) {
+          anim.lastStepTime = now;
+          const curLarge = p.siliconeHeadIdx;
+          const curSmall = p.siliconeSmallHeadIdx;
+          if (!curInSmall && !anim.targetInSmall) {
+            if (curLarge !== anim.targetLargeIdx) {
+              const dir = anim.targetLargeIdx < curLarge ? -1 : 1;
+              const newIdx = Math.max(0, Math.min(N_LARGE - 1, curLarge + dir));
+              const depth = N_LARGE - 1 - newIdx;
+              if (Math.abs(depth - anim.lastDialogueLargeDepth) >= 3) {
+                anim.lastDialogueLargeDepth = depth;
+                if (dir === -1) {
+                  if (depth <= 10) td('silicone_large_shallow');
+                  else td('silicone_large_deep');
+                }
+                if (depth >= 4 && p.toolParam1 > 35) td('silicone_expand');
+              }
+              p.siliconeHeadIdx = newIdx;
+              upd.siliconeHeadIdx = newIdx;
+            }
+          } else if (!curInSmall && anim.targetInSmall) {
+            if (curLarge > 0) {
+              const newIdx = curLarge - 1;
+              p.siliconeHeadIdx = newIdx;
+              upd.siliconeHeadIdx = newIdx;
+            } else {
+              p.siliconeInSmall = true;
+              p.siliconeSmallHeadIdx = N_SMALL - 1;
+              anim.lastDialogueSmallDepth = -99;
+              td('silicone_small_enter');
+              upd.siliconeInSmall = true;
+              upd.siliconeSmallHeadIdx = N_SMALL - 1;
+            }
+          } else if (curInSmall && !anim.targetInSmall) {
+            if (curSmall < N_SMALL - 1) {
+              const newIdx = curSmall + 1;
+              p.siliconeSmallHeadIdx = newIdx;
+              upd.siliconeSmallHeadIdx = newIdx;
+            } else {
+              p.siliconeInSmall = false;
+              p.siliconeSmallHeadIdx = N_SMALL - 1;
+              p.siliconeHeadIdx = 0;
+              upd.siliconeInSmall = false;
+              upd.siliconeSmallHeadIdx = N_SMALL - 1;
+              upd.siliconeHeadIdx = 0;
+            }
+          } else if (curInSmall && anim.targetInSmall) {
+            if (curSmall !== anim.targetSmallIdx) {
+              const dir = anim.targetSmallIdx < curSmall ? -1 : 1;
+              const newIdx = Math.max(0, Math.min(N_SMALL - 1, curSmall + dir));
+              const depth = N_SMALL - 1 - newIdx;
+              if (Math.abs(depth - anim.lastDialogueSmallDepth) >= 4) {
+                anim.lastDialogueSmallDepth = depth;
+                if (dir === -1) td('silicone_small_enter');
+              }
+              p.siliconeSmallHeadIdx = newIdx;
+              upd.siliconeSmallHeadIdx = newIdx;
+            }
           }
         }
-        p.beadsHeadIdx = newIdx;
-        setState(prev => ({ ...prev, beadsHeadIdx: newIdx }));
-
-      } else if (!curInSmall && anim.targetInSmall) {
-        if (curLarge > 0) {
-          const newIdx = curLarge - 1;
-          p.beadsHeadIdx = newIdx;
-          setState(prev => ({ ...prev, beadsHeadIdx: newIdx }));
-        } else {
-          p.beadsInSmall = true;
-          p.beadsSmallHeadIdx = N_SMALL - 1;
-          anim.lastDialogueSmallDepth = -99;
-          td('beads_small_enter');
-          setState(prev => ({ ...prev, beadsInSmall: true, beadsSmallHeadIdx: N_SMALL - 1 }));
-        }
-
-      } else if (curInSmall && !anim.targetInSmall) {
-        if (curSmall < N_SMALL - 1) {
-          const newIdx = curSmall + 1;
-          td('beads_pullout');
-          p.beadsSmallHeadIdx = newIdx;
-          setState(prev => ({ ...prev, beadsSmallHeadIdx: newIdx }));
-        } else {
-          p.beadsInSmall = false;
-          p.beadsSmallHeadIdx = N_SMALL - 1;
-          p.beadsHeadIdx = 0;
-          anim.fastPull = false;
-          setState(prev => ({ ...prev, beadsInSmall: false, beadsSmallHeadIdx: N_SMALL - 1, beadsHeadIdx: 0 }));
-        }
-
-      } else if (curInSmall && anim.targetInSmall) {
-        if (curSmall === anim.targetSmallIdx) return;
-        const dir = anim.targetSmallIdx < curSmall ? -1 : 1;
-        const newIdx = Math.max(0, Math.min(N_SMALL - 1, curSmall + dir));
-        if (dir === 1) td('beads_pullout');
-        p.beadsSmallHeadIdx = newIdx;
-        setState(prev => ({ ...prev, beadsSmallHeadIdx: newIdx }));
       }
-    }, 80);
-    return () => clearInterval(timer);
-  }, []);
 
-  // === 吞入跳蛋 animation loop — moves from duodenum (node 0) deeper into intestines ===
-  useEffect(() => {
-    const timer = setInterval(() => {
-      const p = physicsRef.current;
-      const anim = eggAnimRef.current;
-      if (p.toolType !== '吞入跳蛋') return;
-
-      const now = Date.now();
-      const speedMs = Math.max(100, 450 - (p.toolParam2 ?? 50) * 3.5);
-      if (now - anim.lastStepTime < speedMs) return;
-      anim.lastStepTime = now;
-
-      const curInLarge = p.eggInLarge;
-      const curSmall = p.eggSmallHeadIdx;
-      const curLarge = p.eggLargeHeadIdx;
-
-      if (!curInLarge && !anim.targetInLarge) {
-        // In small intestine, targeting small intestine position
-        if (curSmall === anim.targetSmallIdx) return;
-        const dir = anim.targetSmallIdx > curSmall ? 1 : -1;
-        const newIdx = Math.max(0, Math.min(N_SMALL - 1, curSmall + dir));
-        p.eggSmallHeadIdx = newIdx;
-        setState(prev => ({ ...prev, eggSmallHeadIdx: newIdx }));
-
-      } else if (!curInLarge && anim.targetInLarge) {
-        // Push egg through ileocecal junction into large intestine
-        if (curSmall < N_SMALL - 1) {
-          const newIdx = Math.min(N_SMALL - 1, curSmall + 1);
-          p.eggSmallHeadIdx = newIdx;
-          setState(prev => ({ ...prev, eggSmallHeadIdx: newIdx }));
-        } else {
-          // Cross junction
-          p.eggInLarge = true;
-          p.eggSmallHeadIdx = N_SMALL - 1;
-          p.eggLargeHeadIdx = 0;
-          setState(prev => ({ ...prev, eggInLarge: true, eggSmallHeadIdx: N_SMALL - 1, eggLargeHeadIdx: 0 }));
+      // --- 拉珠 ---
+      if (p.toolType === '拉珠') {
+        const anim = beadsAnimRef.current;
+        const curInSmall = p.beadsInSmall;
+        const speedMs = anim.fastPull
+          ? 95
+          : (curInSmall
+              ? Math.max(300, 560 - (p.toolParam2 ?? 50) * 2.6)
+              : Math.max(200, 420 - (p.toolParam2 ?? 50) * 2.2));
+        if (now - anim.lastStepTime >= speedMs) {
+          anim.lastStepTime = now;
+          const curLarge = p.beadsHeadIdx;
+          const curSmall = p.beadsSmallHeadIdx;
+          if (!curInSmall && !anim.targetInSmall) {
+            if (curLarge === anim.targetLargeIdx) {
+              anim.fastPull = false;
+            } else {
+              const dir = anim.targetLargeIdx < curLarge ? -1 : 1;
+              const newIdx = Math.max(0, Math.min(N_LARGE - 1, curLarge + dir));
+              const depth = N_LARGE - 1 - newIdx;
+              if (Math.abs(depth - anim.lastDialogueLargeDepth) >= 3) {
+                anim.lastDialogueLargeDepth = depth;
+                if (dir === -1) {
+                  if (depth <= 10) td('beads_large_shallow');
+                  else td('beads_large_deep');
+                } else {
+                  td('beads_pullout');
+                }
+              }
+              p.beadsHeadIdx = newIdx;
+              upd.beadsHeadIdx = newIdx;
+            }
+          } else if (!curInSmall && anim.targetInSmall) {
+            if (curLarge > 0) {
+              const newIdx = curLarge - 1;
+              p.beadsHeadIdx = newIdx;
+              upd.beadsHeadIdx = newIdx;
+            } else {
+              p.beadsInSmall = true;
+              p.beadsSmallHeadIdx = N_SMALL - 1;
+              anim.lastDialogueSmallDepth = -99;
+              td('beads_small_enter');
+              upd.beadsInSmall = true;
+              upd.beadsSmallHeadIdx = N_SMALL - 1;
+            }
+          } else if (curInSmall && !anim.targetInSmall) {
+            if (curSmall < N_SMALL - 1) {
+              const newIdx = curSmall + 1;
+              td('beads_pullout');
+              p.beadsSmallHeadIdx = newIdx;
+              upd.beadsSmallHeadIdx = newIdx;
+            } else {
+              p.beadsInSmall = false;
+              p.beadsSmallHeadIdx = N_SMALL - 1;
+              p.beadsHeadIdx = 0;
+              anim.fastPull = false;
+              upd.beadsInSmall = false;
+              upd.beadsSmallHeadIdx = N_SMALL - 1;
+              upd.beadsHeadIdx = 0;
+            }
+          } else if (curInSmall && anim.targetInSmall) {
+            if (curSmall !== anim.targetSmallIdx) {
+              const dir = anim.targetSmallIdx < curSmall ? -1 : 1;
+              const newIdx = Math.max(0, Math.min(N_SMALL - 1, curSmall + dir));
+              if (dir === 1) td('beads_pullout');
+              p.beadsSmallHeadIdx = newIdx;
+              upd.beadsSmallHeadIdx = newIdx;
+            }
+          }
         }
+      }
 
-      } else if (curInLarge && !anim.targetInLarge) {
-        // Retract egg back through ileocecal junction
-        if (curLarge > 0) {
-          const newIdx = Math.max(0, curLarge - 1);
-          p.eggLargeHeadIdx = newIdx;
-          setState(prev => ({ ...prev, eggLargeHeadIdx: newIdx }));
-        } else {
-          // Cross junction back to small intestine
-          p.eggInLarge = false;
-          p.eggLargeHeadIdx = 0;
-          p.eggSmallHeadIdx = N_SMALL - 1;
-          setState(prev => ({ ...prev, eggInLarge: false, eggLargeHeadIdx: 0, eggSmallHeadIdx: N_SMALL - 1 }));
+      // --- 吞入跳蛋 ---
+      if (p.toolType === '吞入跳蛋') {
+        const anim = eggAnimRef.current;
+        const speedMs = Math.max(100, 450 - (p.toolParam2 ?? 50) * 3.5);
+        if (now - anim.lastStepTime >= speedMs) {
+          anim.lastStepTime = now;
+          const curInLarge = p.eggInLarge;
+          const curSmall = p.eggSmallHeadIdx;
+          const curLarge = p.eggLargeHeadIdx;
+          if (!curInLarge && !anim.targetInLarge) {
+            if (curSmall !== anim.targetSmallIdx) {
+              const dir = anim.targetSmallIdx > curSmall ? 1 : -1;
+              const newIdx = Math.max(0, Math.min(N_SMALL - 1, curSmall + dir));
+              p.eggSmallHeadIdx = newIdx;
+              upd.eggSmallHeadIdx = newIdx;
+            }
+          } else if (!curInLarge && anim.targetInLarge) {
+            if (curSmall < N_SMALL - 1) {
+              const newIdx = Math.min(N_SMALL - 1, curSmall + 1);
+              p.eggSmallHeadIdx = newIdx;
+              upd.eggSmallHeadIdx = newIdx;
+            } else {
+              p.eggInLarge = true;
+              p.eggSmallHeadIdx = N_SMALL - 1;
+              p.eggLargeHeadIdx = 0;
+              upd.eggInLarge = true;
+              upd.eggSmallHeadIdx = N_SMALL - 1;
+              upd.eggLargeHeadIdx = 0;
+            }
+          } else if (curInLarge && !anim.targetInLarge) {
+            if (curLarge > 0) {
+              const newIdx = Math.max(0, curLarge - 1);
+              p.eggLargeHeadIdx = newIdx;
+              upd.eggLargeHeadIdx = newIdx;
+            } else {
+              p.eggInLarge = false;
+              p.eggLargeHeadIdx = 0;
+              p.eggSmallHeadIdx = N_SMALL - 1;
+              upd.eggInLarge = false;
+              upd.eggLargeHeadIdx = 0;
+              upd.eggSmallHeadIdx = N_SMALL - 1;
+            }
+          } else if (curInLarge && anim.targetInLarge) {
+            if (curLarge !== anim.targetLargeIdx) {
+              const dir = anim.targetLargeIdx > curLarge ? 1 : -1;
+              const newIdx = Math.max(0, Math.min(N_LARGE - 1, curLarge + dir));
+              p.eggLargeHeadIdx = newIdx;
+              upd.eggLargeHeadIdx = newIdx;
+            }
+          }
         }
+      }
 
-      } else if (curInLarge && anim.targetInLarge) {
-        // In large intestine, targeting large intestine position
-        if (curLarge === anim.targetLargeIdx) return;
-        const dir = anim.targetLargeIdx > curLarge ? 1 : -1;
-        const newIdx = Math.max(0, Math.min(N_LARGE - 1, curLarge + dir));
-        p.eggLargeHeadIdx = newIdx;
-        setState(prev => ({ ...prev, eggLargeHeadIdx: newIdx }));
+      if ((Object.keys(upd) as (keyof UpdType)[]).length > 0) {
+        setState(prev => ({ ...prev, ...upd }));
       }
     }, 80);
     return () => clearInterval(timer);

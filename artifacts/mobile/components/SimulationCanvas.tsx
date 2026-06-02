@@ -763,7 +763,7 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
   const breathOverlayScale = 1 + inhale * 0.025 * breathAmp;
 
   const handlePos = state.toolPos;
-  const renderTime = Date.now() / 33;
+  const renderTime = state.renderVersion ?? 0;
 
   const enemaVisible = (state.enabledTools ?? []).includes(TOOLS.ENEMA) || state.toolStates?.[TOOLS.ENEMA]?.active === true;
   const electricIndepActive = state.toolStates?.[TOOLS.ELECTRIC]?.active === true;

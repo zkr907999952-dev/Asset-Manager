@@ -28,6 +28,8 @@ export function SimulationScreen({ onMenuPress }: Props) {
   const frameCount = useRef(0);
   const fpsCountRef = useRef(0);
   const fpsLastMsRef = useRef(Date.now());
+  const peristalsisSpeedRef = useRef(state.peristalsisSpeed);
+  const peristalsisModifierRef = useRef(state.peristalsisModifier);
   const [actualFps, setActualFps] = useState(0);
   const [canvasLayout, setCanvasLayout] = useState<{ x: number; y: number; width: number; height: number } | null>(null);
   const lastDialogueTrigger = useRef<Record<string, number>>({});
@@ -112,10 +114,14 @@ export function SimulationScreen({ onMenuPress }: Props) {
     }
   }, [triggerDialogue, state.comaState, clearComaByShock]);
 
+  useEffect(() => { peristalsisSpeedRef.current = state.peristalsisSpeed; }, [state.peristalsisSpeed]);
+  useEffect(() => { peristalsisModifierRef.current = state.peristalsisModifier; }, [state.peristalsisModifier]);
+
   useEffect(() => {
+    const fps = state.physicsFps;
     intervalRef.current = setInterval(() => {
       const p = physicsRef.current;
-      p.peristalsisBase = state.peristalsisSpeed + state.peristalsisModifier;
+      p.peristalsisBase = peristalsisSpeedRef.current + peristalsisModifierRef.current;
       stepPhysics(p);
       frameCount.current++;
       fpsCountRef.current++;
@@ -131,15 +137,15 @@ export function SimulationScreen({ onMenuPress }: Props) {
       if (frameCount.current % 2 === 0) {
         syncFromPhysics();
       }
-      if (frameCount.current % Math.max(1, state.physicsFps) === 0) {
+      if (frameCount.current % Math.max(1, fps) === 0) {
         checkDialogueTriggers();
       }
-    }, 1000 / state.physicsFps);
+    }, 1000 / fps);
 
     return () => {
       if (intervalRef.current) clearInterval(intervalRef.current);
     };
-  }, [state.peristalsisSpeed, state.peristalsisModifier, state.physicsFps]);
+  }, [state.physicsFps]);
 
   const topPad = Platform.OS === 'web' ? 67 : insets.top;
 
