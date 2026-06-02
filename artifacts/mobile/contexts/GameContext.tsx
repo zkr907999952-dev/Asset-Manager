@@ -3,14 +3,14 @@ import React, {
 } from 'react';
 import { createInitialPhysicsState } from '../engine/intestineInit';
 import type { PhysicsState } from '../engine/physics';
-import type { ToolType } from '../constants/gameConfig';
 import {
   TOOLS, N_LARGE, N_SMALL, CAVITY_CX, CAVITY_CY,
   BREATH_AMPLITUDE_DEFAULT, EXPANSION_SCALE_DEFAULT,
   PRESSURE_DIFFUSION_RATE_DEFAULT,
   PERISTALSIS_WAVE_AMPLITUDE_DEFAULT, PERISTALSIS_WAVE_SPEED_DEFAULT,
-  MAX_RESECTION_SEGMENTS_DEFAULT,
+  MAX_RESECTION_SEGMENTS_DEFAULT, PHYSICS_FPS,
 } from '../constants/gameConfig';
+import type { ToolType } from '../constants/gameConfig';
 import { getRandomDialogue, type DialogueTrigger } from '../constants/dialogues';
 import { initDialoguesFromExcel } from '../constants/dialogueLoader';
 import type { ComaState } from '../components/HeartRateMonitor';
@@ -124,6 +124,7 @@ export interface GameUIState {
   expansionScale: number;
   debugMode: boolean;
   showCollisionBoxes: boolean;
+  physicsFps: number;
   renderSmallNodes: { x: number; y: number }[];
   renderLargeNodes: { x: number; y: number }[];
   renderSmallSegs: RenderSegment[];
@@ -207,6 +208,7 @@ interface GameContextType {
   setPressureDiffusionRate: (v: number) => void;
   setDebugMode: (v: boolean) => void;
   setShowCollisionBoxes: (v: boolean) => void;
+  setPhysicsFps: (v: number) => void;
   syncFromPhysics: () => void;
   triggerDialogue: (trigger: DialogueTrigger) => void;
   addElectrode: (x: number, y: number) => void;
@@ -347,7 +349,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     peristalsisWaveSpeed: PERISTALSIS_WAVE_SPEED_DEFAULT,
     breathAmplitude: BREATH_AMPLITUDE_DEFAULT,
     expansionScale: EXPANSION_SCALE_DEFAULT,
-    debugMode: false, showCollisionBoxes: false,
+    debugMode: false, showCollisionBoxes: false, physicsFps: PHYSICS_FPS,
     renderSmallNodes: physicsRef.current.smallNodes.map(n => ({ x: n.x, y: n.y })),
     renderLargeNodes: physicsRef.current.largeNodes.map(n => ({ x: n.x, y: n.y })),
     renderSmallSegs: physicsRef.current.smallSegs.map(s => ({ ...s })),
@@ -1281,6 +1283,10 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     setState(prev => ({ ...prev, showCollisionBoxes: v }));
   }, []);
 
+  const setPhysicsFps = useCallback((v: number) => {
+    setState(prev => ({ ...prev, physicsFps: v }));
+  }, []);
+
   const addElectrode = useCallback((x: number, y: number) => {
     if (physicsRef.current.electrodes.length >= 8) {
       physicsRef.current.electrodes.shift();
@@ -2188,7 +2194,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       setToolParam1, setToolParam2, setToolState, setPeriSpeed,
       setPeriWaveAmplitude, setPeriWaveSpeed,
       setBreathAmplitude, setExpansionScale, setPressureDiffusionRate,
-      setDebugMode, setShowCollisionBoxes,
+      setDebugMode, setShowCollisionBoxes, setPhysicsFps,
       syncFromPhysics, triggerDialogue, addElectrode, clearElectrodes,
       insertViaNavel, retractTool, setNavelPierced, setEnemaHeadIdx,
       setEnemaInSmall, setEnemaSmallHeadIdx, setEnemaTarget,

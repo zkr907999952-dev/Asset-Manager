@@ -12,7 +12,6 @@ import { DialogueBox } from '@/components/DialogueBox';
 import { HeartRateMonitor } from '@/components/HeartRateMonitor';
 import { CharacterStatusBadges } from '@/components/CharacterStatusBadges';
 import { stepPhysics } from '@/engine/physics';
-import { PHYSICS_FPS } from '@/constants/gameConfig';
 
 interface Props {
   onMenuPress: () => void;
@@ -27,6 +26,9 @@ export function SimulationScreen({ onMenuPress }: Props) {
   } = useGame();
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const frameCount = useRef(0);
+  const fpsCountRef = useRef(0);
+  const fpsLastMsRef = useRef(Date.now());
+  const [actualFps, setActualFps] = useState(0);
   const [canvasLayout, setCanvasLayout] = useState<{ x: number; y: number; width: number; height: number } | null>(null);
   const lastDialogueTrigger = useRef<Record<string, number>>({});
 
@@ -116,18 +118,28 @@ export function SimulationScreen({ onMenuPress }: Props) {
       p.peristalsisBase = state.peristalsisSpeed + state.peristalsisModifier;
       stepPhysics(p);
       frameCount.current++;
+      fpsCountRef.current++;
+
+      const nowMs = Date.now();
+      const elapsed = nowMs - fpsLastMsRef.current;
+      if (elapsed >= 1000) {
+        setActualFps(Math.round(fpsCountRef.current / elapsed * 1000));
+        fpsCountRef.current = 0;
+        fpsLastMsRef.current = nowMs;
+      }
+
       if (frameCount.current % 2 === 0) {
         syncFromPhysics();
       }
-      if (frameCount.current % 30 === 0) {
+      if (frameCount.current % Math.max(1, state.physicsFps) === 0) {
         checkDialogueTriggers();
       }
-    }, 1000 / PHYSICS_FPS);
+    }, 1000 / state.physicsFps);
 
     return () => {
       if (intervalRef.current) clearInterval(intervalRef.current);
     };
-  }, [state.peristalsisSpeed, state.peristalsisModifier]);
+  }, [state.peristalsisSpeed, state.peristalsisModifier, state.physicsFps]);
 
   const topPad = Platform.OS === 'web' ? 67 : insets.top;
 
@@ -169,6 +181,14 @@ export function SimulationScreen({ onMenuPress }: Props) {
           canvasLayout={canvasLayout}
           onLayout={layout => { setCanvasLayout(layout); }}
         />
+
+        {/* FPS badge — debug mode only */}
+        {state.debugMode && (
+          <View style={styles.fpsBadge} pointerEvents="none">
+            <Text style={styles.fpsText}>{actualFps} fps</Text>
+            <Text style={styles.fpsSubText}>目标 {state.physicsFps}</Text>
+          </View>
+        )}
 
         {/* Status bars + ECG + status badges — transparent absolute overlay at top of canvas */}
         <View style={[styles.statusArea, { pointerEvents: 'none' }]}>
@@ -267,5 +287,28 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     zIndex: 10,
+  },
+  fpsBadge: {
+    position: 'absolute',
+    top: 6,
+    right: 8,
+    zIndex: 5,
+    backgroundColor: 'rgba(0,0,0,0.55)',
+    borderRadius: 6,
+    paddingHorizontal: 7,
+    paddingVertical: 3,
+    alignItems: 'center',
+  },
+  fpsText: {
+    color: '#00ff99',
+    fontSize: 13,
+    fontFamily: 'Inter_600SemiBold',
+    lineHeight: 16,
+  },
+  fpsSubText: {
+    color: 'rgba(255,255,255,0.5)',
+    fontSize: 9,
+    fontFamily: 'Inter_400Regular',
+    lineHeight: 12,
   },
 });

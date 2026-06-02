@@ -76,7 +76,7 @@ export function SettingsScreen({ onMenuPress }: Props) {
   const insets = useSafeAreaInsets();
   const {
     state,
-    setDebugMode, setShowCollisionBoxes,
+    setDebugMode, setShowCollisionBoxes, setPhysicsFps,
     setPeriSpeed, setPeriWaveAmplitude, setPeriWaveSpeed,
     setBreathAmplitude, setExpansionScale, setPressureDiffusionRate,
     setDrugDuration, setHatchDuration, setParasiteDamageInterval, setParasitePerforationChance,
@@ -219,7 +219,7 @@ export function SettingsScreen({ onMenuPress }: Props) {
         <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
           <ToggleRow
             label="调试模式"
-            description="显示每个肠段的四项属性数值色条"
+            description="显示每个肠段的四项属性数值色条及实时 FPS"
             value={state.debugMode}
             onToggle={setDebugMode}
             color={colors.pleasure}
@@ -231,6 +231,15 @@ export function SettingsScreen({ onMenuPress }: Props) {
             value={state.showCollisionBoxes}
             onToggle={setShowCollisionBoxes}
             color={colors.toolActive}
+          />
+          <View style={[styles.divider, { backgroundColor: colors.border }]} />
+          <SliderRow
+            label="物理模拟帧率"
+            value={state.physicsFps}
+            displayValue={`${state.physicsFps} fps`}
+            min={10} max={60} step={5}
+            onValueChange={setPhysicsFps}
+            trackColor={colors.pleasure}
           />
         </View>
 
@@ -259,7 +268,7 @@ export function SettingsScreen({ onMenuPress }: Props) {
             { label: '大肠节段数', value: '29 段' },
             { label: '小肠爆破压力', value: '100' },
             { label: '大肠爆破压力', value: '180' },
-            { label: '物理刷新率', value: '30 fps' },
+            { label: '物理刷新率', value: `${state.physicsFps} fps (目标)` },
             { label: '约束迭代次数', value: '8 次/帧' },
             { label: '当前蠕动速度', value: `${state.peristalsisSpeed.toFixed(1)}×` },
           ].map(({ label, value }) => (
