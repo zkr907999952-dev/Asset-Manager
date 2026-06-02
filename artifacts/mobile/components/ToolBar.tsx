@@ -131,12 +131,12 @@ export function ToolBar() {
 
   return (
     <View
-      style={[styles.wrapper, Platform.select({ web: { pointerEvents: 'none' }, default: { pointerEvents: 'box-none' } }) as any]}
+      pointerEvents={Platform.OS === 'web' ? 'none' : 'box-none'}
+      style={styles.wrapper}
       collapsable={false}
     >
-      {/* Tools panel */}
+      {/* Tools panel — no pointerEvents needed: panel is off-screen (translateX) when closed */}
       <Animated.View
-        pointerEvents={openTab === 'tools' ? 'auto' : 'none'}
         style={[styles.panel, { top: 0, transform: [{ translateX: toolsX }], backgroundColor: PANEL_BG, borderColor: `${colors.border}cc` }]}
       >
         <ToolsContent />
@@ -144,7 +144,6 @@ export function ToolBar() {
 
       {/* Commands panel */}
       <Animated.View
-        pointerEvents={openTab === 'commands' ? 'auto' : 'none'}
         style={[styles.panel, { top: 0, transform: [{ translateX: commandsX }], backgroundColor: PANEL_BG, borderColor: `${colors.border}cc` }]}
       >
         <CommandPanel />
@@ -152,7 +151,6 @@ export function ToolBar() {
 
       {/* Surgery panel */}
       <Animated.View
-        pointerEvents={openTab === 'surgery' ? 'auto' : 'none'}
         style={[styles.panel, { top: 0, transform: [{ translateX: surgeryX }], backgroundColor: PANEL_BG, borderColor: `${colors.border}cc` }]}
       >
         <SurgeryPanel />

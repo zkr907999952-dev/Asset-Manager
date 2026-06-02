@@ -213,7 +213,6 @@ export function ToolControls() {
 
 const styles = StyleSheet.create({
   container: {
-    maxHeight: 260,
     borderTopWidth: 1,
     backgroundColor: 'rgba(19,8,16,0.92)',
   },
@@ -237,7 +236,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   scroll: {
-    flex: 1,
+    maxHeight: 230,
   },
   scrollContent: {
     paddingHorizontal: 10,
