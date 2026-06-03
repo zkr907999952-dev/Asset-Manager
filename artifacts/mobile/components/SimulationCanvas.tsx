@@ -830,13 +830,13 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
             Animated.timing(strikeAnim, {
               toValue: 1,
               duration: toolDef.delayMs,
-              easing: Easing.out(Easing.cubic),
+              easing: Easing.in(Easing.cubic),
               useNativeDriver: false,
             }),
             Animated.timing(strikeAnim, {
               toValue: 2,
-              duration: 260,
-              easing: Easing.in(Easing.quad),
+              duration: 110,
+              easing: Easing.out(Easing.quad),
               useNativeDriver: false,
             }),
           ]).start();
@@ -2472,8 +2472,8 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
           const totalLen = rangePx * 2.2;
           centerSX = ofX + (physX + totalLen / 2) * sc;
           centerSY = ofY + physY * sc;
-          imgW = totalLen * sc * 1.1;
-          imgH = imgW * 0.36;  // wide aspect to match bat silhouette
+          imgW = totalLen * sc * 1.6;
+          imgH = imgW * 0.46;  // wider/taller to fully cover the bat hit zone
         }
 
         const imgSrc = STRIKE_TOOL_IMAGES[toolId];

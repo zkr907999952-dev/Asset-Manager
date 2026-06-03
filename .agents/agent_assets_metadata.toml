@@ -34,19 +34,25 @@ title = "demon character belly external"
 id = "QIbM6USZgk_TP3_PES8YT"
 uri = "file://artifacts/mobile/assets/images/strike_fist.png"
 type = "image"
-title = "strike fist tool"
+title = "fist punch impact mark"
 
 [[generated]]
 id = "jjrvzgp43boAMyUYwkpcS"
 uri = "file://artifacts/mobile/assets/images/strike_bat.png"
 type = "image"
-title = "baseball bat tool"
+title = "baseball bat barrel impact"
 
 [[generated]]
 id = "-WabusgCuRnOTkAIYXN2K"
 uri = "file://artifacts/mobile/assets/images/strike_hammer.png"
 type = "image"
-title = "bell hammer tool"
+title = "cylindrical hammer strike head"
+
+[[generated]]
+id = "4ihlN1K-jtGnilHMFF73A"
+uri = "file://artifacts/mobile/assets/images/strike_fist_tmp.png"
+type = "image"
+title = "fist punch front view white bg"
 
 [[outputs]]
 id = "EvFH6bgGV0eFpaLTc_px6"
