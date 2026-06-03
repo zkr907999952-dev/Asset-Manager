@@ -92,6 +92,9 @@ export interface PhysicsState {
   resectedLargeRanges: { start: number; end: number }[];
   // === Expanding shockwave collision body (belly strike) ===
   strikeWave: { x: number; y: number; radius: number; maxRadius: number; strength: number; growRate: number } | null;
+  // === Pre-built Sets for mesentery disable lookups (avoids new Set() every frame) ===
+  mesenteryDisabledSet: Set<number>;
+  smallMesenteryDisabledSet: Set<number>;
 }
 
 function clamp(v: number, min: number, max: number) {
@@ -210,6 +213,9 @@ function largeNodeMesentery(idx: number): { stiffness: number; deadZone: number 
   return { stiffness: 0.038, deadZone: 4.5 };
 }
 
+// Module-level scratch buffer — reused every frame to avoid per-frame allocation in diffuseAndUpdate
+const _pressureScratch: number[] = new Array(N_SMALL).fill(0);
+
 export function stepPhysics(state: PhysicsState) {
   const relaxMultiplier = state.relaxFrames > 0 ? 0.15 : 1.0;
   if (state.relaxFrames > 0) state.relaxFrames--;
@@ -222,8 +228,8 @@ export function stepPhysics(state: PhysicsState) {
 
   state.time += 1;
   const t = state.time;
-  const largeMesDisSet = new Set(state.mesenteryDisabled);
-  const smallMesDisSet = new Set(state.smallMesenteryDisabled);
+  const largeMesDisSet = state.mesenteryDisabledSet;
+  const smallMesDisSet = state.smallMesenteryDisabledSet;
   state.peristalsisSpeed = state.peristalsisBase;
   const periSpeed = state.peristalsisSpeed * PERISTALSIS_BASE_SPEED;
 
@@ -1201,7 +1207,8 @@ export function stepPhysics(state: PhysicsState) {
   // --- Pressure diffusion & effects ---
   const diffuseAndUpdate = (segs: SegmentProps[], nodes: PhysicsNode[], maxPressure: number) => {
     const n = segs.length;
-    const prevPressures = segs.map(s => s.pressure);
+    const prevPressures = _pressureScratch;
+    for (let _pi = 0; _pi < n; _pi++) prevPressures[_pi] = segs[_pi].pressure;
     for (let i = 0; i < n; i++) {
       const seg = segs[i];
       if (seg.broken) continue;

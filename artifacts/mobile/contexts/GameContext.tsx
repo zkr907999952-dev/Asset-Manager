@@ -93,7 +93,23 @@ export type ScreenName = 'character' | 'simulation' | 'console' | 'settings' | '
 
 export interface RenderSegment {
   health: number; sensitivity: number; pain: number; pressure: number;
-  ruptured: boolean; broken: boolean; perforated: boolean;
+  ruptured: boolean; broken: boolean; perforated: boolean; resected: boolean;
+}
+
+export interface RenderSnapshot {
+  smallNodes: { x: number; y: number }[];
+  largeNodes: { x: number; y: number }[];
+  smallSegs: RenderSegment[];
+  largeSegs: RenderSegment[];
+  periScaleSmall: number[];
+  periScaleLarge: number[];
+  beadsChain: { x: number; y: number; vx: number; vy: number }[];
+  electrodes: { x: number; y: number }[];
+  avgPain: number;
+  avgPressure: number;
+  avgSensitivity: number;
+  breathVal: number;
+  _breathPhase: number;
 }
 
 export interface ToolInstanceState {
@@ -203,6 +219,7 @@ export interface GameUIState {
 interface GameContextType {
   state: GameUIState;
   physicsRef: React.MutableRefObject<PhysicsState>;
+  renderSnapshotRef: React.MutableRefObject<RenderSnapshot>;
   setScreen: (screen: ScreenName) => void;
   setViewMode: (mode: 'external' | 'internal') => void;
   setActiveTool: (tool: ToolType | null) => void;
@@ -278,6 +295,22 @@ const GameContext = createContext<GameContextType | null>(null);
 
 export function GameProvider({ children }: { children: React.ReactNode }) {
   const physicsRef = useRef<PhysicsState>(createInitialPhysicsState());
+  const renderSnapshotRef = useRef<RenderSnapshot>({
+    smallNodes: physicsRef.current.smallNodes.map(n => ({ x: n.x, y: n.y })),
+    largeNodes: physicsRef.current.largeNodes.map(n => ({ x: n.x, y: n.y })),
+    smallSegs: physicsRef.current.smallSegs.map(s => ({ ...s })),
+    largeSegs: physicsRef.current.largeSegs.map(s => ({ ...s })),
+    periScaleSmall: [...physicsRef.current.periScaleSmall],
+    periScaleLarge: [...physicsRef.current.periScaleLarge],
+    beadsChain: [],
+    electrodes: [],
+    avgPain: 0,
+    avgPressure: 0,
+    avgSensitivity: 0,
+    breathVal: 0,
+    _breathPhase: 0,
+  });
+  const syncCallCountRef = useRef(0);
   const dialogueTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const comaStateRef = useRef<ComaState>('none');
 
@@ -443,18 +476,14 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
 
     // Drug expiry checks — zero out individual drug modifiers when timer ends
     if (drug.stimulantExpiry > 0 && now > drug.stimulantExpiry) {
-      drug.stimHRMod = 0;
-      drug.stimBreathMod = 0;
-      drug.stimPeriMod = 0;
+      drug.stimHRMod = 0; drug.stimBreathMod = 0; drug.stimPeriMod = 0;
       drug.stimulantExpiry = 0;
       drug.heartRateModifier = drug.stimHRMod + drug.sedHRMod;
       drug.breathModifier = drug.stimBreathMod + drug.sedBreathMod;
       drug.peristalsisModifier = drug.stimPeriMod;
     }
     if (drug.sedativeExpiry > 0 && now > drug.sedativeExpiry) {
-      drug.sedHRMod = 0;
-      drug.sedBreathMod = 0;
-      drug.sedPainMod = 0;
+      drug.sedHRMod = 0; drug.sedBreathMod = 0; drug.sedPainMod = 0;
       drug.sedativeExpiry = 0;
       drug.heartRateModifier = drug.stimHRMod + drug.sedHRMod;
       drug.breathModifier = drug.stimBreathMod + drug.sedBreathMod;
@@ -463,15 +492,76 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     const stimTL = drug.stimulantExpiry > 0 ? Math.max(0, Math.ceil((drug.stimulantExpiry - now) / 1000)) : 0;
     const sedTL = drug.sedativeExpiry > 0 ? Math.max(0, Math.ceil((drug.sedativeExpiry - now) / 1000)) : 0;
 
-    const rawPain = smallSegs.reduce((a, s) => a + s.pain, 0) / smallSegs.length;
+    // === Update renderSnapshotRef IN-PLACE — zero heap allocations per frame ===
+    const snap = renderSnapshotRef.current;
+
+    for (let i = 0; i < p.smallNodes.length; i++) {
+      snap.smallNodes[i].x = p.smallNodes[i].x;
+      snap.smallNodes[i].y = p.smallNodes[i].y;
+    }
+    for (let i = 0; i < p.largeNodes.length; i++) {
+      snap.largeNodes[i].x = p.largeNodes[i].x;
+      snap.largeNodes[i].y = p.largeNodes[i].y;
+    }
+    for (let i = 0; i < smallSegs.length; i++) {
+      const src = smallSegs[i]; const dst = snap.smallSegs[i];
+      dst.health = src.health; dst.sensitivity = src.sensitivity;
+      dst.pain = src.pain; dst.pressure = src.pressure;
+      dst.ruptured = src.ruptured; dst.broken = src.broken;
+      dst.perforated = src.perforated; dst.resected = src.resected;
+    }
+    for (let i = 0; i < largeSegs.length; i++) {
+      const src = largeSegs[i]; const dst = snap.largeSegs[i];
+      dst.health = src.health; dst.sensitivity = src.sensitivity;
+      dst.pain = src.pain; dst.pressure = src.pressure;
+      dst.ruptured = src.ruptured; dst.broken = src.broken;
+      dst.perforated = src.perforated; dst.resected = src.resected;
+    }
+    for (let i = 0; i < p.periScaleSmall.length; i++) snap.periScaleSmall[i] = p.periScaleSmall[i];
+    for (let i = 0; i < p.periScaleLarge.length; i++) snap.periScaleLarge[i] = p.periScaleLarge[i];
+
+    const bcLen = p.beadsChain.length;
+    if (snap.beadsChain.length !== bcLen) snap.beadsChain.length = bcLen;
+    for (let i = 0; i < bcLen; i++) {
+      if (!snap.beadsChain[i]) snap.beadsChain[i] = { x: 0, y: 0, vx: 0, vy: 0 };
+      snap.beadsChain[i].x = p.beadsChain[i].x;
+      snap.beadsChain[i].y = p.beadsChain[i].y;
+    }
+    const elLen = p.electrodes.length;
+    if (snap.electrodes.length !== elLen) snap.electrodes.length = elLen;
+    for (let i = 0; i < elLen; i++) {
+      if (!snap.electrodes[i]) snap.electrodes[i] = { x: 0, y: 0 };
+      snap.electrodes[i].x = p.electrodes[i].x;
+      snap.electrodes[i].y = p.electrodes[i].y;
+    }
+
+    // Aggregate stats — single pass, no intermediate arrays
+    let sumPain = 0, sumPressure = 0, sumSens = 0;
+    for (let i = 0; i < smallSegs.length; i++) {
+      sumPain += smallSegs[i].pain;
+      sumPressure += smallSegs[i].pressure;
+      sumSens += smallSegs[i].sensitivity;
+    }
+    const nSegs = smallSegs.length || 1;
+    const rawPain = sumPain / nSegs;
+    snap.avgPain = rawPain;
+    snap.avgPressure = sumPressure / nSegs;
+    snap.avgSensitivity = sumSens / nSegs;
+
     const totalPain = Math.max(0, rawPain + drug.painModifier);
-    const totalSens = smallSegs.reduce((a, s) => a + s.sensitivity, 0) / smallSegs.length;
-    const totalPressure = smallSegs.reduce((a, s) => a + s.pressure, 0) / smallSegs.length;
-    const ruptures = [...smallSegs, ...largeSegs].filter(s => s.ruptured).length;
-    const breaks = [...smallSegs, ...largeSegs].filter(s => s.broken).length;
+
+    let ruptures = 0, breaks = 0;
+    for (let i = 0; i < smallSegs.length; i++) {
+      if (smallSegs[i].ruptured) ruptures++;
+      if (smallSegs[i].broken) breaks++;
+    }
+    for (let i = 0; i < largeSegs.length; i++) {
+      if (largeSegs[i].ruptured) ruptures++;
+      if (largeSegs[i].broken) breaks++;
+    }
 
     const hp = Math.min(100, Math.max(0, 100 - totalPain * 0.7 - breaks * 5 + (p.hpBonus ?? 0)));
-    const pleasure = Math.min(100, totalSens * 0.6 + (totalPressure > 40 ? (totalPressure - 40) * 0.5 : 0));
+    const pleasure = Math.min(100, snap.avgSensitivity * 0.6 + (snap.avgPressure > 40 ? (snap.avgPressure - 40) * 0.5 : 0));
 
     let heartRate: number;
     if (coma === 'tachycardia') {
@@ -483,19 +573,23 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       heartRate = Math.max(20, Math.min(240, heartRate));
     }
 
+    // Advance breath phase in-place (replaces per-frame useBreathAnimation cost)
+    const bpmF = 14 + Math.max(0, heartRate - 72) * 0.115;
+    const periodMs = 60000 / bpmF;
+    snap._breathPhase = (snap._breathPhase + (2 * Math.PI * (1000 / 15)) / periodMs) % (2 * Math.PI);
+    snap.breathVal = Math.sin(snap._breathPhase);
+
+    // === Scalar-only setState — no array allocations in hot path ===
+    syncCallCountRef.current++;
+    const isSlowSync = (syncCallCountRef.current % 15) === 0;
+
     setState(prev => ({
       ...prev,
       hp, pleasure, heartRate,
       intestinalRuptures: ruptures,
       intestinalBreaks: breaks,
-      renderSmallNodes: p.smallNodes.map(n => ({ x: n.x, y: n.y })),
-      renderLargeNodes: p.largeNodes.map(n => ({ x: n.x, y: n.y })),
-      renderSmallSegs: smallSegs.map(s => ({ ...s })),
-      renderLargeSegs: largeSegs.map(s => ({ ...s })),
-      periScaleSmall: [...p.periScaleSmall],
-      periScaleLarge: [...p.periScaleLarge],
-      toolPos: p.toolPos ? { ...p.toolPos } : null,
-      toolAnchor: p.toolAnchor ? { ...p.toolAnchor } : null,
+      toolPos: p.toolPos ? { x: p.toolPos.x, y: p.toolPos.y } : null,
+      toolAnchor: p.toolAnchor ? { x: p.toolAnchor.x, y: p.toolAnchor.y } : null,
       toolInserted: p.toolInserted,
       navelPierced: p.navelPierced,
       enemaHeadIdx: p.enemaHeadIdx,
@@ -510,14 +604,23 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       eggSmallHeadIdx: p.eggSmallHeadIdx,
       eggInLarge: p.eggInLarge,
       eggLargeHeadIdx: p.eggLargeHeadIdx,
-      beadsChain: [...p.beadsChain],
-      electrodes: [...p.electrodes],
       hpBonus: p.hpBonus ?? 0,
       heartRateModifier: drug.heartRateModifier,
       peristalsisModifier: drug.peristalsisModifier,
       stimulantTimeLeft: stimTL,
       sedativeTimeLeft: sedTL,
       renderVersion: prev.renderVersion + 1,
+      // Slow path: update state arrays every 15 frames for AttributePanel/CharacterView
+      ...(isSlowSync ? {
+        renderSmallNodes: snap.smallNodes.map(n => ({ x: n.x, y: n.y })),
+        renderLargeNodes: snap.largeNodes.map(n => ({ x: n.x, y: n.y })),
+        renderSmallSegs: snap.smallSegs.map(s => ({ ...s })),
+        renderLargeSegs: snap.largeSegs.map(s => ({ ...s })),
+        periScaleSmall: [...snap.periScaleSmall],
+        periScaleLarge: [...snap.periScaleLarge],
+        beadsChain: [...snap.beadsChain],
+        electrodes: [...snap.electrodes],
+      } : {}),
     }));
   }, []);
 
@@ -1822,6 +1925,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     p.repairMarks = [];
     p.sutureMarks = [];
     p.smallMesenteryDisabled = [];
+    p.smallMesenteryDisabledSet = new Set<number>();
     parasiteRef.current = [];
     const d = 22;
     const color = {
@@ -1858,6 +1962,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     p.largeRepairMarks = [];
     p.largeSutureMarks = [];
     p.mesenteryDisabled = [];
+    p.mesenteryDisabledSet = new Set<number>();
     const d = 22;
     const color = {
       r: Math.max(155, Math.min(255, 210 + Math.round((Math.random() - 0.5) * d * 2))),
@@ -1895,6 +2000,8 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     p.largeRepairMarks = []; p.largeSutureMarks = [];
     p.mesenteryDisabled = [];
     p.smallMesenteryDisabled = [];
+    p.mesenteryDisabledSet = new Set<number>();
+    p.smallMesenteryDisabledSet = new Set<number>();
     const d = 22;
     const sc = {
       r: Math.max(180, Math.min(255, 245 + Math.round((Math.random() - 0.5) * d * 2))),
@@ -1955,6 +2062,8 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     setState(prev => {
       physicsRef.current.mesenteryDisabled = [...prev.mesenterySelectedNodes];
       physicsRef.current.smallMesenteryDisabled = [...prev.smallMesenterySelectedNodes];
+      physicsRef.current.mesenteryDisabledSet = new Set(prev.mesenterySelectedNodes);
+      physicsRef.current.smallMesenteryDisabledSet = new Set(prev.smallMesenterySelectedNodes);
       return {
         ...prev,
         mesenterySelectionMode: false,
@@ -2354,7 +2463,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
 
   return (
     <GameContext.Provider value={{
-      state, physicsRef,
+      state, physicsRef, renderSnapshotRef,
       setScreen, setViewMode, setActiveTool, toggleToolEnabled, setToolActive,
       setToolParam1, setToolParam2, setToolState, setPeriSpeed,
       setPeriWaveAmplitude, setPeriWaveSpeed,

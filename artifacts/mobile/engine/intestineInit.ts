@@ -222,5 +222,7 @@ export function createInitialPhysicsState(): PhysicsState {
     resectedSmallRanges: [],
     resectedLargeRanges: [],
     strikeWave: null,
+    mesenteryDisabledSet: new Set<number>(),
+    smallMesenteryDisabledSet: new Set<number>(),
   };
 }

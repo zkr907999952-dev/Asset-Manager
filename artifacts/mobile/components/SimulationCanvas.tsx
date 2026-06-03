@@ -1,6 +1,6 @@
 import React, { useRef, useCallback, useState } from 'react';
 import { View, PanResponder, StyleSheet, Animated, Easing, Image } from 'react-native';
-import { useBreathAnimation } from '@/hooks/useBreathAnimation';
+
 import Svg, {
   Ellipse, Circle, Line, Path, Rect, Defs, RadialGradient, LinearGradient, Stop, G,
   Image as SvgImage, ClipPath,
@@ -230,7 +230,7 @@ interface CanvasProps {
 
 export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
   const {
-    state, physicsRef, triggerDialogue, addElectrode,
+    state, physicsRef, renderSnapshotRef, triggerDialogue, addElectrode,
     insertViaNavel, retractTool, setNavelPierced, setEnemaHeadIdx,
     setEnemaInSmall, setEnemaSmallHeadIdx, setEnemaTarget,
     setSiliconeTarget, setBeadsTarget, setEggTarget,
@@ -891,8 +891,6 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
   })).current;
 
   const {
-    renderSmallNodes, renderLargeNodes, renderSmallSegs, renderLargeSegs,
-    periScaleSmall, periScaleLarge,
     repairMarks, sutureMarks, largeRepairMarks, largeSutureMarks,
     smallTransplantColor, largeTransplantColor,
     mesenterySelectionMode, mesenterySelectedNodes,
@@ -902,14 +900,21 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
   } = state;
   const isInternal = state.viewMode === 'internal';
 
-  const avgPain = renderSmallSegs.length > 0
-    ? renderSmallSegs.reduce((a, s) => a + s.pain, 0) / renderSmallSegs.length : 0;
-  const avgPressure = renderSmallSegs.length > 0
-    ? renderSmallSegs.reduce((a, s) => a + s.pressure, 0) / renderSmallSegs.length : 0;
+  // Read render data from the pre-allocated snapshot (zero-alloc per frame)
+  const snap = renderSnapshotRef.current;
+  const renderSmallNodes = snap.smallNodes;
+  const renderLargeNodes = snap.largeNodes;
+  const renderSmallSegs = snap.smallSegs;
+  const renderLargeSegs = snap.largeSegs;
+  const periScaleSmall = snap.periScaleSmall;
+  const periScaleLarge = snap.periScaleLarge;
+
+  const avgPain = snap.avgPain;
+  const avgPressure = snap.avgPressure;
   const bulge = 1 + avgPressure * 0.003;
   const expansionScale = state.expansionScale;
 
-  const breathVal = useBreathAnimation(state.heartRate);
+  const breathVal = snap.breathVal;
   const breathAmp = state.breathAmplitude;
   const inhale = (breathVal + 1) / 2;
   // Image: x=-80 centers 500px img on 340px canvas. Adjusted y downward per user feedback.
@@ -1874,7 +1879,7 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
                 fill="none" stroke="rgba(100,180,255,0.55)" strokeWidth={0.8} />
             )}
             {state.showCollisionBoxes && state.activeTool === TOOLS.ELECTRIC &&
-              state.electrodes.map((el, i) => (
+              snap.electrodes.map((el, i) => (
                 <Circle key={`cb-el-${i}`} cx={el.x} cy={el.y}
                   r={30 + state.toolParam2 * 0.3}
                   fill="none" stroke="rgba(255,255,80,0.4)" strokeWidth={0.7} />
@@ -2068,7 +2073,7 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
             ? Math.min(40, renderLargeNodes.length)
             : Math.min(40, Math.max(0, renderLargeNodes.length - headIdx));
           const externalCount = Math.max(0, 40 - internalCount);
-          const chain = state.beadsChain ?? [];
+          const chain = snap.beadsChain ?? [];
 
           // Small-intestine beads — FRONT of chain (smallest beads, indices 0+)
           // Computed first so we know the offset for large-intestine bead indices
@@ -2281,9 +2286,9 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
         )}
 
         {/* Electrodes + wires + controller */}
-        {(state.electrodes.length > 0 || state.activeTool === TOOLS.ELECTRIC || electricIndepActive) && (
+        {(snap.electrodes.length > 0 || state.activeTool === TOOLS.ELECTRIC || electricIndepActive) && (
           <G>
-            {state.electrodes.map((el, i) => {
+            {snap.electrodes.map((el, i) => {
               const elecActive = (state.activeTool === TOOLS.ELECTRIC && state.toolActive) || electricIndepActive;
               const wireColor = elecActive ? '#ffee44' : '#888844';
               if (isInternal) {
@@ -2306,7 +2311,7 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
                   stroke={wireColor} strokeWidth={1.2} strokeOpacity={0.75} />
               );
             })}
-            {state.electrodes.map((el, i) => {
+            {snap.electrodes.map((el, i) => {
               const elecActive2 = (state.activeTool === TOOLS.ELECTRIC && state.toolActive) || electricIndepActive;
               const elecParam2 = state.activeTool === TOOLS.ELECTRIC
                 ? state.toolParam2

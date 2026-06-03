@@ -22,20 +22,19 @@ export function SimulationScreen({ onMenuPress }: Props) {
   const insets = useSafeAreaInsets();
   const {
     state, physicsRef, syncFromPhysics, setViewMode,
-    triggerDialogue, resetPositions, clearComaByShock,
+    triggerDialogue, resetPositions, clearComaByShock, renderSnapshotRef,
   } = useGame();
-  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const rafRef = useRef<number | null>(null);
   const frameCount = useRef(0);
   const fpsCountRef = useRef(0);
-  const fpsLastMsRef = useRef(Date.now());
+  const fpsLastMsRef = useRef(performance.now());
   const peristalsisSpeedRef = useRef(state.peristalsisSpeed);
   const peristalsisModifierRef = useRef(state.peristalsisModifier);
   const [actualFps, setActualFps] = useState(0);
   const [canvasLayout, setCanvasLayout] = useState<{ x: number; y: number; width: number; height: number } | null>(null);
   const lastDialogueTrigger = useRef<Record<string, number>>({});
 
-  const avgPain = state.renderSmallSegs.length > 0
-    ? state.renderSmallSegs.reduce((a, s) => a + s.pain, 0) / state.renderSmallSegs.length : 0;
+  const avgPain = renderSnapshotRef.current.avgPain;
 
   const checkDialogueTriggers = useCallback(() => {
     const p = physicsRef.current;
@@ -119,31 +118,41 @@ export function SimulationScreen({ onMenuPress }: Props) {
 
   useEffect(() => {
     const fps = state.physicsFps;
-    intervalRef.current = setInterval(() => {
-      const p = physicsRef.current;
-      p.peristalsisBase = peristalsisSpeedRef.current + peristalsisModifierRef.current;
-      stepPhysics(p);
-      frameCount.current++;
-      fpsCountRef.current++;
+    const targetMs = 1000 / fps;
+    let lastTime = -1;
 
-      const nowMs = Date.now();
-      const elapsed = nowMs - fpsLastMsRef.current;
-      if (elapsed >= 1000) {
-        setActualFps(Math.round(fpsCountRef.current / elapsed * 1000));
-        fpsCountRef.current = 0;
-        fpsLastMsRef.current = nowMs;
-      }
+    const loop = (now: number) => {
+      if (lastTime < 0) lastTime = now;
+      if (now - lastTime >= targetMs) {
+        lastTime += targetMs;
+        if (now - lastTime > targetMs) lastTime = now;
 
-      if (frameCount.current % 2 === 0) {
-        syncFromPhysics();
-      }
-      if (frameCount.current % Math.max(1, fps) === 0) {
-        checkDialogueTriggers();
-      }
-    }, 1000 / fps);
+        const p = physicsRef.current;
+        p.peristalsisBase = peristalsisSpeedRef.current + peristalsisModifierRef.current;
+        stepPhysics(p);
+        frameCount.current++;
+        fpsCountRef.current++;
 
+        const elapsed = now - fpsLastMsRef.current;
+        if (elapsed >= 1000) {
+          setActualFps(Math.round(fpsCountRef.current / elapsed * 1000));
+          fpsCountRef.current = 0;
+          fpsLastMsRef.current = now;
+        }
+
+        if (frameCount.current % 2 === 0) {
+          syncFromPhysics();
+        }
+        if (frameCount.current % Math.max(1, fps) === 0) {
+          checkDialogueTriggers();
+        }
+      }
+      rafRef.current = requestAnimationFrame(loop);
+    };
+
+    rafRef.current = requestAnimationFrame(loop);
     return () => {
-      if (intervalRef.current) clearInterval(intervalRef.current);
+      if (rafRef.current !== null) cancelAnimationFrame(rafRef.current);
     };
   }, [state.physicsFps]);
 

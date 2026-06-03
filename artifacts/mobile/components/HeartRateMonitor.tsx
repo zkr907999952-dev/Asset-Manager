@@ -54,9 +54,10 @@ interface Props {
 }
 
 export function HeartRateMonitor({ heartRate, comaState, width, height, transparent = false, showLabel = true }: Props) {
-  const bufferRef = useRef<number[]>(new Array(BUFFER_SIZE).fill(0));
+  const bufRef = useRef<Float32Array>(new Float32Array(BUFFER_SIZE));
+  const writeIdxRef = useRef(0);
   const phaseRef = useRef(0);
-  const [points, setPoints] = useState<number[]>(new Array(BUFFER_SIZE).fill(0));
+  const [tick, setTick] = useState(0);
 
   const color = getECGColor(heartRate, comaState);
 
@@ -66,10 +67,9 @@ export function HeartRateMonitor({ heartRate, comaState, width, height, transpar
       const phasePerTick = (effectiveBpm / 60) * (TICK_MS / 1000);
       phaseRef.current = (phaseRef.current + phasePerTick) % 1.0;
       const y = ecgSample(phaseRef.current, comaState);
-      const buf = bufferRef.current;
-      buf.push(y);
-      if (buf.length > BUFFER_SIZE) buf.shift();
-      setPoints([...buf]);
+      bufRef.current[writeIdxRef.current % BUFFER_SIZE] = y;
+      writeIdxRef.current++;
+      setTick(t => t + 1);
     }, TICK_MS);
     return () => clearInterval(timer);
   }, [heartRate, comaState]);
@@ -78,11 +78,17 @@ export function HeartRateMonitor({ heartRate, comaState, width, height, transpar
   const midY = graphH / 2;
   const amplitude = graphH * 0.42;
 
-  const pointsStr = points.map((v, i) => {
+  const buf = bufRef.current;
+  const writeIdx = writeIdxRef.current;
+  let pointsStr = '';
+  for (let i = 0; i < BUFFER_SIZE; i++) {
+    const dataIdx = (writeIdx + i) % BUFFER_SIZE;
+    const v = buf[dataIdx];
     const x = (i / (BUFFER_SIZE - 1)) * width;
     const y = midY - v * amplitude;
-    return `${x.toFixed(1)},${y.toFixed(1)}`;
-  }).join(' ');
+    if (i > 0) pointsStr += ' ';
+    pointsStr += x.toFixed(1) + ',' + y.toFixed(1);
+  }
 
   const displayBpm = comaState === 'tachycardia' ? '---' : comaState === 'bradycardia' ? '---' : String(heartRate);
 
