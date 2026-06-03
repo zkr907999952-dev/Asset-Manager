@@ -78,6 +78,12 @@ uri = "file://attached_assets/generated_images/strike_bat_anim.png"
 type = "image"
 title = "generated_image"
 
+[[generated]]
+id = "6CPPkenEya7qOXD8-MBhY"
+uri = "file://attached_assets/generated_images/strike_fist_anim_v2.png"
+type = "image"
+title = "generated_image"
+
 [[outputs]]
 id = "EvFH6bgGV0eFpaLTc_px6"
 uri = "file://artifacts/mobile/assets/images/icon.png"
@@ -107,3 +113,9 @@ id = "2Zi5dxGh96PhWCyO0ltEd"
 uri = "file://attached_assets/generated_images/strike_bat_anim.png"
 type = "image"
 title = "棒球棒动画素材（平视无透视）"
+
+[[outputs]]
+id = "9HRtzAIBKScDHb17UTWJH"
+uri = "file://attached_assets/generated_images/strike_fist_anim_v2.png"
+type = "image"
+title = "拳头动画素材（俧视下击）"

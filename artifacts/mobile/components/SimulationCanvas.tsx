@@ -2506,6 +2506,13 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
         );
       })}
 
+      {/* Preload strike animation images so they're cached before first use */}
+      <View pointerEvents="none" style={{ position: 'absolute', width: 0, height: 0, overflow: 'hidden' }}>
+        {Object.values(STRIKE_ANIM_IMAGES).map((src, i) => (
+          <Image key={i} source={src} style={{ width: 1, height: 1 }} />
+        ))}
+      </View>
+
       {/* Flash overlay on strike impact — always rendered, opacity animated */}
       <Animated.View
         pointerEvents="none"
