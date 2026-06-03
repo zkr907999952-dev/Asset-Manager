@@ -1333,22 +1333,23 @@ export function applyBellyStrikePhysics(
         const d = Math.hypot(dx, dy);
         if (d < rangePx) factor = 1 - d / rangePx;
       } else {
-        // Bat: multi-point strip from knob (left) to barrel tip (right)
-        // 8 sample points along bat axis; radius tapers from handleR→barrelR; power scales toward barrel
-        const hLen = rangePx * 0.55;     // handle extends left of physX
-        const bLen = rangePx * 1.65;     // barrel tip right of physX
+        // Bat: physX = barrel tip (large end, drag point) on LEFT; handle/knob extend RIGHT
+        // 9 sample points along bat axis; radius tapers from barrelR→handleR; power highest at barrel
+        const hLen = rangePx * 0.55;     // handle length (to the right)
+        const bLen = rangePx * 1.65;     // barrel length (to the right of physX)
         const totalLen = hLen + bLen;
         const handleR = rangePx * 0.13;  // narrow grip radius
         const barrelR = rangePx * 0.34;  // barrel radius
         const N = 9;
         for (let k = 0; k < N; k++) {
-          const t = k / (N - 1);                      // 0 = knob end, 1 = barrel tip
-          const sx = physX - hLen + t * totalLen;      // sample point x
-          // Bat profile: smoothstep from handleR to barrelR starting at t=0.22
-          const tp = t < 0.22 ? 0 : (t - 0.22) / 0.78;
+          const t = k / (N - 1);                    // 0 = barrel tip (physX), 1 = knob end (right)
+          const sx = physX + t * totalLen;           // sample point x (barrel at physX, knob at physX+totalLen)
+          // Bat profile: smoothstep from barrelR (t=0) to handleR (t≈0.78+)
+          const tFlipped = 1 - t;
+          const tp = tFlipped < 0.22 ? 0 : (tFlipped - 0.22) / 0.78;
           const localR = handleR + (barrelR - handleR) * (tp * tp * (3 - 2 * tp));
-          // Power weight: barrel tip hits strongest
-          const pWeight = 0.12 + 0.88 * (t * t);
+          // Power weight: barrel tip (t=0) hits strongest
+          const pWeight = 0.12 + 0.88 * ((1 - t) * (1 - t));
           const dist = Math.hypot(n.x - sx, n.y - physY);
           if (dist < localR) {
             const contrib = (1 - dist / localR) * pWeight;
