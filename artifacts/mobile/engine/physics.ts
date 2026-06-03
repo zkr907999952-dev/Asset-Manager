@@ -310,7 +310,7 @@ export function stepPhysics(state: PhysicsState) {
     wave.radius = Math.min(wave.radius + wave.growRate, wave.maxRadius);
     const progress = wave.radius / wave.maxRadius; // 0 → 1
     // Force fades from full to zero as the wave expands
-    const waveForce = wave.strength * 0.022 * (1 - progress * 0.9);
+    const waveForce = wave.strength * 0.048 * (1 - progress * 0.88);
     const ringLo = prevR - 10;
     const ringHi = wave.radius + 10;
     const pushWave = (nodes: PhysicsNode[]) => {
@@ -1320,6 +1320,7 @@ export function applyBellyStrikePhysics(
   rangeType: 'circle' | 'bat',
   rangePx: number,
   baseDamage: number,
+  impulseScale = 1,
 ) {
   const applyToNodes = (nodes: { x: number; y: number; pinned?: boolean; vx?: number; vy?: number }[], segs: { pain: number; sensitivity: number; health: number; broken?: boolean; ruptured?: boolean }[]) => {
     for (let i = 0; i < nodes.length; i++) {
@@ -1353,7 +1354,7 @@ export function applyBellyStrikePhysics(
       }
       // Instant outward impulse via Verlet velocity injection (n.px -= push → vx = push * DAMPING next frame)
       const dist = Math.hypot(dx, dy);
-      const pushMult = dmg * 0.04;
+      const pushMult = dmg * 0.09 * impulseScale;
       const n2 = n as PhysicsNode;
       if (dist > 0.1) {
         n2.px -= (dx / dist) * pushMult;
@@ -1370,7 +1371,7 @@ export function applyBellyStrikePhysics(
   // Launch the expanding shockwave — processed each frame in stepPhysics
   const growRate = Math.max(4, rangePx * 0.065);
   const maxRadius = rangePx * 1.8;
-  state.strikeWave = { x: physX, y: physY, radius: 0, maxRadius, strength: baseDamage, growRate };
+  state.strikeWave = { x: physX, y: physY, radius: 0, maxRadius, strength: baseDamage * impulseScale, growRate };
 }
 
 export function buildSmoothPath(nodes: { x: number; y: number }[]): string {

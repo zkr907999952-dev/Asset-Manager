@@ -196,6 +196,8 @@ export interface GameUIState {
   bellyStrikeTool: BellyStrikeToolId | null;
   bellyStrikeForce: number;
   bellyStrikeRange: number;
+  bellyStrikeImpulseScale: number;
+  bellyStrikeToolPowers: Record<BellyStrikeToolId, number>;
 }
 
 interface GameContextType {
@@ -265,6 +267,8 @@ interface GameContextType {
   setBellyStrikeTool: (tool: BellyStrikeToolId | null) => void;
   setBellyStrikeForce: (v: number) => void;
   setBellyStrikeRange: (v: number) => void;
+  setBellyStrikeImpulseScale: (v: number) => void;
+  setBellyStrikeToolPower: (tool: BellyStrikeToolId, v: number) => void;
   applyBellyStrike: (physX: number, physY: number) => void;
 }
 
@@ -421,6 +425,8 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     bellyStrikeTool: null,
     bellyStrikeForce: 50,
     bellyStrikeRange: 50,
+    bellyStrikeImpulseScale: 100,
+    bellyStrikeToolPowers: { '拳头': 100, '棒球棒': 100, '撞钟锤': 100 },
     resectedSmallRanges: [],
     resectedLargeRanges: [],
     resectedCount: 0,
@@ -2290,8 +2296,16 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     }, 4000);
   }, []);
 
-  const bellyStrikeRef = useRef<{ tool: BellyStrikeToolId | null; force: number; range: number }>({
+  const bellyStrikeRef = useRef<{
+    tool: BellyStrikeToolId | null;
+    force: number;
+    range: number;
+    impulseScale: number;
+    toolPowers: Record<BellyStrikeToolId, number>;
+  }>({
     tool: null, force: 50, range: 50,
+    impulseScale: 100,
+    toolPowers: { '拳头': 100, '棒球棒': 100, '撞钟锤': 100 },
   });
 
   const setBellyStrikeTool = useCallback((tool: BellyStrikeToolId | null) => {
@@ -2309,15 +2323,29 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     setState(prev => ({ ...prev, bellyStrikeRange: v }));
   }, []);
 
+  const setBellyStrikeImpulseScale = useCallback((v: number) => {
+    bellyStrikeRef.current.impulseScale = v;
+    setState(prev => ({ ...prev, bellyStrikeImpulseScale: v }));
+  }, []);
+
+  const setBellyStrikeToolPower = useCallback((tool: BellyStrikeToolId, v: number) => {
+    bellyStrikeRef.current.toolPowers[tool] = v;
+    setState(prev => ({
+      ...prev,
+      bellyStrikeToolPowers: { ...prev.bellyStrikeToolPowers, [tool]: v },
+    }));
+  }, []);
+
   const applyBellyStrike = useCallback((physX: number, physY: number) => {
-    const { tool, force, range: rangePct } = bellyStrikeRef.current;
+    const { tool, force, range: rangePct, impulseScale, toolPowers } = bellyStrikeRef.current;
     if (!tool) return;
     const toolDef = BELLY_STRIKE_TOOL_LIST.find(t => t.id === tool);
     if (!toolDef) return;
     const forceMult = 0.3 + force * 0.007;
     const rangePx = toolDef.baseRangePx * (0.5 + rangePct * 0.005);
-    const baseDamage = 25 * forceMult * toolDef.powerMult;
-    applyBellyStrikePhysicsFunc(physicsRef.current, physX, physY, toolDef.rangeType, rangePx, baseDamage);
+    const toolPowerScale = (toolPowers[tool] ?? 100) / 100;
+    const baseDamage = 25 * forceMult * toolDef.powerMult * toolPowerScale;
+    applyBellyStrikePhysicsFunc(physicsRef.current, physX, physY, toolDef.rangeType, rangePx, baseDamage, impulseScale / 100);
     const forceLevel = force < 34 ? 'low' : force < 67 ? 'mid' : 'high';
     const toolKey = tool === '拳头' ? 'fist' : tool === '棒球棒' ? 'bat' : 'hammer';
     const trigger = `strike_${toolKey}_${forceLevel}` as DialogueTrigger;
@@ -2347,7 +2375,8 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       takeParasiteEgg, setHatchDuration, setParasiteDamageInterval, setParasitePerforationChance, performParasiteSurgery,
       enterResectionSelection, cancelResectionSelection, performResectionSurgery,
       setResectionSelection, setMaxResectionSegments,
-      setBellyStrikeTool, setBellyStrikeForce, setBellyStrikeRange, applyBellyStrike,
+      setBellyStrikeTool, setBellyStrikeForce, setBellyStrikeRange,
+      setBellyStrikeImpulseScale, setBellyStrikeToolPower, applyBellyStrike,
     }}>
       {children}
     </GameContext.Provider>

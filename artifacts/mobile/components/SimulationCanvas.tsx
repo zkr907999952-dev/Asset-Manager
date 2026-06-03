@@ -6,6 +6,7 @@ import Svg, {
   Image as SvgImage, ClipPath,
 } from 'react-native-svg';
 const AnimatedCircle = Animated.createAnimatedComponent(Circle);
+type WaveEntry = { id: number; physX: number; physY: number; maxR: number; anim: Animated.Value };
 import type { ParasiteEntity } from '../contexts/GameContext';
 
 const INTESTINES_REF = require('@/assets/images/intestines.png');
@@ -244,15 +245,18 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
     rangePx: number;
     charging: boolean;
     rangeType: 'circle' | 'bat';
+    id: number;
   } | null>(null);
   const strikeChargeAnim = useRef(new Animated.Value(0)).current;
   const strikeFlashAnim = useRef(new Animated.Value(0)).current;
-  const strikeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  // Expanding shockwave ring visual
-  const strikeWaveAnim = useRef(new Animated.Value(0)).current;
-  const [strikeWaveVisual, setStrikeWaveVisual] = useState<{
-    physX: number; physY: number; maxR: number;
-  } | null>(null);
+  // Multiple concurrent strikes: overlayId for safe clear, waveId for per-wave anims
+  const overlayIdRef = useRef(0);
+  const waveIdRef = useRef(0);
+  const [strikeWaves, setStrikeWaves] = useState<WaveEntry[]>([]);
+  // Screen shake
+  const shakeAnim = useRef(new Animated.Value(0)).current;
+  // Flash color (varies with strike power)
+  const [flashColor, setFlashColor] = useState('rgba(255,100,30,0.15)');
 
   const toPhysicsCoords = useCallback((localX: number, localY: number) => {
     if (!canvasLayout) return { x: localX, y: localY };
@@ -339,7 +343,7 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
         if (toolDef) {
           bellyStrikeDragRef.current = { active: true, physX: pos.x, physY: pos.y, screenX: locationX, screenY: locationY };
           const rangePx = toolDef.baseRangePx * (0.5 + s.bellyStrikeRange * 0.005);
-          setStrikeOverlay({ physX: pos.x, physY: pos.y, toolId: s.bellyStrikeTool, rangePx, charging: false, rangeType: toolDef.rangeType });
+          setStrikeOverlay({ physX: pos.x, physY: pos.y, toolId: s.bellyStrikeTool, rangePx, charging: false, rangeType: toolDef.rangeType, id: overlayIdRef.current });
           return;
         }
       }
@@ -568,7 +572,7 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
         const toolDef = BELLY_STRIKE_TOOL_LIST.find(t => t.id === s.bellyStrikeTool);
         if (toolDef) {
           const rangePx = toolDef.baseRangePx * (0.5 + s.bellyStrikeRange * 0.005);
-          setStrikeOverlay({ physX: pos.x, physY: pos.y, toolId: s.bellyStrikeTool!, rangePx, charging: false, rangeType: toolDef.rangeType });
+          setStrikeOverlay({ physX: pos.x, physY: pos.y, toolId: s.bellyStrikeTool!, rangePx, charging: false, rangeType: toolDef.rangeType, id: overlayIdRef.current });
         }
         return;
       }
@@ -788,27 +792,49 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
         const toolDef = BELLY_STRIKE_TOOL_LIST.find(t => t.id === s.bellyStrikeTool);
         if (toolDef && abs) {
           const rangePx = toolDef.baseRangePx * (0.5 + s.bellyStrikeRange * 0.005);
-          setStrikeOverlay({ physX, physY, toolId: s.bellyStrikeTool!, rangePx, charging: true, rangeType: toolDef.rangeType });
+          // Compute flash color and shake intensity based on power (approximate baseDamage)
+          const toolPowerScale = ((s.bellyStrikeToolPowers ?? {})[s.bellyStrikeTool!] ?? 100) / 100;
+          const forceMult = 0.3 + s.bellyStrikeForce * 0.007;
+          const approxDamage = 25 * forceMult * toolDef.powerMult * toolPowerScale * ((s.bellyStrikeImpulseScale ?? 100) / 100);
+          const fi = Math.min(1, approxDamage / 55);
+          const cFlash = `rgba(255,${Math.round(95 - fi * 80)},${Math.round(20 - fi * 15)},${(0.12 + fi * 0.28).toFixed(2)})`;
+          const shakeStrength = Math.min(16, approxDamage * 0.3);
+          // Unique ID for this overlay so only it clears it
+          const capturedOverlayId = ++overlayIdRef.current;
+          setStrikeOverlay({ physX, physY, toolId: s.bellyStrikeTool!, rangePx, charging: true, rangeType: toolDef.rangeType, id: capturedOverlayId });
           strikeChargeAnim.setValue(0);
-          strikeFlashAnim.setValue(0);
           Animated.timing(strikeChargeAnim, { toValue: 1, duration: toolDef.delayMs, useNativeDriver: false }).start();
-          if (strikeTimerRef.current) clearTimeout(strikeTimerRef.current);
-          strikeTimerRef.current = setTimeout(() => {
+          // No clearTimeout — allow multiple concurrent strikes
+          setTimeout(() => {
             abs(physX, physY);
-            // Flash effect
+            // Flash with power-based color
+            setFlashColor(cFlash);
             strikeFlashAnim.setValue(1);
-            Animated.timing(strikeFlashAnim, { toValue: 0, duration: 350, useNativeDriver: false }).start(() => {
-              setStrikeOverlay(null);
+            Animated.timing(strikeFlashAnim, { toValue: 0, duration: 380, useNativeDriver: false }).start(() => {
+              setStrikeOverlay(prev => prev?.id === capturedOverlayId ? null : prev);
             });
-            // Expanding shockwave ring visual
+            // Screen shake scaled by power
+            if (shakeStrength > 1.5) {
+              const d = shakeStrength;
+              shakeAnim.setValue(0);
+              Animated.sequence([
+                Animated.timing(shakeAnim, { toValue: d, duration: 35, useNativeDriver: true }),
+                Animated.timing(shakeAnim, { toValue: -d * 0.7, duration: 45, useNativeDriver: true }),
+                Animated.timing(shakeAnim, { toValue: d * 0.4, duration: 35, useNativeDriver: true }),
+                Animated.timing(shakeAnim, { toValue: -d * 0.18, duration: 28, useNativeDriver: true }),
+                Animated.timing(shakeAnim, { toValue: 0, duration: 22, useNativeDriver: true }),
+              ]).start();
+            }
+            // Expanding shockwave ring (independent entry with own Animated.Value)
             const maxR = rangePx * 1.8;
-            setStrikeWaveVisual({ physX, physY, maxR });
-            strikeWaveAnim.setValue(0);
-            Animated.timing(strikeWaveAnim, {
+            const waveId = ++waveIdRef.current;
+            const waveAnim = new Animated.Value(0);
+            setStrikeWaves(prev => [...prev, { id: waveId, physX, physY, maxR, anim: waveAnim }]);
+            Animated.timing(waveAnim, {
               toValue: 1,
               duration: Math.max(300, maxR / toolDef.baseRangePx * 280),
               useNativeDriver: false,
-            }).start(() => setStrikeWaveVisual(null));
+            }).start(() => setStrikeWaves(prev => prev.filter(w => w.id !== waveId)));
           }, toolDef.delayMs);
         }
         return;
@@ -980,8 +1006,8 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
   });
 
   return (
-    <View
-      style={styles.container}
+    <Animated.View
+      style={[styles.container, { transform: [{ translateX: shakeAnim }] }]}
       onLayout={e => {
         const { x, y, width, height } = e.nativeEvent.layout;
         onLayout({ x, y, width, height });
@@ -2269,20 +2295,18 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
             )}
           </G>
         )}
-        {/* Expanding shockwave ring (post-impact) */}
-        {strikeWaveVisual && (() => {
-          const { physX, physY, maxR } = strikeWaveVisual;
-          const animR = strikeWaveAnim.interpolate({ inputRange: [0, 1], outputRange: [2, maxR] });
-          const animR2 = strikeWaveAnim.interpolate({ inputRange: [0, 1], outputRange: [2, maxR * 0.65] });
-          const animOp = strikeWaveAnim.interpolate({ inputRange: [0, 0.15, 0.7, 1], outputRange: [0, 0.9, 0.5, 0] });
-          const animOp2 = strikeWaveAnim.interpolate({ inputRange: [0, 0.1, 0.5, 1], outputRange: [0, 0.4, 0.15, 0] });
-          const animSW = strikeWaveAnim.interpolate({ inputRange: [0, 0.3, 1], outputRange: [5, 3, 1] });
+        {/* Expanding shockwave rings — one per concurrent strike */}
+        {strikeWaves.map(wave => {
+          const { id, physX, physY, maxR, anim } = wave;
+          const animR = anim.interpolate({ inputRange: [0, 1], outputRange: [2, maxR] });
+          const animR2 = anim.interpolate({ inputRange: [0, 1], outputRange: [2, maxR * 0.65] });
+          const animOp = anim.interpolate({ inputRange: [0, 0.15, 0.7, 1], outputRange: [0, 0.9, 0.5, 0] });
+          const animOp2 = anim.interpolate({ inputRange: [0, 0.1, 0.5, 1], outputRange: [0, 0.4, 0.15, 0] });
+          const animSW = anim.interpolate({ inputRange: [0, 0.3, 1], outputRange: [6, 3, 1] });
           return (
-            <G>
-              {/* Inner glow fill — expands to 65% of max range, fades quickly */}
+            <G key={id}>
               <AnimatedCircle cx={physX} cy={physY} r={animR2}
                 fill="rgba(255,130,40,1)" opacity={animOp2} />
-              {/* Outer shockwave ring — sharp edge, expands to full range */}
               <AnimatedCircle cx={physX} cy={physY} r={animR}
                 fill="none"
                 stroke="rgba(255,160,60,1)"
@@ -2290,7 +2314,7 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
                 opacity={animOp} />
             </G>
           );
-        })()}
+        })}
 
         {/* Belly strike range overlay */}
         {strikeOverlay && (() => {
@@ -2329,19 +2353,17 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
         })()}
       </Svg>
 
-      {/* Flash overlay on strike impact */}
-      {strikeOverlay?.charging && (
-        <Animated.View
-          pointerEvents="none"
-          style={{
-            position: 'absolute',
-            top: 0, left: 0, right: 0, bottom: 0,
-            backgroundColor: 'rgba(255,150,50,0.22)',
-            opacity: strikeFlashAnim,
-          }}
-        />
-      )}
-    </View>
+      {/* Flash overlay on strike impact — always rendered, opacity animated */}
+      <Animated.View
+        pointerEvents="none"
+        style={{
+          position: 'absolute',
+          top: 0, left: 0, right: 0, bottom: 0,
+          backgroundColor: flashColor,
+          opacity: strikeFlashAnim,
+        }}
+      />
+    </Animated.View>
   );
 }
 
