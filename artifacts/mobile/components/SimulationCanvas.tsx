@@ -1,4 +1,4 @@
-import React, { useRef, useCallback, useState } from 'react';
+import React, { useRef, useCallback, useState, useEffect } from 'react';
 import { View, PanResponder, StyleSheet, Animated, Easing, Image } from 'react-native';
 
 import Svg, {
@@ -232,7 +232,7 @@ interface CanvasProps {
 
 export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
   const {
-    state, physicsRef, renderSnapshotRef, triggerDialogue, addElectrode,
+    state, physicsRef, renderSnapshotRef, renderVersionRef, triggerDialogue, addElectrode,
     insertViaNavel, retractTool, setNavelPierced, setEnemaHeadIdx,
     setEnemaInSmall, setEnemaSmallHeadIdx, setEnemaTarget,
     setSiliconeTarget, setBeadsTarget, setEggTarget,
@@ -241,6 +241,25 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
   } = useGame();
   const lastDialogueTime = useRef(0);
   const isDragging = useRef(false);
+
+  // Self-driven render loop: re-renders when physics snapshot updates via renderVersionRef.
+  // This decouples SimulationCanvas from the global GameContext setState cadence.
+  const [, forceRender] = useState(0);
+  const lastSeenRenderVersion = useRef(-1);
+  const canvasRafRef = useRef<number | null>(null);
+  useEffect(() => {
+    const tick = () => {
+      if (renderVersionRef.current !== lastSeenRenderVersion.current) {
+        lastSeenRenderVersion.current = renderVersionRef.current;
+        forceRender(v => v + 1);
+      }
+      canvasRafRef.current = requestAnimationFrame(tick);
+    };
+    canvasRafRef.current = requestAnimationFrame(tick);
+    return () => {
+      if (canvasRafRef.current !== null) cancelAnimationFrame(canvasRafRef.current);
+    };
+  }, []); // intentionally empty — runs once, refs are stable
 
   // Belly strike drag state
   const bellyStrikeDragRef = useRef<{
@@ -893,14 +912,45 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
   })).current;
 
   const {
-    repairMarks, sutureMarks, largeRepairMarks, largeSutureMarks,
-    smallTransplantColor, largeTransplantColor,
     mesenterySelectionMode, mesenterySelectedNodes,
     parasites,
     resectionSelectionMode, resectionIntestine, resectionStartSeg, resectionEndSeg,
-    resectedSmallRanges, resectedLargeRanges,
   } = state;
   const isInternal = state.viewMode === 'internal';
+
+  // Live tool state — read directly from physicsRef so SimulationCanvas always sees
+  // the current values even between slow-path setState calls (every 15 physics frames).
+  const p = physicsRef.current;
+  const activeTool = p.toolType;
+  const toolPos = p.toolPos;
+  const toolInserted = p.toolInserted;
+  const toolAnchor = p.toolAnchor;
+  const toolActive = p.toolActive;
+  const toolParam1 = p.toolParam1;
+  const toolParam2 = p.toolParam2;
+  const toolStates = p.toolStates;
+  const navelPierced = p.navelPierced;
+  const expansionScale = p.expansionScale;
+  const enemaHeadIdx = p.enemaHeadIdx;
+  const enemaInSmall = p.enemaInSmall;
+  const enemaSmallHeadIdx = p.enemaSmallHeadIdx;
+  const siliconeHeadIdx = p.siliconeHeadIdx;
+  const siliconeInSmall = p.siliconeInSmall;
+  const siliconeSmallHeadIdx = p.siliconeSmallHeadIdx;
+  const beadsHeadIdx = p.beadsHeadIdx;
+  const beadsInSmall = p.beadsInSmall;
+  const beadsSmallHeadIdx = p.beadsSmallHeadIdx;
+  const eggSmallHeadIdx = p.eggSmallHeadIdx;
+  const eggInLarge = p.eggInLarge;
+  const eggLargeHeadIdx = p.eggLargeHeadIdx;
+  const repairMarks = p.repairMarks;
+  const sutureMarks = p.sutureMarks;
+  const largeRepairMarks = p.largeRepairMarks;
+  const largeSutureMarks = p.largeSutureMarks;
+  const smallTransplantColor = p.smallTransplantColor;
+  const largeTransplantColor = p.largeTransplantColor;
+  const resectedSmallRanges = p.resectedSmallRanges;
+  const resectedLargeRanges = p.resectedLargeRanges;
 
   // Read render data from the pre-allocated snapshot (zero-alloc per frame)
   const snap = renderSnapshotRef.current;
@@ -914,7 +964,7 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
   const avgPain = snap.avgPain;
   const avgPressure = snap.avgPressure;
   const bulge = 1 + avgPressure * 0.003;
-  const expansionScale = state.expansionScale;
+  // expansionScale defined above from physicsRef
 
   const breathVal = snap.breathVal;
   const breathAmp = state.breathAmplitude;
@@ -925,17 +975,17 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
   const navelYBreath = NAVEL_Y_EXTERNAL - inhale * 5 * breathAmp;
   const breathOverlayScale = 1 + inhale * 0.025 * breathAmp;
 
-  const handlePos = state.toolPos;
-  const renderTime = state.renderVersion ?? 0;
+  const handlePos = toolPos;
+  const renderTime = renderVersionRef.current;
 
-  const enemaVisible = (state.enabledTools ?? []).includes(TOOLS.ENEMA) || state.toolStates?.[TOOLS.ENEMA]?.active === true;
-  const electricIndepActive = state.toolStates?.[TOOLS.ELECTRIC]?.active === true;
+  const enemaVisible = (state.enabledTools ?? []).includes(TOOLS.ENEMA) || toolStates?.[TOOLS.ENEMA]?.active === true;
+  const electricIndepActive = toolStates?.[TOOLS.ELECTRIC]?.active === true;
 
   // Tube path: from head position outward toward anus (entry point)
   // This represents the physical tube that has been inserted
   const enemaPathLarge = (() => {
     if (!enemaVisible || renderLargeNodes.length === 0) return '';
-    const headIdx = Math.max(0, Math.min(renderLargeNodes.length - 1, state.enemaHeadIdx));
+    const headIdx = Math.max(0, Math.min(renderLargeNodes.length - 1, enemaHeadIdx));
     // slice from head to anus end (higher indices = toward anus)
     return buildSmoothPath(renderLargeNodes.slice(headIdx));
   })();
@@ -943,47 +993,47 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
   // Only visible when enema is actively injecting (toolActive)
   const enemaFillPath = (() => {
     if (!enemaVisible || renderLargeNodes.length === 0) return '';
-    if (state.enemaInSmall) return '';
-    const isActive = state.toolActive || state.toolStates?.[TOOLS.ENEMA]?.active === true;
+    if (enemaInSmall) return '';
+    const isActive = toolActive || toolStates?.[TOOLS.ENEMA]?.active === true;
     if (!isActive) return '';
-    const headIdx = Math.max(0, Math.min(renderLargeNodes.length - 1, state.enemaHeadIdx));
+    const headIdx = Math.max(0, Math.min(renderLargeNodes.length - 1, enemaHeadIdx));
     if (headIdx <= 1) return '';
     // Fill from cecum (0) to head — fluid accumulating ahead of the tip
     return buildSmoothPath(renderLargeNodes.slice(0, headIdx + 1));
   })();
   const enemaPathSmall = (() => {
-    if (!enemaVisible || !state.enemaInSmall || renderSmallNodes.length === 0) return '';
-    const smallHeadIdx = Math.max(0, Math.min(renderSmallNodes.length - 1, state.enemaSmallHeadIdx));
+    if (!enemaVisible || !enemaInSmall || renderSmallNodes.length === 0) return '';
+    const smallHeadIdx = Math.max(0, Math.min(renderSmallNodes.length - 1, enemaSmallHeadIdx));
     return buildSmoothPath([...renderSmallNodes.slice(smallHeadIdx)].reverse());
   })();
   const enemaHead = enemaVisible
-    ? (state.enemaInSmall && renderSmallNodes.length > 0
-        ? renderSmallNodes[Math.max(0, Math.min(renderSmallNodes.length - 1, state.enemaSmallHeadIdx))]
-        : renderLargeNodes[Math.max(0, Math.min(renderLargeNodes.length - 1, state.enemaHeadIdx))])
+    ? (enemaInSmall && renderSmallNodes.length > 0
+        ? renderSmallNodes[Math.max(0, Math.min(renderSmallNodes.length - 1, enemaSmallHeadIdx))]
+        : renderLargeNodes[Math.max(0, Math.min(renderLargeNodes.length - 1, enemaHeadIdx))])
     : null;
-  const enemaHeadInSmall = enemaVisible && state.enemaInSmall;
+  const enemaHeadInSmall = enemaVisible && enemaInSmall;
 
   const ELEC_CTRL_X = 36;
   const ELEC_CTRL_Y = CANVAS_H - 38;
 
   const rodGeo = (() => {
     if (!handlePos) return null;
-    const tool = state.activeTool;
+    const tool = activeTool;
     if (tool === TOOLS.METAL_ROD || tool === TOOLS.VIBRATOR) {
       const isVib = tool === TOOLS.VIBRATOR;
-      const rodLen = 80 + state.toolParam1 * (isVib ? 1.2 : 1.0);
-      const stirAmp = state.toolActive ? (isVib ? 4 : 2 + state.toolParam2 * 0.04) : 0;
-      return { g: computeRodGeoFor(state.toolInserted, state.toolAnchor, handlePos, rodLen, stirAmp, renderTime), radius: 9 };
+      const rodLen = 80 + toolParam1 * (isVib ? 1.2 : 1.0);
+      const stirAmp = toolActive ? (isVib ? 4 : 2 + toolParam2 * 0.04) : 0;
+      return { g: computeRodGeoFor(toolInserted, toolAnchor, handlePos, rodLen, stirAmp, renderTime), radius: 9 };
     }
     if (tool === TOOLS.NEEDLE) {
-      const rodLen = 90 + state.toolParam1 * 1.0;
-      const stirAmp = state.toolActive ? 1.5 + state.toolParam2 * 0.04 : 0;
-      return { g: computeRodGeoFor(state.toolInserted, state.toolAnchor, handlePos, rodLen, stirAmp, renderTime), radius: 5 };
+      const rodLen = 90 + toolParam1 * 1.0;
+      const stirAmp = toolActive ? 1.5 + toolParam2 * 0.04 : 0;
+      return { g: computeRodGeoFor(toolInserted, toolAnchor, handlePos, rodLen, stirAmp, renderTime), radius: 5 };
     }
     if (tool === TOOLS.BAYONET) {
-      const bladeLen = 80 + state.toolParam1 * 1.5;
-      const stirAmp = state.toolActive ? 3 + state.toolParam2 * 0.04 : 0;
-      return { g: computeRodGeoFor(state.toolInserted, state.toolAnchor, handlePos, bladeLen, stirAmp, renderTime), radius: 4 };
+      const bladeLen = 80 + toolParam1 * 1.5;
+      const stirAmp = toolActive ? 3 + toolParam2 * 0.04 : 0;
+      return { g: computeRodGeoFor(toolInserted, toolAnchor, handlePos, bladeLen, stirAmp, renderTime), radius: 4 };
     }
     return null;
   })();
@@ -992,41 +1042,41 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
   const siliconeVisible = (state.enabledTools ?? []).includes(TOOLS.SILICONE_ROD);
   const siliconePathLarge = (() => {
     if (!siliconeVisible || renderLargeNodes.length === 0) return '';
-    const headIdx = Math.max(0, Math.min(renderLargeNodes.length - 1, state.siliconeHeadIdx));
+    const headIdx = Math.max(0, Math.min(renderLargeNodes.length - 1, siliconeHeadIdx));
     return buildSmoothPath(renderLargeNodes.slice(headIdx));
   })();
   const siliconePathSmall = (() => {
-    if (!siliconeVisible || !state.siliconeInSmall || renderSmallNodes.length === 0) return '';
-    const smallHeadIdx = Math.max(0, Math.min(renderSmallNodes.length - 1, state.siliconeSmallHeadIdx));
+    if (!siliconeVisible || !siliconeInSmall || renderSmallNodes.length === 0) return '';
+    const smallHeadIdx = Math.max(0, Math.min(renderSmallNodes.length - 1, siliconeSmallHeadIdx));
     return buildSmoothPath([...renderSmallNodes.slice(smallHeadIdx)].reverse());
   })();
   const siliconeHead = siliconeVisible
-    ? (state.siliconeInSmall && renderSmallNodes.length > 0
-        ? renderSmallNodes[Math.max(0, Math.min(renderSmallNodes.length - 1, state.siliconeSmallHeadIdx))]
-        : renderLargeNodes[Math.max(0, Math.min(renderLargeNodes.length - 1, state.siliconeHeadIdx))])
+    ? (siliconeInSmall && renderSmallNodes.length > 0
+        ? renderSmallNodes[Math.max(0, Math.min(renderSmallNodes.length - 1, siliconeSmallHeadIdx))]
+        : renderLargeNodes[Math.max(0, Math.min(renderLargeNodes.length - 1, siliconeHeadIdx))])
     : null;
 
   // Vibrating egg paths — control line runs from duodenum (node 0) to egg head
   const eggVisible = (state.enabledTools ?? []).includes(TOOLS.VIBRATING_EGG);
   const eggHeadNode = (() => {
     if (!eggVisible || renderSmallNodes.length === 0) return null;
-    if (state.eggInLarge && renderLargeNodes.length > 0) {
-      const idx = Math.max(0, Math.min(renderLargeNodes.length - 1, state.eggLargeHeadIdx));
+    if (eggInLarge && renderLargeNodes.length > 0) {
+      const idx = Math.max(0, Math.min(renderLargeNodes.length - 1, eggLargeHeadIdx));
       return renderLargeNodes[idx];
     }
-    const idx = Math.max(0, Math.min(renderSmallNodes.length - 1, state.eggSmallHeadIdx));
+    const idx = Math.max(0, Math.min(renderSmallNodes.length - 1, eggSmallHeadIdx));
     return renderSmallNodes[idx];
   })();
   const eggTangentAngle = (() => {
     if (!eggVisible) return 0;
-    if (state.eggInLarge && renderLargeNodes.length > 1) {
-      const idx = Math.max(0, Math.min(renderLargeNodes.length - 1, state.eggLargeHeadIdx));
+    if (eggInLarge && renderLargeNodes.length > 1) {
+      const idx = Math.max(0, Math.min(renderLargeNodes.length - 1, eggLargeHeadIdx));
       const prev = renderLargeNodes[Math.max(0, idx - 1)];
       const next = renderLargeNodes[Math.min(renderLargeNodes.length - 1, idx + 1)];
       return Math.atan2(next.y - prev.y, next.x - prev.x) * 180 / Math.PI;
     }
     if (renderSmallNodes.length > 1) {
-      const idx = Math.max(0, Math.min(renderSmallNodes.length - 1, state.eggSmallHeadIdx));
+      const idx = Math.max(0, Math.min(renderSmallNodes.length - 1, eggSmallHeadIdx));
       const prev = renderSmallNodes[Math.max(0, idx - 1)];
       const next = renderSmallNodes[Math.min(renderSmallNodes.length - 1, idx + 1)];
       return Math.atan2(next.y - prev.y, next.x - prev.x) * 180 / Math.PI;
@@ -1036,22 +1086,22 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
   // Control line: follows intestine path from duodenum (small node 0) to egg head
   const eggControlLinePath = (() => {
     if (!eggVisible || renderSmallNodes.length === 0) return '';
-    if (!state.eggInLarge) {
-      const idx = Math.max(0, Math.min(renderSmallNodes.length - 1, state.eggSmallHeadIdx));
+    if (!eggInLarge) {
+      const idx = Math.max(0, Math.min(renderSmallNodes.length - 1, eggSmallHeadIdx));
       if (idx < 1) return '';
       return buildSmoothPath(renderSmallNodes.slice(0, idx + 1));
     }
     // In large intestine: full small intestine path + large intestine from 0 to egg
     const smallPath = buildSmoothPath(renderSmallNodes);
-    const largeIdx = Math.max(0, Math.min(renderLargeNodes.length - 1, state.eggLargeHeadIdx));
+    const largeIdx = Math.max(0, Math.min(renderLargeNodes.length - 1, eggLargeHeadIdx));
     if (largeIdx < 1) return smallPath;
     const largePath = buildSmoothPath(renderLargeNodes.slice(0, largeIdx + 1));
     return smallPath + ' ' + largePath;
   })();
 
   // Suspended tools: enabled tools that are not the current activeTool, rendered at their last position
-  const suspendedTools = Object.entries(state.toolStates ?? {}).filter(([id, ts]) => {
-    if (id === state.activeTool) return false;
+  const suspendedTools = Object.entries(toolStates ?? {}).filter(([id, ts]) => {
+    if (id === activeTool) return false;
     return (state.enabledTools ?? []).includes(id as any) && ts.pos != null;
   });
 
@@ -1111,12 +1161,12 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
                 rx={CANVAS_W * 0.28 * breathOverlayScale} ry={CANVAS_H * 0.11 * breathOverlayScale}
                 fill={`rgba(255,80,80,${Math.min(0.28, avgPain * 0.003)})`} />
             )}
-            {(state.activeTool === TOOLS.NEEDLE ||
-              ((state.activeTool === TOOLS.METAL_ROD || state.activeTool === TOOLS.VIBRATOR) && state.navelPierced)) && (
+            {(activeTool === TOOLS.NEEDLE ||
+              ((activeTool === TOOLS.METAL_ROD || activeTool === TOOLS.VIBRATOR) && navelPierced)) && (
               <Circle cx={NAVEL_X} cy={navelYBreath} r={NAVEL_RADIUS}
                 fill="none" stroke="rgba(255,180,80,0.5)" strokeWidth={1.5} strokeDasharray="3 3" />
             )}
-            {state.navelPierced && (
+            {navelPierced && (
               <G>
                 <Line x1={NAVEL_X} y1={navelYBreath - 14}
                   x2={NAVEL_X} y2={navelYBreath + 14}
@@ -1863,7 +1913,7 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
 
             {state.showCollisionBoxes && rodGeo && (() => {
               const samples = computeRodCollisionSamples(
-                rodGeo.g, state.toolInserted, state.toolAnchor,
+                rodGeo.g, toolInserted, toolAnchor,
               );
               return (
                 <G>
@@ -1880,22 +1930,22 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
               <Circle cx={enemaHead.x} cy={enemaHead.y} r={LARGE_RADIUS + 2}
                 fill="none" stroke="rgba(100,180,255,0.55)" strokeWidth={0.8} />
             )}
-            {state.showCollisionBoxes && state.activeTool === TOOLS.ELECTRIC &&
+            {state.showCollisionBoxes && activeTool === TOOLS.ELECTRIC &&
               snap.electrodes.map((el, i) => (
                 <Circle key={`cb-el-${i}`} cx={el.x} cy={el.y}
-                  r={30 + state.toolParam2 * 0.3}
+                  r={30 + toolParam2 * 0.3}
                   fill="none" stroke="rgba(255,255,80,0.4)" strokeWidth={0.7} />
               ))
             }
-            {state.showCollisionBoxes && state.activeTool === TOOLS.GRAB && handlePos && (
+            {state.showCollisionBoxes && activeTool === TOOLS.GRAB && handlePos && (
               <Circle cx={handlePos.x} cy={handlePos.y}
-                r={20 + state.toolParam1 * 0.25}
+                r={20 + toolParam1 * 0.25}
                 fill="none" stroke="rgba(100,255,100,0.5)" strokeWidth={0.7} />
             )}
 
             {/* Navel marker inside cavity */}
             <Circle cx={NAVEL_X} cy={NAVEL_Y_INTERNAL} r={4}
-              fill={state.navelPierced ? '#883030' : '#5a2020'}
+              fill={navelPierced ? '#883030' : '#5a2020'}
               stroke="#3a1010" strokeWidth={1} />
           </G>
         )}
@@ -1919,19 +1969,19 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
         {/* ===== TOOLS LAYER (active/current tool) ===== */}
 
         {/* Rod / Vibrator */}
-        {handlePos && (state.activeTool === TOOLS.METAL_ROD || state.activeTool === TOOLS.VIBRATOR) && (() => {
+        {handlePos && (activeTool === TOOLS.METAL_ROD || activeTool === TOOLS.VIBRATOR) && (() => {
           if (!rodGeo) return null;
-          const isVib = state.activeTool === TOOLS.VIBRATOR;
+          const isVib = activeTool === TOOLS.VIBRATOR;
           const { g } = rodGeo;
           const rodColor = isVib ? '#b078ff' : '#aaaacc';
           const rodWidth = isVib ? 6 : 5;
-          const splitAtNavel = !isInternal && state.toolInserted;
+          const splitAtNavel = !isInternal && toolInserted;
           const nx = NAVEL_X, ny = navelYBreath;
           return (
             <G key="rod">
-              {isVib && state.toolActive && (
+              {isVib && toolActive && (
                 <Circle cx={splitAtNavel ? nx : g.headX} cy={splitAtNavel ? ny : g.headY}
-                  r={30 + state.toolParam2 * 0.4}
+                  r={30 + toolParam2 * 0.4}
                   fill="rgba(180,120,255,0.10)"
                   stroke="rgba(180,120,255,0.5)" strokeWidth={1} strokeDasharray="4 4" />
               )}
@@ -1950,10 +2000,10 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
         })()}
 
         {/* Needle */}
-        {handlePos && state.activeTool === TOOLS.NEEDLE && (() => {
+        {handlePos && activeTool === TOOLS.NEEDLE && (() => {
           if (!rodGeo) return null;
           const { g } = rodGeo;
-          const splitAtNavel = !isInternal && state.toolInserted;
+          const splitAtNavel = !isInternal && toolInserted;
           const nx = NAVEL_X, ny = navelYBreath;
           return (
             <G key="needle">
@@ -1970,20 +2020,20 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
         })()}
 
         {/* Grab indicator */}
-        {handlePos && state.activeTool === TOOLS.GRAB && (
+        {handlePos && activeTool === TOOLS.GRAB && (
           <Circle cx={handlePos.x} cy={handlePos.y}
-            r={10 + state.toolParam1 * 0.25}
-            fill={state.toolActive ? 'rgba(96,192,96,0.30)' : 'rgba(96,192,96,0.18)'}
+            r={10 + toolParam1 * 0.25}
+            fill={toolActive ? 'rgba(96,192,96,0.30)' : 'rgba(96,192,96,0.18)'}
             stroke="#60c060" strokeWidth={1.5} />
         )}
 
         {/* Syringe */}
-        {handlePos && state.activeTool === TOOLS.SYRINGE && (
+        {handlePos && activeTool === TOOLS.SYRINGE && (
           <G>
             <Rect x={handlePos.x - 6} y={handlePos.y - 30}
               width={12} height={30} rx={2} fill="#60c0c0" fillOpacity={0.85}
               stroke="#88aaaa" strokeWidth={0.8} />
-            {state.toolActive && (
+            {toolActive && (
               <Rect x={handlePos.x - 4} y={handlePos.y - 28}
                 width={8} height={6} fill="#aaccff" />
             )}
@@ -1995,11 +2045,11 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
         )}
 
         {/* Bayonet */}
-        {handlePos && state.activeTool === TOOLS.BAYONET && (() => {
+        {handlePos && activeTool === TOOLS.BAYONET && (() => {
           if (!rodGeo) return null;
           const { g } = rodGeo;
-          const bladeWidth = 2 + state.toolParam2 * 0.06;
-          const splitAtNavel = !isInternal && state.toolInserted;
+          const bladeWidth = 2 + toolParam2 * 0.06;
+          const splitAtNavel = !isInternal && toolInserted;
           const nx = NAVEL_X, ny = navelYBreath;
           return (
             <G key="bayonet">
@@ -2019,7 +2069,7 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
               {!splitAtNavel && (
                 <>
                   <Circle cx={g.headX} cy={g.headY} r={3} fill="#ff3030" stroke="#cc0000" strokeWidth={0.8} />
-                  {state.toolActive && (
+                  {toolActive && (
                     <Circle cx={g.headX} cy={g.headY} r={10}
                       fill="rgba(255,40,40,0.12)" stroke="rgba(255,80,80,0.4)" strokeWidth={1} />
                   )}
@@ -2034,7 +2084,7 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
           <G>
             <Path d={siliconePathLarge}
               stroke="rgba(100,40,180,0.78)"
-              strokeWidth={18 + state.toolParam1 * 0.10}
+              strokeWidth={18 + toolParam1 * 0.10}
               fill="none" strokeLinecap="round" />
             <Path d={siliconePathLarge}
               stroke="rgba(200,160,255,0.50)"
@@ -2046,7 +2096,7 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
           <G>
             <Path d={siliconePathSmall}
               stroke="rgba(130,50,220,0.82)"
-              strokeWidth={14 + state.toolParam1 * 0.08}
+              strokeWidth={14 + toolParam1 * 0.08}
               fill="none" strokeLinecap="round" />
             <Path d={siliconePathSmall}
               stroke="rgba(210,180,255,0.45)"
@@ -2057,21 +2107,21 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
         {siliconeVisible && siliconeHead && (
           <G>
             <Circle cx={siliconeHead.x} cy={siliconeHead.y}
-              r={8 + state.toolParam1 * 0.06}
+              r={8 + toolParam1 * 0.06}
               fill="rgba(80,20,160,0.92)" stroke="rgba(160,100,255,0.9)" strokeWidth={1.5} />
-            {state.toolActive && (
+            {toolActive && (
               <Circle cx={siliconeHead.x} cy={siliconeHead.y}
-                r={12 + state.toolParam1 * 0.07}
+                r={12 + toolParam1 * 0.07}
                 fill="none" stroke="rgba(180,130,255,0.38)" strokeWidth={1} />
             )}
           </G>
         )}
 
         {/* Anal beads (拉珠) — independent beadsHeadIdx + external chain physics */}
-        {state.activeTool === TOOLS.ANAL_BEADS && (() => {
+        {activeTool === TOOLS.ANAL_BEADS && (() => {
           const BEAD_R = (i: number) => Math.min(3 + i * 0.65, 16.0);
-          const headIdx = Math.max(0, Math.min(renderLargeNodes.length - 1, state.beadsHeadIdx));
-          const internalCount = state.beadsInSmall
+          const headIdx = Math.max(0, Math.min(renderLargeNodes.length - 1, beadsHeadIdx));
+          const internalCount = beadsInSmall
             ? Math.min(40, renderLargeNodes.length)
             : Math.min(40, Math.max(0, renderLargeNodes.length - headIdx));
           const externalCount = Math.max(0, 40 - internalCount);
@@ -2080,8 +2130,8 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
           // Small-intestine beads — FRONT of chain (smallest beads, indices 0+)
           // Computed first so we know the offset for large-intestine bead indices
           const sBeads: { x: number; y: number; r: number }[] = [];
-          if (state.beadsInSmall && renderSmallNodes.length > 0) {
-            const sHead = Math.max(0, Math.min(renderSmallNodes.length - 1, state.beadsSmallHeadIdx));
+          if (beadsInSmall && renderSmallNodes.length > 0) {
+            const sHead = Math.max(0, Math.min(renderSmallNodes.length - 1, beadsSmallHeadIdx));
             for (let i = 0; i < 20 && sHead + i < renderSmallNodes.length && sBeads.length < 20; i++) {
               sBeads.push({ ...renderSmallNodes[sHead + i], r: BEAD_R(i) });
             }
@@ -2187,8 +2237,8 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
           );
         })()}
         {/* Vibration rings — drawn behind egg body */}
-        {eggVisible && eggHeadNode && state.toolActive && (() => {
-          const vib = state.toolParam1 / 100;
+        {eggVisible && eggHeadNode && toolActive && (() => {
+          const vib = toolParam1 / 100;
           const baseR = 14 + vib * 20;
           const pulse = Math.sin(Date.now() / 120) * 0.5 + 0.5;
           return (
@@ -2210,7 +2260,7 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
         {eggVisible && eggHeadNode && (() => {
           const { x, y } = eggHeadNode;
           const angle = eggTangentAngle;
-          const isActive = state.toolActive;
+          const isActive = toolActive;
           return (
             <G transform={`translate(${x},${y}) rotate(${angle})`}>
               {/* Back half (darker) */}
@@ -2235,7 +2285,7 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
         })()}
 
         {/* Enema tube (inserted section from head to anus) */}
-        {state.activeTool === TOOLS.ENEMA && enemaPathLarge !== '' && (
+        {activeTool === TOOLS.ENEMA && enemaPathLarge !== '' && (
           <G>
             <Path d={enemaPathLarge} stroke="rgba(60,110,200,0.55)" strokeWidth={5}
               fill="none" strokeLinecap="round" />
@@ -2244,7 +2294,7 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
           </G>
         )}
         {/* Enema fluid fill (fluid accumulating ahead of head toward cecum) */}
-        {state.activeTool === TOOLS.ENEMA && enemaFillPath !== '' && (
+        {activeTool === TOOLS.ENEMA && enemaFillPath !== '' && (
           <G>
             <Path d={enemaFillPath} stroke="rgba(100,200,255,0.55)" strokeWidth={7}
               fill="none" strokeLinecap="round" />
@@ -2252,7 +2302,7 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
               fill="none" strokeLinecap="round" />
           </G>
         )}
-        {state.activeTool === TOOLS.ENEMA && enemaPathSmall !== '' && (
+        {activeTool === TOOLS.ENEMA && enemaPathSmall !== '' && (
           <G>
             <Path d={enemaPathSmall} stroke="rgba(210,110,70,0.72)" strokeWidth={4.5}
               fill="none" strokeLinecap="round" />
@@ -2274,7 +2324,7 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
               <Circle cx={renderLargeNodes[0].x} cy={renderLargeNodes[0].y} r={9}
                 fill="none" stroke="rgba(255,200,100,0.6)" strokeWidth={1.5} strokeDasharray="3 2" />
             )}
-            {(state.toolActive || state.toolStates?.[TOOLS.ENEMA]?.active) && (
+            {(toolActive || toolStates?.[TOOLS.ENEMA]?.active) && (
               <>
                 <Circle cx={enemaHead.x} cy={enemaHead.y} r={14}
                   fill="none"
@@ -2288,10 +2338,10 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
         )}
 
         {/* Electrodes + wires + controller */}
-        {(snap.electrodes.length > 0 || state.activeTool === TOOLS.ELECTRIC || electricIndepActive) && (
+        {(snap.electrodes.length > 0 || activeTool === TOOLS.ELECTRIC || electricIndepActive) && (
           <G>
             {snap.electrodes.map((el, i) => {
-              const elecActive = (state.activeTool === TOOLS.ELECTRIC && state.toolActive) || electricIndepActive;
+              const elecActive = (activeTool === TOOLS.ELECTRIC && toolActive) || electricIndepActive;
               const wireColor = elecActive ? '#ffee44' : '#888844';
               if (isInternal) {
                 return (
@@ -2314,10 +2364,10 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
               );
             })}
             {snap.electrodes.map((el, i) => {
-              const elecActive2 = (state.activeTool === TOOLS.ELECTRIC && state.toolActive) || electricIndepActive;
-              const elecParam2 = state.activeTool === TOOLS.ELECTRIC
-                ? state.toolParam2
-                : (state.toolStates?.[TOOLS.ELECTRIC]?.param2 ?? 50);
+              const elecActive2 = (activeTool === TOOLS.ELECTRIC && toolActive) || electricIndepActive;
+              const elecParam2 = activeTool === TOOLS.ELECTRIC
+                ? toolParam2
+                : (toolStates?.[TOOLS.ELECTRIC]?.param2 ?? 50);
               return (
                 <G key={`el-${i}`}>
                   <Circle cx={el.x} cy={el.y} r={6} fill="#ffff00" fillOpacity={0.9}
@@ -2329,18 +2379,18 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
                 </G>
               );
             })}
-            {(state.activeTool === TOOLS.ELECTRIC || electricIndepActive) && (
+            {(activeTool === TOOLS.ELECTRIC || electricIndepActive) && (
               <G>
                 <Rect x={ELEC_CTRL_X - 20} y={ELEC_CTRL_Y - 16}
                   width={40} height={32} rx={3}
                   fill="#2a2a2a" stroke="#666" strokeWidth={1.2} />
                 <Circle cx={ELEC_CTRL_X - 8} cy={ELEC_CTRL_Y}
-                  r={3} fill={((state.activeTool === TOOLS.ELECTRIC && state.toolActive) || electricIndepActive) ? '#ff4040' : '#664040'} />
+                  r={3} fill={((activeTool === TOOLS.ELECTRIC && toolActive) || electricIndepActive) ? '#ff4040' : '#664040'} />
                 <Circle cx={ELEC_CTRL_X + 8} cy={ELEC_CTRL_Y}
-                  r={3} fill={((state.activeTool === TOOLS.ELECTRIC && state.toolActive) || electricIndepActive) ? '#ffcc40' : '#665540'} />
+                  r={3} fill={((activeTool === TOOLS.ELECTRIC && toolActive) || electricIndepActive) ? '#ffcc40' : '#665540'} />
                 <Rect x={ELEC_CTRL_X - 16} y={ELEC_CTRL_Y + 7}
                   width={32} height={3}
-                  fill={((state.activeTool === TOOLS.ELECTRIC && state.toolActive) || electricIndepActive) ? '#ffee44' : '#444'} />
+                  fill={((activeTool === TOOLS.ELECTRIC && toolActive) || electricIndepActive) ? '#ffee44' : '#444'} />
               </G>
             )}
           </G>

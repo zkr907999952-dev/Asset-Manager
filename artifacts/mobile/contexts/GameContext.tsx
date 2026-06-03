@@ -220,6 +220,7 @@ interface GameContextType {
   state: GameUIState;
   physicsRef: React.MutableRefObject<PhysicsState>;
   renderSnapshotRef: React.MutableRefObject<RenderSnapshot>;
+  renderVersionRef: React.MutableRefObject<number>;
   setScreen: (screen: ScreenName) => void;
   setViewMode: (mode: 'external' | 'internal') => void;
   setActiveTool: (tool: ToolType | null) => void;
@@ -311,6 +312,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     _breathPhase: 0,
   });
   const syncCallCountRef = useRef(0);
+  const renderVersionRef = useRef(0);
   const dialogueTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const comaStateRef = useRef<ComaState>('none');
 
@@ -579,39 +581,42 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     snap._breathPhase = (snap._breathPhase + (2 * Math.PI * (1000 / 15)) / periodMs) % (2 * Math.PI);
     snap.breathVal = Math.sin(snap._breathPhase);
 
-    // === Scalar-only setState — no array allocations in hot path ===
+    // === Increment render version ref (drives SimulationCanvas own RAF loop, zero React cost) ===
+    renderVersionRef.current++;
+
+    // === Slow-path setState only: ~2fps at 30fps physics (every 15 sync calls) ===
+    // SimulationCanvas reads fast-changing fields directly from physicsRef; updating
+    // other useGame() subscribers at 2fps reduces React reconciliation by ~87%.
     syncCallCountRef.current++;
     const isSlowSync = (syncCallCountRef.current % 15) === 0;
 
-    setState(prev => ({
-      ...prev,
-      hp, pleasure, heartRate,
-      intestinalRuptures: ruptures,
-      intestinalBreaks: breaks,
-      toolPos: p.toolPos ? { x: p.toolPos.x, y: p.toolPos.y } : null,
-      toolAnchor: p.toolAnchor ? { x: p.toolAnchor.x, y: p.toolAnchor.y } : null,
-      toolInserted: p.toolInserted,
-      navelPierced: p.navelPierced,
-      enemaHeadIdx: p.enemaHeadIdx,
-      enemaInSmall: p.enemaInSmall,
-      enemaSmallHeadIdx: p.enemaSmallHeadIdx,
-      siliconeHeadIdx: p.siliconeHeadIdx,
-      siliconeInSmall: p.siliconeInSmall,
-      siliconeSmallHeadIdx: p.siliconeSmallHeadIdx,
-      beadsHeadIdx: p.beadsHeadIdx,
-      beadsInSmall: p.beadsInSmall,
-      beadsSmallHeadIdx: p.beadsSmallHeadIdx,
-      eggSmallHeadIdx: p.eggSmallHeadIdx,
-      eggInLarge: p.eggInLarge,
-      eggLargeHeadIdx: p.eggLargeHeadIdx,
-      hpBonus: p.hpBonus ?? 0,
-      heartRateModifier: drug.heartRateModifier,
-      peristalsisModifier: drug.peristalsisModifier,
-      stimulantTimeLeft: stimTL,
-      sedativeTimeLeft: sedTL,
-      renderVersion: prev.renderVersion + 1,
-      // Slow path: update state arrays every 15 frames for AttributePanel/CharacterView
-      ...(isSlowSync ? {
+    if (isSlowSync) {
+      setState(prev => ({
+        ...prev,
+        hp, pleasure, heartRate,
+        intestinalRuptures: ruptures,
+        intestinalBreaks: breaks,
+        toolPos: p.toolPos ? { x: p.toolPos.x, y: p.toolPos.y } : null,
+        toolAnchor: p.toolAnchor ? { x: p.toolAnchor.x, y: p.toolAnchor.y } : null,
+        toolInserted: p.toolInserted,
+        navelPierced: p.navelPierced,
+        enemaHeadIdx: p.enemaHeadIdx,
+        enemaInSmall: p.enemaInSmall,
+        enemaSmallHeadIdx: p.enemaSmallHeadIdx,
+        siliconeHeadIdx: p.siliconeHeadIdx,
+        siliconeInSmall: p.siliconeInSmall,
+        siliconeSmallHeadIdx: p.siliconeSmallHeadIdx,
+        beadsHeadIdx: p.beadsHeadIdx,
+        beadsInSmall: p.beadsInSmall,
+        beadsSmallHeadIdx: p.beadsSmallHeadIdx,
+        eggSmallHeadIdx: p.eggSmallHeadIdx,
+        eggInLarge: p.eggInLarge,
+        eggLargeHeadIdx: p.eggLargeHeadIdx,
+        hpBonus: p.hpBonus ?? 0,
+        heartRateModifier: drug.heartRateModifier,
+        peristalsisModifier: drug.peristalsisModifier,
+        stimulantTimeLeft: stimTL,
+        sedativeTimeLeft: sedTL,
         renderSmallNodes: snap.smallNodes.map(n => ({ x: n.x, y: n.y })),
         renderLargeNodes: snap.largeNodes.map(n => ({ x: n.x, y: n.y })),
         renderSmallSegs: snap.smallSegs.map(s => ({ ...s })),
@@ -620,8 +625,8 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         periScaleLarge: [...snap.periScaleLarge],
         beadsChain: [...snap.beadsChain],
         electrodes: [...snap.electrodes],
-      } : {}),
-    }));
+      }));
+    }
   }, []);
 
   const triggerDialogue = useCallback((trigger: DialogueTrigger) => {
@@ -686,7 +691,6 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
           }
         }
         p.enemaHeadIdx = newIdx;
-        setState(prev => ({ ...prev, enemaHeadIdx: newIdx }));
 
       } else if (!curInSmall && anim.targetInSmall) {
         if (curLarge > 0) {
@@ -697,13 +701,11 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
             td('enema_large_deep');
           }
           p.enemaHeadIdx = newIdx;
-          setState(prev => ({ ...prev, enemaHeadIdx: newIdx }));
         } else {
           p.enemaInSmall = true;
           p.enemaSmallHeadIdx = N_SMALL - 1;
           anim.lastDialogueSmallDepth = -99;
           td('enema_enter_small');
-          setState(prev => ({ ...prev, enemaInSmall: true, enemaSmallHeadIdx: N_SMALL - 1 }));
         }
 
       } else if (curInSmall && !anim.targetInSmall) {
@@ -715,13 +717,11 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
             td('enema_retract');
           }
           p.enemaSmallHeadIdx = newIdx;
-          setState(prev => ({ ...prev, enemaSmallHeadIdx: newIdx }));
         } else {
           p.enemaInSmall = false;
           p.enemaSmallHeadIdx = N_SMALL - 1;
           p.enemaHeadIdx = 0;
           anim.lastDialogueSmallDepth = -99;
-          setState(prev => ({ ...prev, enemaInSmall: false, enemaSmallHeadIdx: N_SMALL - 1, enemaHeadIdx: 0 }));
         }
 
       } else if (curInSmall && anim.targetInSmall) {
@@ -740,7 +740,6 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
           }
         }
         p.enemaSmallHeadIdx = newIdx;
-        setState(prev => ({ ...prev, enemaSmallHeadIdx: newIdx }));
       }
     }, STEP_MS);
     return () => clearInterval(timer);
@@ -1213,9 +1212,10 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         }
       }
 
-      if ((Object.keys(upd) as (keyof UpdType)[]).length > 0) {
-        setState(prev => ({ ...prev, ...upd }));
-      }
+      // upd fields already written to physicsRef above; SimulationCanvas reads them
+      // directly via physicsRef so no setState needed. Slow-path syncFromPhysics (2fps)
+      // will sync these to state for other UI components.
+      void upd;
     }, 80);
     return () => clearInterval(timer);
   }, []);
@@ -2463,7 +2463,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
 
   return (
     <GameContext.Provider value={{
-      state, physicsRef, renderSnapshotRef,
+      state, physicsRef, renderSnapshotRef, renderVersionRef,
       setScreen, setViewMode, setActiveTool, toggleToolEnabled, setToolActive,
       setToolParam1, setToolParam2, setToolState, setPeriSpeed,
       setPeriWaveAmplitude, setPeriWaveSpeed,
