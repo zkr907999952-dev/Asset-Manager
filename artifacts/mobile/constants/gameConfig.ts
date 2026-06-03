@@ -13,7 +13,7 @@ export const SMALL_RADIUS = 8;
 export const LARGE_RADIUS = 15;
 
 export const PHYSICS_FPS = 30;
-export const PHYSICS_ITERATIONS = 5;
+export const PHYSICS_ITERATIONS = 3;
 export const DAMPING = 0.975;
 export const MESENTERY_STIFFNESS = 0.022;
 export const SEGMENT_STIFFNESS = 0.85;

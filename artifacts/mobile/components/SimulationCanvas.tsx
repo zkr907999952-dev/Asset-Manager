@@ -1105,6 +1105,35 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
     return (state.enabledTools ?? []).includes(id as any) && ts.pos != null;
   });
 
+  // === PATH PRE-COMPUTATION ===
+  // Build all segment path strings ONCE per render frame.
+  // Avoids calling buildSmoothSegPath twice per segment (outline + fill passes).
+  // Fixed-color passes (outline, highlight) are merged into single combined path strings,
+  // reducing SVG element count from ~257 to ~100 per frame — the primary mobile bottleneck.
+  const nSmallSegs = renderSmallSegs.length;
+  const nLargeSegs = renderLargeSegs.length;
+  const smallSegPaths: string[] = new Array(nSmallSegs).fill('');
+  const largeSegPaths: string[] = new Array(nLargeSegs).fill('');
+  const _smallParts: string[] = [];
+  const _largeHighParts: string[] = [];
+
+  for (let i = 0; i < nSmallSegs; i++) {
+    const seg = renderSmallSegs[i];
+    if (i >= renderSmallNodes.length - 1 || seg.broken || seg.resected) continue;
+    const d = buildSmoothSegPath(renderSmallNodes, i);
+    if (d) { smallSegPaths[i] = d; _smallParts.push(d); }
+  }
+  for (let i = 0; i < nLargeSegs; i++) {
+    const seg = renderLargeSegs[i];
+    if (i >= renderLargeNodes.length - 1 || seg.broken || seg.resected) continue;
+    const d = buildSmoothSegPath(renderLargeNodes, i);
+    if (d) { largeSegPaths[i] = d; _largeHighParts.push(d); }
+  }
+  // Single merged path strings for fixed-color passes (outline & highlight)
+  const smallCombinedOutline = _smallParts.join(' ');
+  const smallCombinedHighlight = smallCombinedOutline;
+  const largeCombinedHighlight = _largeHighParts.join(' ');
+
   return (
     <Animated.View
       style={[styles.container, { transform: [{ translateX: shakeAnim }] }]}
@@ -1197,22 +1226,17 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
               fill="none" stroke="#3a1010" strokeWidth={4} />
 
             {/* ===== LARGE INTESTINE — smooth bezier segments ===== */}
+            {/* Per-segment fill paths (color varies by health/pain/pressure) */}
             {renderLargeSegs.map((seg, i) => {
-              if (i >= renderLargeNodes.length - 1) return null;
-              if (seg.broken) return null; // visual gap at break
-              if (seg.resected) return null; // surgically removed — hidden
-              const d = buildSmoothSegPath(renderLargeNodes, i);
+              const d = largeSegPaths[i];
               if (!d) return null;
               const lPeriScale = (periScaleLarge?.[i] ?? 1);
               const w = LARGE_RADIUS * lPeriScale * 2 + (seg.pressure / LARGE_RUPTURE_PRESSURE) * LARGE_RADIUS * expansionScale;
               const col = segmentColor(seg.health, seg.pain, seg.pressure, seg.ruptured, seg.broken, seg.perforated, true, largeTransplantColor ?? undefined);
-              return (
-                <G key={`lg-${i}`}>
-                  <Path d={d} stroke={col} strokeWidth={w} fill="none" strokeLinecap="round" strokeLinejoin="round" />
-                  <Path d={d} stroke="rgba(255,200,175,0.22)" strokeWidth={LARGE_RADIUS * 0.65} fill="none" strokeLinecap="round" />
-                </G>
-              );
+              return <Path key={`lg-${i}`} d={d} stroke={col} strokeWidth={w} fill="none" strokeLinecap="round" strokeLinejoin="round" />;
             })}
+            {/* Single merged highlight path — replaces 31 individual highlight Paths */}
+            {largeCombinedHighlight ? <Path d={largeCombinedHighlight} stroke="rgba(255,200,175,0.22)" strokeWidth={LARGE_RADIUS * 0.65} fill="none" strokeLinecap="round" /> : null}
 
             {/* Ileocecal junction — visible tube connecting terminal ileum to cecum */}
             {renderSmallNodes.length > 0 && renderLargeNodes.length > 0 && (() => {
@@ -1250,28 +1274,6 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
               );
             })()}
 
-            {/* Large intestine rupture burst markers */}
-            {renderLargeSegs.map((seg, i) => {
-              if (!seg.ruptured) return null;
-              const n = renderLargeNodes[i];
-              if (!n) return null;
-              return (
-                <G key={`lgrpt-${i}`}>
-                  {[0, 45, 90, 135].map(angle => {
-                    const rad = angle * Math.PI / 180;
-                    const r = LARGE_RADIUS + 6;
-                    return (
-                      <Line key={angle}
-                        x1={n.x} y1={n.y}
-                        x2={n.x + Math.cos(rad) * r} y2={n.y + Math.sin(rad) * r}
-                        stroke="#ff3030" strokeWidth={2} strokeLinecap="round" />
-                    );
-                  })}
-                  <Circle cx={n.x} cy={n.y} r={5} fill="#cc0000" stroke="#ff4040" strokeWidth={1} />
-                </G>
-              );
-            })}
-
             {/* Large intestine perforation markers */}
             {renderLargeSegs.map((seg, i) =>
               seg.perforated && !seg.broken ? (
@@ -1308,40 +1310,22 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
               );
             })}
 
-            {/* ===== SMALL INTESTINE — outline casing pass (drawn first, behind fill) ===== */}
-            {renderSmallSegs.map((seg, i) => {
-              if (i >= renderSmallNodes.length - 1) return null;
-              if (seg.broken) return null;
-              if (seg.resected) return null; // surgically removed — hidden
-              const d = buildSmoothSegPath(renderSmallNodes, i);
-              if (!d) return null;
-              const sPeriScale = (periScaleSmall?.[i] ?? 1);
-              const w = SMALL_RADIUS * sPeriScale * 2 + (seg.pressure / 100) * SMALL_RADIUS * expansionScale;
-              return (
-                <Path key={`sm-out-${i}`} d={d}
-                  stroke="rgba(175, 100, 80, 0.55)"
-                  strokeWidth={w + 3.5}
-                  fill="none" strokeLinecap="round" strokeLinejoin="round" />
-              );
-            })}
+            {/* ===== SMALL INTESTINE — outline casing (single merged path, replaces 65 individual Paths) ===== */}
+            {smallCombinedOutline ? (
+              <Path d={smallCombinedOutline} stroke="rgba(175, 100, 80, 0.55)" strokeWidth={SMALL_RADIUS * 2 + 4} fill="none" strokeLinecap="round" strokeLinejoin="round" />
+            ) : null}
 
-            {/* ===== SMALL INTESTINE — fill segments ===== */}
+            {/* ===== SMALL INTESTINE — per-segment fill (color varies by health/pain/pressure) ===== */}
             {renderSmallSegs.map((seg, i) => {
-              if (i >= renderSmallNodes.length - 1) return null;
-              if (seg.broken) return null; // visual gap at break
-              if (seg.resected) return null; // surgically removed — hidden
-              const d = buildSmoothSegPath(renderSmallNodes, i);
+              const d = smallSegPaths[i];
               if (!d) return null;
               const sPeriScale = (periScaleSmall?.[i] ?? 1);
               const w = SMALL_RADIUS * sPeriScale * 2 + (seg.pressure / 100) * SMALL_RADIUS * expansionScale;
               const col = segmentColor(seg.health, seg.pain, seg.pressure, seg.ruptured, seg.broken, seg.perforated, false, smallTransplantColor ?? undefined);
-              return (
-                <G key={`sm-${i}`}>
-                  <Path d={d} stroke={col} strokeWidth={w} fill="none" strokeLinecap="round" strokeLinejoin="round" />
-                  <Path d={d} stroke="rgba(255,220,200,0.18)" strokeWidth={SMALL_RADIUS * 0.7} fill="none" strokeLinecap="round" />
-                </G>
-              );
+              return <Path key={`sm-${i}`} d={d} stroke={col} strokeWidth={w} fill="none" strokeLinecap="round" strokeLinejoin="round" />;
             })}
+            {/* Single merged highlight path — replaces 65 individual highlight Paths */}
+            {smallCombinedHighlight ? <Path d={smallCombinedHighlight} stroke="rgba(255,220,200,0.18)" strokeWidth={SMALL_RADIUS * 0.7} fill="none" strokeLinecap="round" /> : null}
 
             {/* Rupture burst markers */}
             {renderSmallSegs.map((seg, i) => {
