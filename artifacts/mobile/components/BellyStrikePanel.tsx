@@ -1,6 +1,5 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { View, Text, TouchableOpacity, ScrollView, Image, StyleSheet } from 'react-native';
-import { Feather } from '@expo/vector-icons';
 import { useColors } from '@/hooks/useColors';
 import { useGame } from '@/contexts/GameContext';
 import { GameSlider } from './GameSlider';
@@ -26,15 +25,11 @@ export function BellyStrikePanel() {
   const {
     state,
     setBellyStrikeTool, setBellyStrikeForce, setBellyStrikeRange,
-    setBellyStrikeImpulseScale, setBellyStrikeToolPower,
   } = useGame();
-  const [showAdvanced, setShowAdvanced] = useState(false);
 
   const selected = state.bellyStrikeTool;
   const force = state.bellyStrikeForce;
   const range = state.bellyStrikeRange;
-  const impulseScale = state.bellyStrikeImpulseScale;
-  const toolPowers = state.bellyStrikeToolPowers;
 
   const forceLevel = force < 34 ? 0 : force < 67 ? 1 : 2;
 
@@ -128,56 +123,11 @@ export function BellyStrikePanel() {
         </View>
       )}
 
-      {/* Advanced settings section */}
-      <TouchableOpacity
-        style={[styles.advHeader, { borderColor: `${colors.border}44` }]}
-        onPress={() => setShowAdvanced(v => !v)}
-        activeOpacity={0.7}
-      >
-        <Text style={[styles.advHeaderText, { color: colors.mutedForeground }]}>高级设置</Text>
-        <Feather name={showAdvanced ? 'chevron-up' : 'chevron-down'} size={12} color={colors.mutedForeground} />
-      </TouchableOpacity>
-
-      {showAdvanced && (
-        <View style={[styles.advBox, { borderColor: `${colors.border}44`, backgroundColor: `${colors.primary}06` }]}>
-
-          {/* Impulse scale */}
-          <View style={styles.sliderRow}>
-            <View style={styles.sliderLabelRow}>
-              <Text style={[styles.sliderLabel, { color: colors.foreground }]}>物理推力</Text>
-              <Text style={[styles.sliderVal, { color: colors.mutedForeground }]}>{impulseScale}%</Text>
-            </View>
-            <GameSlider
-              value={impulseScale}
-              minimumValue={20}
-              maximumValue={300}
-              step={5}
-              onValueChange={setBellyStrikeImpulseScale}
-            />
-          </View>
-
-          {/* Per-tool power */}
-          <Text style={[styles.advSubTitle, { color: colors.mutedForeground }]}>工具威力倍数</Text>
-          {BELLY_STRIKE_TOOL_LIST.map(tool => {
-            const pwr = toolPowers[tool.id] ?? 100;
-            return (
-              <View key={tool.id} style={styles.sliderRow}>
-                <View style={styles.sliderLabelRow}>
-                  <Text style={[styles.sliderLabel, { color: colors.foreground, fontSize: 10 }]}>{tool.id}</Text>
-                  <Text style={[styles.sliderVal, { color: colors.mutedForeground }]}>{pwr}%</Text>
-                </View>
-                <GameSlider
-                  value={pwr}
-                  minimumValue={10}
-                  maximumValue={400}
-                  step={10}
-                  onValueChange={v => setBellyStrikeToolPower(tool.id, v)}
-                />
-              </View>
-            );
-          })}
-        </View>
-      )}
+      <View style={[styles.hintBox2, { borderColor: `${colors.border}33` }]}>
+        <Text style={[styles.hintText2, { color: colors.mutedForeground }]}>
+          威力高级设置已移至主设置界面 →「腹击威力」
+        </Text>
+      </View>
 
       <View style={styles.spacer} />
     </ScrollView>
@@ -280,35 +230,17 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter_400Regular',
     lineHeight: 13,
   },
-  advHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingVertical: 6,
-    paddingHorizontal: 4,
-    marginTop: 6,
-    borderTopWidth: 1,
-  },
-  advHeaderText: {
-    fontSize: 9,
-    fontFamily: 'Inter_600SemiBold',
-    letterSpacing: 0.8,
-    textTransform: 'uppercase',
-  },
-  advBox: {
-    borderRadius: 8,
+  hintBox2: {
     borderWidth: 1,
-    padding: 8,
-    gap: 6,
-    marginTop: 2,
+    borderRadius: 6,
+    padding: 6,
+    marginTop: 10,
   },
-  advSubTitle: {
+  hintText2: {
     fontSize: 9,
-    fontFamily: 'Inter_600SemiBold',
-    letterSpacing: 0.6,
-    textTransform: 'uppercase',
-    marginTop: 2,
-    marginBottom: 2,
+    fontFamily: 'Inter_400Regular',
+    lineHeight: 13,
+    textAlign: 'center',
   },
   spacer: { height: 12 },
 });

@@ -81,6 +81,7 @@ export function SettingsScreen({ onMenuPress }: Props) {
     setBreathAmplitude, setExpansionScale, setPressureDiffusionRate,
     setDrugDuration, setHatchDuration, setParasiteDamageInterval, setParasitePerforationChance,
     setMaxResectionSegments,
+    setBellyStrikeImpulseScale, setBellyStrikeToolPower,
   } = useGame();
   const topPad = Platform.OS === 'web' ? 67 : insets.top;
   const bottomPad = Platform.OS === 'web' ? 34 : insets.bottom;
@@ -199,6 +200,39 @@ export function SettingsScreen({ onMenuPress }: Props) {
             onValueChange={setParasitePerforationChance}
             trackColor="#cc4444"
           />
+        </View>
+
+        {/* Belly strike power */}
+        <Text style={[styles.sectionTitle, { color: colors.primary }]}>腹击威力</Text>
+        <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
+          <SliderRow
+            label="物理推力"
+            value={state.bellyStrikeImpulseScale ?? 100}
+            displayValue={`${state.bellyStrikeImpulseScale ?? 100}%`}
+            min={20} max={300} step={5}
+            onValueChange={setBellyStrikeImpulseScale}
+            trackColor="#e07030"
+          />
+          <View style={[styles.divider, { backgroundColor: colors.border }]} />
+          <View style={styles.subLabel}>
+            <Text style={[styles.subLabelText, { color: colors.mutedForeground }]}>工具威力倍数</Text>
+          </View>
+          {(['拳头', '棒球棒', '撞钟锤'] as const).map((toolId, idx) => {
+            const pwr = (state.bellyStrikeToolPowers ?? {})[toolId] ?? 100;
+            return (
+              <View key={toolId}>
+                {idx > 0 && <View style={[styles.divider, { backgroundColor: colors.border }]} />}
+                <SliderRow
+                  label={toolId}
+                  value={pwr}
+                  displayValue={`${pwr}%`}
+                  min={10} max={400} step={10}
+                  onValueChange={v => setBellyStrikeToolPower(toolId, v)}
+                  trackColor="#e07030"
+                />
+              </View>
+            );
+          })}
         </View>
 
         {/* Resection system */}
@@ -378,6 +412,8 @@ const styles = StyleSheet.create({
   },
   infoLabel: { fontSize: 13, fontFamily: 'Inter_400Regular' },
   infoValue: { fontSize: 13, fontFamily: 'Inter_600SemiBold' },
+  subLabel: { paddingVertical: 6 },
+  subLabelText: { fontSize: 10, fontFamily: 'Inter_600SemiBold', letterSpacing: 0.6, textTransform: 'uppercase' },
   aboutCard: {
     borderRadius: 10,
     borderWidth: 1,

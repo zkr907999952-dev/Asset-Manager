@@ -2334,18 +2334,47 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
               </G>
             );
           } else {
-            // Bat shape: horizontal oval from physX to physX + rangePx*2
-            const batW = rangePx * 2;
-            const batH = rangePx * 0.35;
+            // Bat silhouette: realistic profile from knob (left) to barrel tip (right)
+            const hLen = rangePx * 0.55;     // handle left of physX
+            const bLen = rangePx * 1.65;     // barrel right of physX
+            const knobR = rangePx * 0.135;   // knob endcap radius (wider than handle)
+            const handleR = rangePx * 0.09;  // narrow grip
+            const barrelR = rangePx * 0.34;  // barrel radius
+            const lx = physX - hLen;          // left end (knob center)
+            const rx = physX + bLen;          // right end (barrel cap center)
+            // Taper control points: smoothly widens from handle to barrel starting ~25% of total length
+            const taperCtrlX = physX + rangePx * 0.38;
+            const barrelCtrlX = physX + rangePx * 0.95;
+            // Bat path (clockwise): knob left cap → handle bottom → taper → barrel → right cap → taper → handle top → close
+            const knobCx = lx + knobR;  // knob cap circle center x
+            const batPath = [
+              // Start top of knob (above center)
+              `M ${knobCx} ${physY - knobR}`,
+              // Left knob cap — CCW arc (left semicircle): top → bottom
+              `A ${knobR} ${knobR} 0 0 0 ${knobCx} ${physY + knobR}`,
+              // Bottom of handle going right
+              `L ${physX} ${physY + handleR}`,
+              // Bottom taper bezier → barrel bottom
+              `C ${taperCtrlX} ${physY + handleR * 2.2} ${barrelCtrlX} ${physY + barrelR * 0.92} ${rx} ${physY + barrelR}`,
+              // Right barrel cap — CW arc (right semicircle): bottom → top
+              `A ${barrelR} ${barrelR} 0 0 1 ${rx} ${physY - barrelR}`,
+              // Top taper bezier → handle top
+              `C ${barrelCtrlX} ${physY - barrelR * 0.92} ${taperCtrlX} ${physY - handleR * 2.2} ${physX} ${physY - handleR}`,
+              // Handle top going left back to knob
+              `L ${knobCx} ${physY - knobR}`,
+              `Z`,
+            ].join(' ');
             return (
               <G>
-                <Ellipse cx={physX + batW * 0.45} cy={physY} rx={batW * 0.55} ry={batH}
+                <Path
+                  d={batPath}
                   fill={fillColor}
                   stroke={strokeColor}
                   strokeWidth={charging ? 2.5 : 1.5}
-                  strokeDasharray={charging ? '0' : '5,4'} />
-                <Line x1={physX - batW * 0.15} y1={physY} x2={physX} y2={physY}
-                  stroke={strokeColor} strokeWidth={charging ? 2 : 1.2} />
+                  strokeLinejoin="round"
+                  strokeDasharray={charging ? '0' : '6,4'}
+                />
+                {/* Tap origin dot */}
                 <Circle cx={physX} cy={physY} r={3} fill={strokeColor} />
               </G>
             );
