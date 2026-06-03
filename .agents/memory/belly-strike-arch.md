@@ -14,6 +14,23 @@ description: How the 腹击 (belly strike) feature is wired across ToolBar, Game
 - `engine/physics.ts` — `applyBellyStrikePhysics()` exported function
 - `components/SimulationCanvas.tsx` — PanResponder belly strike interception, SVG range overlay, Animated flash
 
+## Icon vs Animation asset separation
+
+**Panel icons** (`BellyStrikePanel.tsx`) — all SVG components, no PNG:
+- `icons/StrikeFistIcon.tsx` — front-view fist (36×36)
+- `icons/StrikeBatIcon.tsx` — angled bat (36×36)
+- `icons/StrikeHammerIcon.tsx` — suspended log hammer (36×36, existing)
+
+**Animation overlays** (`SimulationCanvas.tsx`, `STRIKE_ANIM_COMPONENTS`) — SVG components rendered via `<AnimComp width height />`:
+- `icons/StrikeFistAnim.tsx` — rear view of fist (knuckles toward viewer)
+- `icons/StrikeBatAnim.tsx` — flat side view bat (barrel left, handle right)
+- `icons/StrikeHammerAnim.tsx` — thick log face-on (tree-ring cross-section)
+
+**Why separated:** Icons need compact 36×36 designs readable at small size; animations need expressive full-detail art scaled to match the hit-range silhouette. Sharing one asset forced a bad compromise on both.
+
+## Delays (as of last update)
+- Fist: 200ms, Bat: 500ms, Hammer: 1000ms (halved from original 400/1000/2000)
+
 ## Key design decisions
 
 **Why bellyStrikeRef in GameContext:**

@@ -69,27 +69,27 @@ export interface BellyStrikeToolDef {
 export const BELLY_STRIKE_TOOL_LIST: BellyStrikeToolDef[] = [
   {
     id: BELLY_STRIKE_TOOLS.FIST,
-    desc: '圆形范围，威力中等，0.4秒延迟',
+    desc: '圆形范围，威力中等，0.2秒延迟',
     rangeType: 'circle',
     baseRangePx: 50,
     powerMult: 1.0,
-    delayMs: 400,
+    delayMs: 200,
   },
   {
     id: BELLY_STRIKE_TOOLS.BAT,
-    desc: '棒状范围，端部威力递增，1秒延迟',
+    desc: '棒状范围，端部威力递增，0.5秒延迟',
     rangeType: 'bat',
     baseRangePx: 80,
     powerMult: 1.5,
-    delayMs: 1000,
+    delayMs: 500,
   },
   {
     id: BELLY_STRIKE_TOOLS.HAMMER,
-    desc: '大圆范围，威力巨大，2秒延迟',
+    desc: '大圆范围，威力巨大，1秒延迟',
     rangeType: 'circle',
     baseRangePx: 80,
     powerMult: 2.5,
-    delayMs: 2000,
+    delayMs: 1000,
   },
 ];
 
