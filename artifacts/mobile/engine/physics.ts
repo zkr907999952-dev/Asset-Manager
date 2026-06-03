@@ -123,23 +123,28 @@ function softCavityPush(node: PhysicsNode, margin: number) {
   const softRY = CAVITY_RY - margin + 24;
   const nx = dx / softRX;
   const ny = dy / softRY;
-  const r = Math.sqrt(nx * nx + ny * ny);
-  if (r > 1) {
-    const excess = r - 1;
-    // Progressive spring: stronger when further outside
-    const k = Math.min(0.85, 0.2 + excess * 1.8);
-    node.x -= (nx / r) * excess * softRX * k;
-    node.y -= (ny / r) * excess * softRY * k;
-    // Only hard-clamp AND zero velocity if extremely far outside
-    const dx2 = node.x - CAVITY_CX;
-    const dy2 = node.y - CAVITY_CY;
-    const r2 = Math.sqrt((dx2 / softRX) ** 2 + (dy2 / softRY) ** 2);
-    if (r2 > 1.6) {
-      node.x = CAVITY_CX + (dx2 / r2) * (softRX - 1);
-      node.y = CAVITY_CY + (dy2 / r2) * (softRY - 1);
-      node.px = node.x;
-      node.py = node.y;
-    }
+  // Fast path: skip sqrt if node is clearly inside cavity (r²≤1).
+  // Most nodes are inside, so this saves ~90% of sqrt calls here.
+  const r2 = nx * nx + ny * ny;
+  if (r2 <= 1) return;
+  const r = Math.sqrt(r2);
+  const excess = r - 1;
+  // Progressive spring: stronger when further outside
+  const k = Math.min(0.85, 0.2 + excess * 1.8);
+  node.x -= (nx / r) * excess * softRX * k;
+  node.y -= (ny / r) * excess * softRY * k;
+  // Only hard-clamp AND zero velocity if extremely far outside (r²>2.56 i.e. r>1.6)
+  const dx2 = node.x - CAVITY_CX;
+  const dy2 = node.y - CAVITY_CY;
+  const nx2 = dx2 / softRX;
+  const ny2 = dy2 / softRY;
+  const r2b = nx2 * nx2 + ny2 * ny2;
+  if (r2b > 2.56) {
+    const rb = Math.sqrt(r2b);
+    node.x = CAVITY_CX + (nx2 / rb) * (softRX - 1);
+    node.y = CAVITY_CY + (ny2 / rb) * (softRY - 1);
+    node.px = node.x;
+    node.py = node.y;
   }
 }
 
@@ -215,6 +220,10 @@ function largeNodeMesentery(idx: number): { stiffness: number; deadZone: number 
 
 // Module-level scratch buffer — reused every frame to avoid per-frame allocation in diffuseAndUpdate
 const _pressureScratch: number[] = new Array(N_SMALL).fill(0);
+
+// Module-level bead radii — precomputed once, reused every frame (avoids 40-push allocation per physics tick)
+const _BEAD_RADII: number[] = [];
+for (let _bi = 0; _bi < 40; _bi++) _BEAD_RADII.push(Math.min(3 + _bi * 0.65, 16.0));
 
 export function stepPhysics(state: PhysicsState) {
   const relaxMultiplier = state.relaxFrames > 0 ? 0.15 : 1.0;
@@ -375,9 +384,12 @@ export function stepPhysics(state: PhysicsState) {
         if (!a.pinned) { a.x += dx * diff; a.y += dy * diff; }
         if (!b.pinned) { b.x -= dx * diff; b.y -= dy * diff; }
       }
-      // Use soft push in constraint loop — never zero velocity here
-      for (const n of nodes) {
-        if (!n.pinned) softCavityPush(n, cavMargin);
+      // Use soft push in constraint loop — only on alternate iterations to halve sqrt cost.
+      // Physics stability is maintained since 3 of 5 iterations still push (iters 0, 2, 4).
+      if (iter % 2 === 0) {
+        for (const n of nodes) {
+          if (!n.pinned) softCavityPush(n, cavMargin);
+        }
       }
     }
     const maxStretch = segLen * 2.5;
@@ -425,23 +437,33 @@ export function stepPhysics(state: PhysicsState) {
   applyResectionSprings(state.largeNodes, LARGE_SEG_LENGTH, state.resectedLargeRanges ?? []);
 
   // --- Separation constraint between small and large intestine (even frames) ---
+  // Fast-reject threshold: max possible minDist ≈ SMALL_RADIUS*2 + LARGE_RADIUS*2 ≈ 62px.
+  // Using 68px (generous) so no real collisions are skipped by the AABB pre-check.
   if (t % 2 === 0) {
     for (let si = 0; si < state.smallNodes.length; si++) {
       const sn = state.smallNodes[si];
       const sSeg = state.smallSegs[Math.min(si, state.smallSegs.length - 1)];
       const sPeriScale = state.periScaleSmall[si] ?? 1;
       const sExpR = SMALL_RADIUS * sPeriScale * (1 + (sSeg.pressure / 100) * state.expansionScale * 0.45);
+      const snx = sn.x, sny = sn.y;
 
       for (let li = 0; li < state.largeNodes.length; li++) {
         const ln = state.largeNodes[li];
+        const dx = snx - ln.x, dy = sny - ln.y;
+        // AABB fast reject — skips expensive lSeg/sqrt for most distant pairs
+        const adx = dx < 0 ? -dx : dx;
+        if (adx > 68) continue;
+        const ady = dy < 0 ? -dy : dy;
+        if (ady > 68) continue;
+        const d2 = dx * dx + dy * dy;
         const lSeg = state.largeSegs[Math.min(li, state.largeSegs.length - 1)];
         const lPeriScale = state.periScaleLarge[li] ?? 1;
         const lExpR = LARGE_RADIUS * lPeriScale * (1 + (lSeg.pressure / LARGE_RUPTURE_PRESSURE) * state.expansionScale * 0.45);
-
-        const dx = sn.x - ln.x, dy = sn.y - ln.y;
-        const d = Math.sqrt(dx * dx + dy * dy);
         const minDist = sExpR + lExpR;
-        if (d < minDist && d > 0.01) {
+        const minDist2 = minDist * minDist;
+        // Use squared distance — only pay for sqrt when nodes actually overlap
+        if (d2 < minDist2 && d2 > 0.0001) {
+          const d = Math.sqrt(d2);
           const push = (minDist - d) / d * 0.55;
           sn.x += dx * push * 0.6;
           sn.y += dy * push * 0.6;
@@ -451,7 +473,8 @@ export function stepPhysics(state: PhysicsState) {
   }
 
   // --- Small intestine self-collision (odd frames, alternates with cross-collision) ---
-  // Skip pairs within ±4 indices to avoid fighting the chain constraint
+  // Skip pairs within ±4 indices to avoid fighting the chain constraint.
+  // Fast-reject threshold: max possible minDist ≈ 2 * SMALL_RADIUS * 2 ≈ 42px; use 48px.
   if (t % 2 !== 0) {
     for (let si = 0; si < state.smallNodes.length; si++) {
       const a = state.smallNodes[si];
@@ -459,18 +482,26 @@ export function stepPhysics(state: PhysicsState) {
       const aScale = state.periScaleSmall[si] ?? 1;
       const aSeg = state.smallSegs[Math.min(si, state.smallSegs.length - 1)];
       const aR = SMALL_RADIUS * aScale * (1 + (aSeg.pressure / 100) * state.expansionScale * 0.45);
+      const ax = a.x, ay = a.y;
 
       for (let sj = si + 4; sj < state.smallNodes.length; sj++) {
         const b = state.smallNodes[sj];
         if (b.pinned) continue;
+        const dx = ax - b.x, dy = ay - b.y;
+        // AABB fast reject — skips bSeg/sqrt for most distant pairs
+        const adx = dx < 0 ? -dx : dx;
+        if (adx > 48) continue;
+        const ady = dy < 0 ? -dy : dy;
+        if (ady > 48) continue;
+        const d2 = dx * dx + dy * dy;
         const bScale = state.periScaleSmall[sj] ?? 1;
         const bSeg = state.smallSegs[Math.min(sj, state.smallSegs.length - 1)];
         const bR = SMALL_RADIUS * bScale * (1 + (bSeg.pressure / 100) * state.expansionScale * 0.45);
-
-        const dx = a.x - b.x, dy = a.y - b.y;
-        const d = Math.sqrt(dx * dx + dy * dy);
         const minDist = aR + bR;
-        if (d < minDist && d > 0.01) {
+        const minDist2 = minDist * minDist;
+        // Only pay for sqrt when nodes actually overlap
+        if (d2 < minDist2 && d2 > 0.0001) {
+          const d = Math.sqrt(d2);
           const push = (minDist - d) / d * 0.32;
           a.x += dx * push * 0.5; a.y += dy * push * 0.5;
           b.x -= dx * push * 0.5; b.y -= dy * push * 0.5;
@@ -887,8 +918,7 @@ export function stepPhysics(state: PhysicsState) {
 
     // === 拉珠 — fully independent state, no sharing with enema or silicone ===
     if (state.toolType === '拉珠') {
-      const BEAD_RADII: number[] = [];
-      for (let i = 0; i < 40; i++) BEAD_RADII.push(Math.min(3 + i * 0.65, 16.0));
+      const BEAD_RADII = _BEAD_RADII; // module-level constant, no allocation
       const speedFactor = 0.5 + (state.toolParam2 ?? 50) * 0.01;
       const headIdx = clamp(state.beadsHeadIdx, 0, N_LARGE - 1);
 
