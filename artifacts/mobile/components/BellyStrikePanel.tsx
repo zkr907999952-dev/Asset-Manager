@@ -31,7 +31,7 @@ export function BellyStrikePanel() {
   const force = state.bellyStrikeForce;
   const range = state.bellyStrikeRange;
 
-  const forceLevel = force < 34 ? 0 : force < 67 ? 1 : 2;
+  const forceLevel = force < 67 ? 0 : force < 134 ? 1 : 2;
 
   return (
     <ScrollView
@@ -98,7 +98,7 @@ export function BellyStrikePanel() {
             <GameSlider
               value={force}
               minimumValue={0}
-              maximumValue={100}
+              maximumValue={200}
               step={1}
               onValueChange={setBellyStrikeForce}
             />

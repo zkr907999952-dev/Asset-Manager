@@ -209,7 +209,7 @@ export function SettingsScreen({ onMenuPress }: Props) {
             label="物理推力"
             value={state.bellyStrikeImpulseScale ?? 100}
             displayValue={`${state.bellyStrikeImpulseScale ?? 100}%`}
-            min={20} max={300} step={5}
+            min={20} max={600} step={5}
             onValueChange={setBellyStrikeImpulseScale}
             trackColor="#e07030"
           />

@@ -812,7 +812,7 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
           // Compute flash color and shake intensity based on power (approximate baseDamage)
           const toolPowerScale = ((s.bellyStrikeToolPowers ?? {})[s.bellyStrikeTool!] ?? 100) / 100;
           const forceMult = 0.3 + s.bellyStrikeForce * 0.007;
-          const approxDamage = 25 * forceMult * toolDef.powerMult * toolPowerScale * ((s.bellyStrikeImpulseScale ?? 100) / 100);
+          const approxDamage = 50 * forceMult * toolDef.powerMult * toolPowerScale * ((s.bellyStrikeImpulseScale ?? 100) / 100);
           const fi = Math.min(1, approxDamage / 55);
           const cFlash = `rgba(255,${Math.round(95 - fi * 80)},${Math.round(20 - fi * 15)},${(0.12 + fi * 0.28).toFixed(2)})`;
           const shakeStrength = Math.min(16, approxDamage * 0.3);

@@ -2344,7 +2344,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     const forceMult = 0.3 + force * 0.007;
     const rangePx = toolDef.baseRangePx * (0.5 + rangePct * 0.005);
     const toolPowerScale = (toolPowers[tool] ?? 100) / 100;
-    const baseDamage = 25 * forceMult * toolDef.powerMult * toolPowerScale;
+    const baseDamage = 50 * forceMult * toolDef.powerMult * toolPowerScale;
     applyBellyStrikePhysicsFunc(physicsRef.current, physX, physY, toolDef.rangeType, rangePx, baseDamage, impulseScale / 100);
     const forceLevel = force < 34 ? 'low' : force < 67 ? 'mid' : 'high';
     const toolKey = tool === '拳头' ? 'fist' : tool === '棒球棒' ? 'bat' : 'hammer';
