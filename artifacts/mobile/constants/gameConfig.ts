@@ -69,11 +69,11 @@ export interface BellyStrikeToolDef {
 export const BELLY_STRIKE_TOOL_LIST: BellyStrikeToolDef[] = [
   {
     id: BELLY_STRIKE_TOOLS.FIST,
-    desc: '圆形范围，威力中等，0.2秒延迟',
+    desc: '圆形范围，威力中等，0.35秒延迟',
     rangeType: 'circle',
     baseRangePx: 50,
     powerMult: 1.0,
-    delayMs: 200,
+    delayMs: 350,
   },
   {
     id: BELLY_STRIKE_TOOLS.BAT,

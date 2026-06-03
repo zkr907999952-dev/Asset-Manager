@@ -9,7 +9,7 @@ import { StrikeFistIcon } from './icons/StrikeFistIcon';
 import { StrikeBatIcon } from './icons/StrikeBatIcon';
 
 const TOOL_DELAY_LABELS: Record<BellyStrikeToolId, string> = {
-  '拳头': '0.2s 延迟',
+  '拳头': '0.35s 延迟',
   '棒球棒': '0.5s 延迟',
   '撞钟锤': '1s 延迟',
 };
