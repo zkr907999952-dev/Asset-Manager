@@ -123,12 +123,6 @@ export function BellyStrikePanel() {
         </View>
       )}
 
-      <View style={[styles.hintBox2, { borderColor: `${colors.border}33` }]}>
-        <Text style={[styles.hintText2, { color: colors.mutedForeground }]}>
-          威力高级设置已移至主设置界面 →「腹击威力」
-        </Text>
-      </View>
-
       <View style={styles.spacer} />
     </ScrollView>
   );
@@ -229,18 +223,6 @@ const styles = StyleSheet.create({
     fontSize: 9,
     fontFamily: 'Inter_400Regular',
     lineHeight: 13,
-  },
-  hintBox2: {
-    borderWidth: 1,
-    borderRadius: 6,
-    padding: 6,
-    marginTop: 10,
-  },
-  hintText2: {
-    fontSize: 9,
-    fontFamily: 'Inter_400Regular',
-    lineHeight: 13,
-    textAlign: 'center',
   },
   spacer: { height: 12 },
 });

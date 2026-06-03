@@ -247,6 +247,14 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
     rangeType: 'circle' | 'bat';
     id: number;
   } | null>(null);
+  const [chargedOverlays, setChargedOverlays] = useState<Array<{
+    physX: number; physY: number;
+    toolId: BellyStrikeToolId;
+    rangePx: number;
+    charging: boolean;
+    rangeType: 'circle' | 'bat';
+    id: number;
+  }>>([]);
   const strikeChargeAnim = useRef(new Animated.Value(0)).current;
   const strikeFlashAnim = useRef(new Animated.Value(0)).current;
   // Multiple concurrent strikes: overlayId for safe clear, waveId for per-wave anims
@@ -801,7 +809,9 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
           const shakeStrength = Math.min(16, approxDamage * 0.3);
           // Unique ID for this overlay so only it clears it
           const capturedOverlayId = ++overlayIdRef.current;
-          setStrikeOverlay({ physX, physY, toolId: s.bellyStrikeTool!, rangePx, charging: true, rangeType: toolDef.rangeType, id: capturedOverlayId });
+          // Move current drag overlay to chargedOverlays so it persists while charging
+          setStrikeOverlay(null);
+          setChargedOverlays(prev => [...prev, { physX, physY, toolId: s.bellyStrikeTool!, rangePx, charging: true, rangeType: toolDef.rangeType, id: capturedOverlayId }]);
           strikeChargeAnim.setValue(0);
           Animated.timing(strikeChargeAnim, { toValue: 1, duration: toolDef.delayMs, useNativeDriver: false }).start();
           // No clearTimeout — allow multiple concurrent strikes
@@ -811,7 +821,7 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
             setFlashColor(cFlash);
             strikeFlashAnim.setValue(1);
             Animated.timing(strikeFlashAnim, { toValue: 0, duration: 380, useNativeDriver: false }).start(() => {
-              setStrikeOverlay(prev => prev?.id === capturedOverlayId ? null : prev);
+              setChargedOverlays(prev => prev.filter(o => o.id !== capturedOverlayId));
             });
             // Screen shake scaled by power
             if (shakeStrength > 1.5) {
@@ -2316,14 +2326,14 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
           );
         })}
 
-        {/* Belly strike range overlay */}
-        {strikeOverlay && (() => {
-          const { physX, physY, rangePx, charging, rangeType } = strikeOverlay;
+        {/* Belly strike range overlays: chargedOverlays (persistent) + current drag overlay */}
+        {[...chargedOverlays, ...(strikeOverlay ? [strikeOverlay] : [])].map(overlay => {
+          const { physX, physY, rangePx, charging, rangeType, id } = overlay;
           const strokeColor = charging ? '#ff8844' : '#ff884488';
           const fillColor = charging ? 'rgba(255,136,68,0.12)' : 'rgba(255,136,68,0.06)';
           if (rangeType === 'circle') {
             return (
-              <G>
+              <G key={id}>
                 <Circle cx={physX} cy={physY} r={rangePx}
                   fill={fillColor}
                   stroke={strokeColor}
@@ -2334,38 +2344,39 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
               </G>
             );
           } else {
-            // Bat silhouette: realistic profile from knob (left) to barrel tip (right)
-            const hLen = rangePx * 0.55;     // handle left of physX
-            const bLen = rangePx * 1.65;     // barrel right of physX
-            const knobR = rangePx * 0.135;   // knob endcap radius (wider than handle)
-            const handleR = rangePx * 0.09;  // narrow grip
-            const barrelR = rangePx * 0.34;  // barrel radius
-            const lx = physX - hLen;          // left end (knob center)
-            const rx = physX + bLen;          // right end (barrel cap center)
-            // Taper control points: smoothly widens from handle to barrel starting ~25% of total length
-            const taperCtrlX = physX + rangePx * 0.38;
-            const barrelCtrlX = physX + rangePx * 0.95;
-            // Bat path (clockwise): knob left cap → handle bottom → taper → barrel → right cap → taper → handle top → close
-            const knobCx = lx + knobR;  // knob cap circle center x
+            // Bat silhouette: physX is the barrel tip (large end = drag point), bat extends LEFT
+            const hLen = rangePx * 0.55;      // handle length
+            const bLen = rangePx * 1.65;      // barrel length
+            const knobR = rangePx * 0.135;    // knob endcap radius
+            const handleR = rangePx * 0.09;   // narrow grip radius
+            const barrelR = rangePx * 0.34;   // barrel radius
+            // physX is barrel tip; taper junction is bLen to the left
+            const taperJunctionX = physX - bLen;
+            const knobCx = taperJunctionX - hLen + knobR;
+            // Taper control points (from taperJunctionX toward barrel)
+            const taperCtrlX = taperJunctionX + rangePx * 0.38;
+            const barrelCtrlX = taperJunctionX + rangePx * 0.95;
             const batPath = [
-              // Start top of knob (above center)
-              `M ${knobCx} ${physY - knobR}`,
-              // Left knob cap — CCW arc (left semicircle): top → bottom
-              `A ${knobR} ${knobR} 0 0 0 ${knobCx} ${physY + knobR}`,
-              // Bottom of handle going right
-              `L ${physX} ${physY + handleR}`,
-              // Bottom taper bezier → barrel bottom
-              `C ${taperCtrlX} ${physY + handleR * 2.2} ${barrelCtrlX} ${physY + barrelR * 0.92} ${rx} ${physY + barrelR}`,
-              // Right barrel cap — CW arc (right semicircle): bottom → top
-              `A ${barrelR} ${barrelR} 0 0 1 ${rx} ${physY - barrelR}`,
-              // Top taper bezier → handle top
-              `C ${barrelCtrlX} ${physY - barrelR * 0.92} ${taperCtrlX} ${physY - handleR * 2.2} ${physX} ${physY - handleR}`,
-              // Handle top going left back to knob
-              `L ${knobCx} ${physY - knobR}`,
+              // Start at top of barrel tip (drag point)
+              `M ${physX} ${physY - barrelR}`,
+              // Right barrel cap — CW arc (right semicircle): top → bottom
+              `A ${barrelR} ${barrelR} 0 0 1 ${physX} ${physY + barrelR}`,
+              // Bottom taper bezier → handle bottom at taper junction
+              `C ${barrelCtrlX} ${physY + barrelR * 0.92} ${taperCtrlX} ${physY + handleR * 2.2} ${taperJunctionX} ${physY + handleR}`,
+              // Handle bottom going left toward knob
+              `L ${knobCx} ${physY + handleR}`,
+              `L ${knobCx} ${physY + knobR}`,
+              // Left knob cap — CCW arc (left semicircle): bottom → top
+              `A ${knobR} ${knobR} 0 0 0 ${knobCx} ${physY - knobR}`,
+              `L ${knobCx} ${physY - handleR}`,
+              // Handle top going right back to taper junction
+              `L ${taperJunctionX} ${physY - handleR}`,
+              // Top taper bezier → barrel top at barrel tip
+              `C ${taperCtrlX} ${physY - handleR * 2.2} ${barrelCtrlX} ${physY - barrelR * 0.92} ${physX} ${physY - barrelR}`,
               `Z`,
             ].join(' ');
             return (
-              <G>
+              <G key={id}>
                 <Path
                   d={batPath}
                   fill={fillColor}
@@ -2374,12 +2385,12 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
                   strokeLinejoin="round"
                   strokeDasharray={charging ? '0' : '6,4'}
                 />
-                {/* Tap origin dot */}
+                {/* Drag origin dot at barrel tip */}
                 <Circle cx={physX} cy={physY} r={3} fill={strokeColor} />
               </G>
             );
           }
-        })()}
+        })}
       </Svg>
 
       {/* Flash overlay on strike impact — always rendered, opacity animated */}

@@ -335,9 +335,7 @@ export function SettingsScreen({ onMenuPress }: Props) {
         <View style={[styles.aboutCard, { borderColor: colors.border }]}>
           <Text style={[styles.aboutTitle, { color: colors.primary }]}>玉腹模拟器</Text>
           <Text style={[styles.aboutText, { color: colors.mutedForeground }]}>
-            v1.1 · 腹腔物理仿真引擎{'\n'}
-            基于位置约束的肠道动力学模拟{'\n'}
-            大肠容积180·小肠容积100·差异化破裂阈值
+            v1.1 · 腹腔物理仿真引擎
           </Text>
         </View>
       </ScrollView>
