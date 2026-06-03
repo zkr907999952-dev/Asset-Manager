@@ -4,11 +4,12 @@ import { useColors } from '@/hooks/useColors';
 import { useGame } from '@/contexts/GameContext';
 import { GameSlider } from './GameSlider';
 import { BELLY_STRIKE_TOOL_LIST, type BellyStrikeToolId } from '../constants/gameConfig';
+import { StrikeHammerIcon } from './icons/StrikeHammerIcon';
 
 const TOOL_IMAGES: Record<BellyStrikeToolId, any> = {
   '拳头': require('@/assets/images/strike_fist.png'),
   '棒球棒': require('@/assets/images/strike_bat.png'),
-  '撞钟锤': require('@/assets/images/strike_hammer.png'),
+  '撞钟锤': null,
 };
 
 const TOOL_DELAY_LABELS: Record<BellyStrikeToolId, string> = {
@@ -52,11 +53,15 @@ export function BellyStrikePanel() {
             onPress={() => setBellyStrikeTool(isSel ? null : tool.id)}
             activeOpacity={0.75}
           >
-            <Image
-              source={TOOL_IMAGES[tool.id]}
-              style={[styles.toolImg, !isSel && { opacity: 0.55 }]}
-              resizeMode="contain"
-            />
+            {tool.id === '撞钟锤' ? (
+              <StrikeHammerIcon size={36} opacity={isSel ? 1 : 0.5} />
+            ) : (
+              <Image
+                source={TOOL_IMAGES[tool.id]}
+                style={[styles.toolImg, !isSel && { opacity: 0.55 }]}
+                resizeMode="contain"
+              />
+            )}
             <View style={styles.toolInfo}>
               <Text style={[styles.toolName, { color: isSel ? colors.primary : colors.foreground }]}>
                 {tool.id}
