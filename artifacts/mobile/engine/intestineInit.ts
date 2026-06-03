@@ -221,5 +221,6 @@ export function createInitialPhysicsState(): PhysicsState {
     eggLargeHeadIdx: 0,
     resectedSmallRanges: [],
     resectedLargeRanges: [],
+    strikeWave: null,
   };
 }

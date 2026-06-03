@@ -90,6 +90,8 @@ export interface PhysicsState {
   // === Resection ranges — surgically removed segments ===
   resectedSmallRanges: { start: number; end: number }[];
   resectedLargeRanges: { start: number; end: number }[];
+  // === Expanding shockwave collision body (belly strike) ===
+  strikeWave: { x: number; y: number; radius: number; maxRadius: number; strength: number; growRate: number } | null;
 }
 
 function clamp(v: number, min: number, max: number) {
@@ -300,6 +302,36 @@ export function stepPhysics(state: PhysicsState) {
       softCavityPush(n, margin);
     }
   };
+  // --- Expanding shockwave collision body (belly strike) ---
+  // Applied BEFORE Verlet integration so the velocity kick is consumed this frame.
+  if (state.strikeWave) {
+    const wave = state.strikeWave;
+    const prevR = wave.radius;
+    wave.radius = Math.min(wave.radius + wave.growRate, wave.maxRadius);
+    const progress = wave.radius / wave.maxRadius; // 0 → 1
+    // Force fades from full to zero as the wave expands
+    const waveForce = wave.strength * 0.022 * (1 - progress * 0.9);
+    const ringLo = prevR - 10;
+    const ringHi = wave.radius + 10;
+    const pushWave = (nodes: PhysicsNode[]) => {
+      for (const n of nodes) {
+        if (n.pinned) continue;
+        const dx = n.x - wave.x;
+        const dy = n.y - wave.y;
+        const d = Math.hypot(dx, dy);
+        // Only push nodes swept by the current expanding ring front
+        if (d >= ringLo && d <= ringHi && d > 0.1) {
+          // Velocity injection via Verlet: n.px -= pushX means next frame vx = (x-px)*DAMPING = (old_vx + push)*DAMPING
+          n.px -= (dx / d) * waveForce;
+          n.py -= (dy / d) * waveForce;
+        }
+      }
+    };
+    pushWave(state.smallNodes);
+    pushWave(state.largeNodes);
+    if (wave.radius >= wave.maxRadius) state.strikeWave = null;
+  }
+
   integrateSmallNodes(state.smallNodes, 8);
   integrateLargeNodes(state.largeNodes, 2);
 
@@ -1319,20 +1351,26 @@ export function applyBellyStrikePhysics(
         seg.health = clamp(seg.health - dmg * 0.4, 0, 100);
         if (seg.health < 15) seg.ruptured = true;
       }
-      // Push outward
+      // Instant outward impulse via Verlet velocity injection (n.px -= push → vx = push * DAMPING next frame)
       const dist = Math.hypot(dx, dy);
-      const pushMult = dmg * 0.25;
+      const pushMult = dmg * 0.04;
+      const n2 = n as PhysicsNode;
       if (dist > 0.1) {
-        (n as any).vx = ((n as any).vx ?? 0) + (dx / dist) * pushMult;
-        (n as any).vy = ((n as any).vy ?? 0) + (dy / dist) * pushMult;
+        n2.px -= (dx / dist) * pushMult;
+        n2.py -= (dy / dist) * pushMult;
       } else {
-        (n as any).vx = ((n as any).vx ?? 0) + (Math.random() - 0.5) * pushMult;
-        (n as any).vy = ((n as any).vy ?? 0) + (Math.random() - 0.5) * pushMult;
+        n2.px -= (Math.random() - 0.5) * pushMult;
+        n2.py -= (Math.random() - 0.5) * pushMult;
       }
     }
   };
   applyToNodes(state.smallNodes as any, state.smallSegs);
   applyToNodes(state.largeNodes as any, state.largeSegs);
+
+  // Launch the expanding shockwave — processed each frame in stepPhysics
+  const growRate = Math.max(4, rangePx * 0.065);
+  const maxRadius = rangePx * 1.8;
+  state.strikeWave = { x: physX, y: physY, radius: 0, maxRadius, strength: baseDamage, growRate };
 }
 
 export function buildSmoothPath(nodes: { x: number; y: number }[]): string {

@@ -5,6 +5,7 @@ import Svg, {
   Ellipse, Circle, Line, Path, Rect, Defs, RadialGradient, LinearGradient, Stop, G,
   Image as SvgImage, ClipPath,
 } from 'react-native-svg';
+const AnimatedCircle = Animated.createAnimatedComponent(Circle);
 import type { ParasiteEntity } from '../contexts/GameContext';
 
 const INTESTINES_REF = require('@/assets/images/intestines.png');
@@ -247,6 +248,11 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
   const strikeChargeAnim = useRef(new Animated.Value(0)).current;
   const strikeFlashAnim = useRef(new Animated.Value(0)).current;
   const strikeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Expanding shockwave ring visual
+  const strikeWaveAnim = useRef(new Animated.Value(0)).current;
+  const [strikeWaveVisual, setStrikeWaveVisual] = useState<{
+    physX: number; physY: number; maxR: number;
+  } | null>(null);
 
   const toPhysicsCoords = useCallback((localX: number, localY: number) => {
     if (!canvasLayout) return { x: localX, y: localY };
@@ -794,6 +800,15 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
             Animated.timing(strikeFlashAnim, { toValue: 0, duration: 350, useNativeDriver: false }).start(() => {
               setStrikeOverlay(null);
             });
+            // Expanding shockwave ring visual
+            const maxR = rangePx * 1.8;
+            setStrikeWaveVisual({ physX, physY, maxR });
+            strikeWaveAnim.setValue(0);
+            Animated.timing(strikeWaveAnim, {
+              toValue: 1,
+              duration: Math.max(300, maxR / toolDef.baseRangePx * 280),
+              useNativeDriver: false,
+            }).start(() => setStrikeWaveVisual(null));
           }, toolDef.delayMs);
         }
         return;
@@ -2254,6 +2269,29 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
             )}
           </G>
         )}
+        {/* Expanding shockwave ring (post-impact) */}
+        {strikeWaveVisual && (() => {
+          const { physX, physY, maxR } = strikeWaveVisual;
+          const animR = strikeWaveAnim.interpolate({ inputRange: [0, 1], outputRange: [2, maxR] });
+          const animR2 = strikeWaveAnim.interpolate({ inputRange: [0, 1], outputRange: [2, maxR * 0.65] });
+          const animOp = strikeWaveAnim.interpolate({ inputRange: [0, 0.15, 0.7, 1], outputRange: [0, 0.9, 0.5, 0] });
+          const animOp2 = strikeWaveAnim.interpolate({ inputRange: [0, 0.1, 0.5, 1], outputRange: [0, 0.4, 0.15, 0] });
+          const animSW = strikeWaveAnim.interpolate({ inputRange: [0, 0.3, 1], outputRange: [5, 3, 1] });
+          return (
+            <G>
+              {/* Inner glow fill — expands to 65% of max range, fades quickly */}
+              <AnimatedCircle cx={physX} cy={physY} r={animR2}
+                fill="rgba(255,130,40,1)" opacity={animOp2} />
+              {/* Outer shockwave ring — sharp edge, expands to full range */}
+              <AnimatedCircle cx={physX} cy={physY} r={animR}
+                fill="none"
+                stroke="rgba(255,160,60,1)"
+                strokeWidth={animSW}
+                opacity={animOp} />
+            </G>
+          );
+        })()}
+
         {/* Belly strike range overlay */}
         {strikeOverlay && (() => {
           const { physX, physY, rangePx, charging, rangeType } = strikeOverlay;
