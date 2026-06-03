@@ -1,5 +1,5 @@
 import React, { useRef, useCallback, useState } from 'react';
-import { View, PanResponder, StyleSheet, Animated } from 'react-native';
+import { View, PanResponder, StyleSheet, Animated, Easing, Image } from 'react-native';
 import { useBreathAnimation } from '@/hooks/useBreathAnimation';
 import Svg, {
   Ellipse, Circle, Line, Path, Rect, Defs, RadialGradient, LinearGradient, Stop, G,
@@ -7,6 +7,12 @@ import Svg, {
 } from 'react-native-svg';
 const AnimatedCircle = Animated.createAnimatedComponent(Circle);
 type WaveEntry = { id: number; physX: number; physY: number; maxR: number; anim: Animated.Value };
+
+const STRIKE_TOOL_IMAGES: Record<string, any> = {
+  '拳头':  require('@/assets/images/strike_fist.png'),
+  '棒球棒': require('@/assets/images/strike_bat.png'),
+  '撞钟锤': require('@/assets/images/strike_hammer.png'),
+};
 import type { ParasiteEntity } from '../contexts/GameContext';
 
 const INTESTINES_REF = require('@/assets/images/intestines.png');
@@ -261,6 +267,8 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
   const overlayIdRef = useRef(0);
   const waveIdRef = useRef(0);
   const [strikeWaves, setStrikeWaves] = useState<WaveEntry[]>([]);
+  // Per-strike image animation: 0→1 (approach) → 2 (impact fade-out)
+  const strikeAnimsRef = useRef<Map<number, Animated.Value>>(new Map());
   // Screen shake
   const shakeAnim = useRef(new Animated.Value(0)).current;
   // Flash color (varies with strike power)
@@ -815,6 +823,23 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
           setChargedOverlays(prev => [...prev, { physX, physY, toolId: s.bellyStrikeTool!, rangePx, charging: true, rangeType: toolDef.rangeType, id: capturedOverlayId }]);
           strikeChargeAnim.setValue(0);
           Animated.timing(strikeChargeAnim, { toValue: 1, duration: toolDef.delayMs, useNativeDriver: false }).start();
+          // Strike image animation: shrink from 3× ghost → 1× impact, then punch-through fade
+          const strikeAnim = new Animated.Value(0);
+          strikeAnimsRef.current.set(capturedOverlayId, strikeAnim);
+          Animated.sequence([
+            Animated.timing(strikeAnim, {
+              toValue: 1,
+              duration: toolDef.delayMs,
+              easing: Easing.out(Easing.cubic),
+              useNativeDriver: false,
+            }),
+            Animated.timing(strikeAnim, {
+              toValue: 2,
+              duration: 260,
+              easing: Easing.in(Easing.quad),
+              useNativeDriver: false,
+            }),
+          ]).start();
           // No clearTimeout — allow multiple concurrent strikes
           setTimeout(() => {
             abs(physX, physY);
@@ -826,6 +851,7 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
             // when multiple concurrent strikes share strikeFlashAnim
             setTimeout(() => {
               setChargedOverlays(prev => prev.filter(o => o.id !== capturedOverlayId));
+              strikeAnimsRef.current.delete(capturedOverlayId);
             }, 420);
             // Screen shake scaled by power
             if (shakeStrength > 1.5) {
@@ -2412,6 +2438,69 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
           }
         })}
       </Svg>
+
+      {/* Strike image animations — tool rushes from large ghost → impact size → fade */}
+      {canvasLayout && chargedOverlays.map(overlay => {
+        const anim = strikeAnimsRef.current.get(overlay.id);
+        if (!anim) return null;
+
+        const sc = Math.min(canvasLayout.width / CANVAS_W, canvasLayout.height / CANVAS_H);
+        const ofX = (canvasLayout.width - CANVAS_W * sc) / 2;
+        const ofY = (canvasLayout.height - CANVAS_H * sc) / 2;
+        const { physX, physY, rangePx, toolId, rangeType } = overlay;
+
+        // Phase 0→1: shrink from 3× to 1× and become opaque
+        // Phase 1→2: slight punch-through expand (1× → 1.15×) and fade to 0
+        const scaleInterp = anim.interpolate({
+          inputRange: [0, 1, 2],
+          outputRange: [3.0, 1.0, 1.18],
+        });
+        const opacityInterp = anim.interpolate({
+          inputRange: [0, 0.05, 1, 2],
+          outputRange: [0, 0.25, 0.90, 0],
+        });
+
+        // Final display size (matches the hit range silhouette)
+        let centerSX: number, centerSY: number, imgW: number, imgH: number;
+        if (rangeType === 'circle') {
+          centerSX = ofX + physX * sc;
+          centerSY = ofY + physY * sc;
+          imgW = rangePx * 2.2 * sc;
+          imgH = imgW;
+        } else {
+          // Bat: barrel at physX (left), extends right by totalLen
+          const totalLen = rangePx * 2.2;
+          centerSX = ofX + (physX + totalLen / 2) * sc;
+          centerSY = ofY + physY * sc;
+          imgW = totalLen * sc * 1.1;
+          imgH = imgW * 0.36;  // wide aspect to match bat silhouette
+        }
+
+        const imgSrc = STRIKE_TOOL_IMAGES[toolId];
+        if (!imgSrc) return null;
+
+        return (
+          <Animated.View
+            key={`sa-${overlay.id}`}
+            pointerEvents="none"
+            style={{
+              position: 'absolute',
+              left: centerSX - imgW / 2,
+              top: centerSY - imgH / 2,
+              width: imgW,
+              height: imgH,
+              transform: [{ scale: scaleInterp as any }],
+              opacity: opacityInterp as any,
+            }}
+          >
+            <Image
+              source={imgSrc}
+              style={{ width: '100%', height: '100%' }}
+              resizeMode="contain"
+            />
+          </Animated.View>
+        );
+      })}
 
       {/* Flash overlay on strike impact — always rendered, opacity animated */}
       <Animated.View
