@@ -1,19 +1,19 @@
 import React, { useRef, useCallback, useState } from 'react';
-import { View, PanResponder, StyleSheet, Animated, Easing } from 'react-native';
+import { View, PanResponder, StyleSheet, Animated, Easing, Image } from 'react-native';
 import { useBreathAnimation } from '@/hooks/useBreathAnimation';
 import Svg, {
   Ellipse, Circle, Line, Path, Rect, Defs, RadialGradient, LinearGradient, Stop, G,
   Image as SvgImage, ClipPath,
 } from 'react-native-svg';
-import { StrikeFistAnim } from './icons/StrikeFistAnim';
-import { StrikeBatAnim } from './icons/StrikeBatAnim';
 import { StrikeHammerAnim } from './icons/StrikeHammerAnim';
 const AnimatedCircle = Animated.createAnimatedComponent(Circle);
 type WaveEntry = { id: number; physX: number; physY: number; maxR: number; anim: Animated.Value };
 
+const STRIKE_ANIM_IMAGES: Record<string, any> = {
+  '拳头':  require('@/assets/images/strike_fist_anim.png'),
+  '棒球棒': require('@/assets/images/strike_bat_anim.png'),
+};
 const STRIKE_ANIM_COMPONENTS: Record<string, React.ComponentType<{ width: number; height: number }>> = {
-  '拳头':  StrikeFistAnim,
-  '棒球棒': StrikeBatAnim,
   '撞钟锤': StrikeHammerAnim,
 };
 import type { ParasiteEntity } from '../contexts/GameContext';
@@ -2468,19 +2468,20 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
         if (rangeType === 'circle') {
           centerSX = ofX + physX * sc;
           centerSY = ofY + physY * sc;
-          imgW = rangePx * 2.2 * sc;
+          imgW = rangePx * 2.6 * sc;
           imgH = imgW;
         } else {
           // Bat: barrel at physX (left), extends right by totalLen
           const totalLen = rangePx * 2.2;
           centerSX = ofX + (physX + totalLen / 2) * sc;
           centerSY = ofY + physY * sc;
-          imgW = totalLen * sc * 1.6;
-          imgH = imgW * 0.46;  // wider/taller to fully cover the bat hit zone
+          imgW = totalLen * sc * 1.8;
+          imgH = imgW * 0.75;  // 4:3 image aspect ratio
         }
 
+        const animImg = STRIKE_ANIM_IMAGES[toolId];
         const AnimComp = STRIKE_ANIM_COMPONENTS[toolId];
-        if (!AnimComp) return null;
+        if (!animImg && !AnimComp) return null;
 
         return (
           <Animated.View
@@ -2496,7 +2497,11 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
               opacity: opacityInterp as any,
             }}
           >
-            <AnimComp width={imgW} height={imgH} />
+            {animImg ? (
+              <Image source={animImg} style={{ width: '100%', height: '100%' }} resizeMode="contain" />
+            ) : (
+              <AnimComp width={imgW} height={imgH} />
+            )}
           </Animated.View>
         );
       })}

@@ -1,12 +1,15 @@
 import React from 'react';
-import { View, Text, TouchableOpacity, ScrollView, StyleSheet } from 'react-native';
+import { View, Text, TouchableOpacity, ScrollView, Image, StyleSheet } from 'react-native';
 import { useColors } from '@/hooks/useColors';
 import { useGame } from '@/contexts/GameContext';
 import { GameSlider } from './GameSlider';
 import { BELLY_STRIKE_TOOL_LIST, type BellyStrikeToolId } from '../constants/gameConfig';
 import { StrikeHammerIcon } from './icons/StrikeHammerIcon';
-import { StrikeFistIcon } from './icons/StrikeFistIcon';
-import { StrikeBatIcon } from './icons/StrikeBatIcon';
+
+const TOOL_ICON_IMAGES: Record<string, any> = {
+  '拳头':  require('@/assets/images/strike_fist_icon.png'),
+  '棒球棒': require('@/assets/images/strike_bat_icon.png'),
+};
 
 const TOOL_DELAY_LABELS: Record<BellyStrikeToolId, string> = {
   '拳头': '0.35s 延迟',
@@ -54,10 +57,12 @@ export function BellyStrikePanel() {
           >
             {tool.id === '撞钟锤' ? (
               <StrikeHammerIcon size={36} opacity={isSel ? 1 : 0.5} />
-            ) : tool.id === '拳头' ? (
-              <StrikeFistIcon size={36} opacity={isSel ? 1 : 0.5} />
             ) : (
-              <StrikeBatIcon size={36} opacity={isSel ? 1 : 0.5} />
+              <Image
+                source={TOOL_ICON_IMAGES[tool.id]}
+                style={[styles.toolImg, { opacity: isSel ? 1 : 0.55 }]}
+                resizeMode="contain"
+              />
             )}
             <View style={styles.toolInfo}>
               <Text style={[styles.toolName, { color: isSel ? colors.primary : colors.foreground }]}>
