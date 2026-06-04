@@ -303,10 +303,10 @@ export function SettingsScreen({ onMenuPress }: Props) {
             onPress={() => setScreen('mesenteryEditor')}
           >
             <View style={styles.editorBtnContent}>
-              <View>
+              <View style={{ flex: 1, flexShrink: 1, marginRight: 8 }}>
                 <Text style={[styles.editorBtnLabel, { color: colors.foreground }]}>肠系膜编辑模式</Text>
-                <Text style={[styles.editorBtnDesc, { color: colors.mutedForeground }]}>
-                  编辑大肠/小肠各节点的肠系膜初始坐标（{N_LARGE + N_SMALL} 个节点）
+                <Text style={[styles.editorBtnDesc, { color: colors.mutedForeground }]} numberOfLines={2}>
+                  编辑大/小肠各节点的肠系膜初始坐标（{N_LARGE + N_SMALL} 节点），可保存至配置文件
                 </Text>
               </View>
               <Feather name="edit-3" size={16} color={colors.primary} />

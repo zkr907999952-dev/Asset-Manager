@@ -1,5 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { PhysicsState } from './physics';
+import { buildSmallIntestineNodes, buildLargeIntestineNodes } from './intestineInit';
 
 const MESENTERY_CONFIG_KEY = '@mesentery_config_v1';
 
@@ -42,5 +43,14 @@ export function extractMesenteryConfig(state: PhysicsState): MesenteryConfig {
   return {
     largeNodes: state.largeNodes.map(n => ({ rx: n.rx, ry: n.ry })),
     smallNodes: state.smallNodes.map(n => ({ rx: n.rx, ry: n.ry })),
+  };
+}
+
+export function getDefaultMesenteryConfig(): MesenteryConfig {
+  const small = buildSmallIntestineNodes();
+  const large = buildLargeIntestineNodes();
+  return {
+    smallNodes: small.map(n => ({ rx: n.rx, ry: n.ry })),
+    largeNodes: large.map(n => ({ rx: n.rx, ry: n.ry })),
   };
 }

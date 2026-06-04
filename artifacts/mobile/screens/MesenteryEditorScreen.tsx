@@ -1,32 +1,24 @@
-import React, { useState, useRef, useCallback, useEffect } from 'react';
+import React, { useState, useRef, useCallback } from 'react';
 import {
-  View, Text, TouchableOpacity, StyleSheet, Platform, PanResponder,
+  View, Text, TouchableOpacity, StyleSheet, Platform, PanResponder, Alert,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import Svg, { Circle, Line, Ellipse, Rect, Text as SvgText } from 'react-native-svg';
-import { useColors } from '@/hooks/useColors';
+import Svg, { Circle, Line, Ellipse, Rect, Text as SvgText, Polyline } from 'react-native-svg';
 import { useGame } from '@/contexts/GameContext';
 import {
   CANVAS_W, CANVAS_H, CAVITY_CX, CAVITY_CY, CAVITY_RX, CAVITY_RY,
   N_SMALL, N_LARGE,
 } from '../constants/gameConfig';
 import { largeNodeMesentery } from '../engine/physics';
-import { saveMesenteryConfig } from '../engine/mesenteryConfig';
+import { saveMesenteryConfig, getDefaultMesenteryConfig } from '../engine/mesenteryConfig';
 
 const SMALL_MESENTERY_DEAD_ZONE = 5.0;
-const HIT_THRESHOLD = 28;
+const HIT_THRESHOLD_PX = 28; // in physics coords
 
 interface NodePos { rx: number; ry: number }
-interface SelectedNode {
-  type: 'large' | 'small';
-  idx: number;
-  preRx: number;
-  preRy: number;
-}
+interface SelectedNode { type: 'large' | 'small'; idx: number; preRx: number; preRy: number }
 
-interface Props {
-  onMenuPress: () => void;
-}
+interface Props { onMenuPress: () => void }
 
 export function MesenteryEditorScreen({ onMenuPress }: Props) {
   const insets = useSafeAreaInsets();
@@ -34,98 +26,117 @@ export function MesenteryEditorScreen({ onMenuPress }: Props) {
   const topPad = Platform.OS === 'web' ? 67 : insets.top;
   const bottomPad = Platform.OS === 'web' ? 34 : insets.bottom;
 
+  // ── Layout ──────────────────────────────────────────────────────────────────
   const [canvasSize, setCanvasSize] = useState({ w: 1, h: 1 });
-  const layoutRef = useRef({ scale: 1, offsetX: 0, offsetY: 0 });
-
   const scale = Math.min(canvasSize.w / CANVAS_W, canvasSize.h / CANVAS_H);
-  const offsetX = (canvasSize.w - CANVAS_W * scale) / 2;
-  const offsetY = (canvasSize.h - CANVAS_H * scale) / 2;
-  layoutRef.current = { scale, offsetX, offsetY };
+  const svgOffX = (canvasSize.w - CANVAS_W * scale) / 2;
+  const svgOffY = (canvasSize.h - CANVAS_H * scale) / 2;
 
+  // Keep layout values in a ref so PanResponder (created once) always sees latest
+  const layoutRef = useRef({ scale: 1, svgOffX: 0, svgOffY: 0 });
+  layoutRef.current = { scale, svgOffX, svgOffY };
+
+  // ── Node state ───────────────────────────────────────────────────────────────
   const [largeNodes, setLargeNodes] = useState<NodePos[]>(() =>
     physicsRef.current.largeNodes.map(n => ({ rx: n.rx, ry: n.ry }))
   );
   const [smallNodes, setSmallNodes] = useState<NodePos[]>(() =>
     physicsRef.current.smallNodes.map(n => ({ rx: n.rx, ry: n.ry }))
   );
-
-  const [selected, setSelected] = useState<SelectedNode | null>(null);
-  const [draft, setDraft] = useState<NodePos | null>(null);
-  const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle');
-
   const largeNodesRef = useRef(largeNodes);
   const smallNodesRef = useRef(smallNodes);
-  const selectedRef = useRef<SelectedNode | null>(null);
   largeNodesRef.current = largeNodes;
   smallNodesRef.current = smallNodes;
+
+  // ── Selection & drag ─────────────────────────────────────────────────────────
+  const [selected, setSelected] = useState<SelectedNode | null>(null);
+  const [draft, setDraft] = useState<NodePos | null>(null);
+  const selectedRef = useRef<SelectedNode | null>(null);
   selectedRef.current = selected;
 
+  // Touch origin in physics space – used to track drag delta
+  const touchOriginRef = useRef<{ physX: number; physY: number } | null>(null);
+
+  // ── Status ───────────────────────────────────────────────────────────────────
+  const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle');
+  const [resetStatus, setResetStatus] = useState<'idle' | 'done'>('idle');
+
+  // ── PanResponder (created once; reads layoutRef each call) ───────────────────
   const panResponder = useRef(
     PanResponder.create({
       onStartShouldSetPanResponder: () => true,
       onMoveShouldSetPanResponder: () => true,
 
       onPanResponderGrant: (evt) => {
-        const { pageX, pageY } = evt.nativeEvent;
-        const { scale: sc, offsetX: ox, offsetY: oy } = layoutRef.current;
-        const physX = (pageX - ox) / sc;
-        const physY = (pageY - oy) / sc;
+        // locationX/Y is relative to the responding View — no page-offset needed
+        const lx = evt.nativeEvent.locationX;
+        const ly = evt.nativeEvent.locationY;
+        const { scale: sc, svgOffX: ox, svgOffY: oy } = layoutRef.current;
+        const physX = (lx - ox) / sc;
+        const physY = (ly - oy) / sc;
 
-        let bestDist = HIT_THRESHOLD;
+        let bestDist = HIT_THRESHOLD_PX;
         let best: SelectedNode | null = null;
 
         largeNodesRef.current.forEach((n, idx) => {
           const d = Math.hypot(n.rx - physX, n.ry - physY);
-          if (d < bestDist) {
-            bestDist = d;
-            best = { type: 'large', idx, preRx: n.rx, preRy: n.ry };
-          }
+          if (d < bestDist) { bestDist = d; best = { type: 'large', idx, preRx: n.rx, preRy: n.ry }; }
         });
         smallNodesRef.current.forEach((n, idx) => {
           const d = Math.hypot(n.rx - physX, n.ry - physY);
-          if (d < bestDist) {
-            bestDist = d;
-            best = { type: 'small', idx, preRx: n.rx, preRy: n.ry };
-          }
+          if (d < bestDist) { bestDist = d; best = { type: 'small', idx, preRx: n.rx, preRy: n.ry }; }
         });
 
         if (best) {
+          // snap drag origin to the node's current rest position
+          const cur = (best as SelectedNode).type === 'large'
+            ? largeNodesRef.current[(best as SelectedNode).idx]
+            : smallNodesRef.current[(best as SelectedNode).idx];
+          touchOriginRef.current = { physX, physY };
           setSelected(best);
-          setDraft({ rx: physX, ry: physY });
+          setDraft({ rx: cur.rx, ry: cur.ry });
+        } else {
+          touchOriginRef.current = null;
         }
       },
 
-      onPanResponderMove: (evt) => {
-        if (!selectedRef.current) return;
-        const { pageX, pageY } = evt.nativeEvent;
-        const { scale: sc, offsetX: ox, offsetY: oy } = layoutRef.current;
+      onPanResponderMove: (_, gestureState) => {
+        if (!selectedRef.current || !touchOriginRef.current) return;
+        const { scale: sc } = layoutRef.current;
+        const origin = touchOriginRef.current;
+        const sel = selectedRef.current;
+        // Base position is the node's original rest position
+        const base = sel.type === 'large'
+          ? largeNodesRef.current[sel.idx]
+          : smallNodesRef.current[sel.idx];
         setDraft({
-          rx: (pageX - ox) / sc,
-          ry: (pageY - oy) / sc,
+          rx: base.rx + gestureState.dx / sc,
+          ry: base.ry + gestureState.dy / sc,
         });
       },
 
-      onPanResponderRelease: () => {},
+      onPanResponderRelease: () => { touchOriginRef.current = null; },
     })
   ).current;
 
+  // ── Actions ──────────────────────────────────────────────────────────────────
   const handleConfirm = useCallback(() => {
-    const sel = selectedRef.current;
-    if (!sel) { setSelected(null); setDraft(null); return; }
-    setDraft(prev => {
-      if (!prev) return prev;
-      if (sel.type === 'large') {
-        setLargeNodes(ns => {
-          const next = [...ns];
-          next[sel.idx] = { rx: prev.rx, ry: prev.ry };
-          return next;
-        });
-      } else {
-        setSmallNodes(ns => {
-          const next = [...ns];
-          next[sel.idx] = { rx: prev.rx, ry: prev.ry };
-          return next;
-        });
+    setDraft(currentDraft => {
+      const sel = selectedRef.current;
+      if (sel && currentDraft) {
+        if (sel.type === 'large') {
+          setLargeNodes(ns => {
+            const next = [...ns];
+            next[sel.idx] = { rx: currentDraft.rx, ry: currentDraft.ry };
+            return next;
+          });
+        } else {
+          setSmallNodes(ns => {
+            const next = [...ns];
+            next[sel.idx] = { rx: currentDraft.rx, ry: currentDraft.ry };
+            return next;
+          });
+        }
       }
       return null;
     });
@@ -138,31 +149,63 @@ export function MesenteryEditorScreen({ onMenuPress }: Props) {
   }, []);
 
   const handleSave = useCallback(async () => {
+    // Commit any active draft before saving
     const sel = selectedRef.current;
     const finalLarge = [...largeNodesRef.current];
     const finalSmall = [...smallNodesRef.current];
 
     setSaveStatus('saving');
     const p = physicsRef.current;
-    for (let i = 0; i < p.largeNodes.length && i < finalLarge.length; i++) {
-      p.largeNodes[i].rx = finalLarge[i].rx;
-      p.largeNodes[i].ry = finalLarge[i].ry;
-    }
-    for (let i = 0; i < p.smallNodes.length && i < finalSmall.length; i++) {
-      p.smallNodes[i].rx = finalSmall[i].rx;
-      p.smallNodes[i].ry = finalSmall[i].ry;
-    }
+    finalLarge.forEach((n, i) => { p.largeNodes[i].rx = n.rx; p.largeNodes[i].ry = n.ry; });
+    finalSmall.forEach((n, i) => { p.smallNodes[i].rx = n.rx; p.smallNodes[i].ry = n.ry; });
     try {
       await saveMesenteryConfig({ largeNodes: finalLarge, smallNodes: finalSmall });
       setSaveStatus('saved');
-      setTimeout(() => setSaveStatus('idle'), 2200);
+      setTimeout(() => setSaveStatus('idle'), 2500);
     } catch {
       setSaveStatus('idle');
     }
   }, [physicsRef]);
 
+  const handleReset = useCallback(() => {
+    Alert.alert(
+      '复位到预设值',
+      '将所有肠系膜坐标恢复为默认预设值。此操作不会自动保存，确认后需点击"保存"才会写入配置文件。',
+      [
+        { text: '取消', style: 'cancel' },
+        {
+          text: '复位',
+          style: 'destructive',
+          onPress: () => {
+            const defaults = getDefaultMesenteryConfig();
+            setLargeNodes(defaults.largeNodes.map(n => ({ rx: n.rx, ry: n.ry })));
+            setSmallNodes(defaults.smallNodes.map(n => ({ rx: n.rx, ry: n.ry })));
+            setSelected(null);
+            setDraft(null);
+            setResetStatus('done');
+            setTimeout(() => setResetStatus('idle'), 2500);
+          },
+        },
+      ]
+    );
+  }, []);
+
+  // ── SVG helpers ───────────────────────────────────────────────────────────────
   const svgW = CANVAS_W * scale;
   const svgH = CANVAS_H * scale;
+
+  // Build polyline points string for guide path (physics coords → SVG coords)
+  const buildPolylinePoints = (nodes: NodePos[], selType: 'large' | 'small', selIdx: number | null) => {
+    return nodes.map((n, idx) => {
+      const isSel = selIdx !== null && idx === selIdx;
+      const rx = isSel && draft ? draft.rx : n.rx;
+      const ry = isSel && draft ? draft.ry : n.ry;
+      return `${(rx * scale).toFixed(1)},${(ry * scale).toFixed(1)}`;
+    }).join(' ');
+  };
+
+  const largeSelIdx = selected?.type === 'large' ? selected.idx : null;
+  const smallSelIdx = selected?.type === 'small' ? selected.idx : null;
 
   const renderNodes = (
     nodes: NodePos[],
@@ -176,10 +219,12 @@ export function MesenteryEditorScreen({ onMenuPress }: Props) {
     const sy = ry * scale;
     const dz = deadZoneFn(idx);
     const deadR = Math.max(dz * scale, 3);
-    const color = isSel ? '#ffffff' : (type === 'large' ? '#ffaa33' : '#33ccff');
+    const baseColor = type === 'large' ? '#ffaa33' : '#33ccff';
+    const color = isSel ? '#ffffff' : baseColor;
     const arm = isSel ? 10 : 6;
-    const dotR = isSel ? 4 : 2.5;
-    const sw = isSel ? 1.5 : 0.8;
+    const dotR = isSel ? 4.5 : 2.5;
+    const sw = isSel ? 1.8 : 0.8;
+    const op = isSel ? 1 : 0.75;
 
     return (
       <React.Fragment key={`${type}-${idx}`}>
@@ -193,29 +238,50 @@ export function MesenteryEditorScreen({ onMenuPress }: Props) {
           />
         )}
         <Line x1={sx - arm} y1={sy} x2={sx + arm} y2={sy}
-          stroke={color} strokeWidth={sw} strokeOpacity={isSel ? 1 : 0.72} />
+          stroke={color} strokeWidth={sw} strokeOpacity={op} />
         <Line x1={sx} y1={sy - arm} x2={sx} y2={sy + arm}
-          stroke={color} strokeWidth={sw} strokeOpacity={isSel ? 1 : 0.72} />
-        <Circle cx={sx} cy={sy} r={dotR}
-          fill={color} fillOpacity={isSel ? 1 : 0.8} />
+          stroke={color} strokeWidth={sw} strokeOpacity={op} />
+        <Circle cx={sx} cy={sy} r={dotR} fill={color} fillOpacity={op} />
+        {isSel && (
+          <SvgText x={sx + 6} y={sy - 6} fontSize={8} fill="#ffffff" fontFamily="Inter_400Regular">
+            [{idx}]
+          </SvgText>
+        )}
       </React.Fragment>
     );
   });
 
+  // ── Info label for selected node ──────────────────────────────────────────────
+  const selNode = selected
+    ? (selected.type === 'large' ? largeNodes[selected.idx] : smallNodes[selected.idx])
+    : null;
+  const dispRx = draft ? draft.rx : selNode?.rx ?? 0;
+  const dispRy = draft ? draft.ry : selNode?.ry ?? 0;
   const selLabel = selected
-    ? `${selected.type === 'large' ? '大肠' : '小肠'}[${selected.idx}]  (${(draft?.rx ?? (selected.type === 'large' ? largeNodes[selected.idx].rx : smallNodes[selected.idx].rx)).toFixed(1)}, ${(draft?.ry ?? (selected.type === 'large' ? largeNodes[selected.idx].ry : smallNodes[selected.idx].ry)).toFixed(1)})`
+    ? `${selected.type === 'large' ? '大肠' : '小肠'}[${selected.idx}]  x:${dispRx.toFixed(1)} y:${dispRy.toFixed(1)}`
     : null;
 
   return (
-    <View style={[styles.container, { backgroundColor: '#0a0404' }]}>
+    <View style={[styles.container]}>
+      {/* ── Header ── */}
       <View style={[styles.header, { paddingTop: topPad }]}>
         <TouchableOpacity style={styles.backBtn} onPress={() => setScreen('settings')}>
-          <Text style={styles.backBtnText}>← 返回设置</Text>
+          <Text style={styles.backBtnText}>← 返回</Text>
         </TouchableOpacity>
-        <Text style={styles.title}>肠系膜编辑模式</Text>
-        {selLabel && <Text style={styles.selInfo}>{selLabel}</Text>}
+        <Text style={styles.title}>肠系膜编辑</Text>
+        <View style={styles.headerRight}>
+          {resetStatus === 'done'
+            ? <Text style={styles.statusChip}>已复位</Text>
+            : saveStatus === 'saved'
+              ? <Text style={styles.statusChip}>已保存 ✓</Text>
+              : null}
+          {selLabel
+            ? <Text style={styles.selInfo} numberOfLines={1}>{selLabel}</Text>
+            : <Text style={styles.hintLabel}>点击节点选择并拖动</Text>}
+        </View>
       </View>
 
+      {/* ── Canvas ── */}
       <View
         style={styles.canvasArea}
         onLayout={e => setCanvasSize({ w: e.nativeEvent.layout.width, h: e.nativeEvent.layout.height })}
@@ -224,45 +290,71 @@ export function MesenteryEditorScreen({ onMenuPress }: Props) {
         <Svg
           width={svgW}
           height={svgH}
-          style={{ position: 'absolute', left: offsetX, top: offsetY }}
+          style={{ position: 'absolute', left: svgOffX, top: svgOffY }}
           viewBox={`0 0 ${CANVAS_W} ${CANVAS_H}`}
         >
           <Rect x={0} y={0} width={CANVAS_W} height={CANVAS_H} fill="#0a0404" />
+
+          {/* Cavity reference ellipse */}
           <Ellipse
             cx={CAVITY_CX} cy={CAVITY_CY} rx={CAVITY_RX} ry={CAVITY_RY}
-            fill="none" stroke="#442222" strokeWidth={1.5} strokeDasharray="6,4"
+            fill="none" stroke="#3a1818" strokeWidth={1.5} strokeDasharray="6,5"
           />
-          <SvgText x={6} y={12} fill="#ffaa33" fontSize={8} opacity={0.6}>▪ 大肠节点</SvgText>
-          <SvgText x={6} y={22} fill="#33ccff" fontSize={8} opacity={0.6}>▪ 小肠节点</SvgText>
-          <SvgText x={6} y={32} fill="#888888" fontSize={7} opacity={0.5}>虚圈=自由范围</SvgText>
 
+          {/* ── Guide polylines — segment order ── */}
+          <Polyline
+            points={buildPolylinePoints(smallNodes, 'small', smallSelIdx)}
+            fill="none"
+            stroke="#33ccff"
+            strokeWidth={1.0}
+            strokeOpacity={0.30}
+            strokeDasharray="4,4"
+          />
+          <Polyline
+            points={buildPolylinePoints(largeNodes, 'large', largeSelIdx)}
+            fill="none"
+            stroke="#ffaa33"
+            strokeWidth={1.0}
+            strokeOpacity={0.30}
+            strokeDasharray="4,4"
+          />
+
+          {/* ── Nodes ── */}
           {renderNodes(smallNodes, 'small', () => SMALL_MESENTERY_DEAD_ZONE)}
-          {renderNodes(largeNodes, 'large', (idx) => largeNodeMesentery(idx).deadZone)}
-        </Svg>
+          {renderNodes(largeNodes, 'large', idx => largeNodeMesentery(idx).deadZone)}
 
-        {!selected && (
-          <View style={styles.hintBox} pointerEvents="none">
-            <Text style={styles.hintText}>点击节点选择，拖动修改坐标</Text>
-          </View>
-        )}
+          {/* Legend */}
+          <Rect x={0} y={0} width={88} height={38} fill="rgba(10,4,4,0.72)" rx={4} />
+          <Circle cx={8} cy={10} r={3} fill="#ffaa33" />
+          <SvgText x={15} y={13} fill="#ffaa33" fontSize={8} opacity={0.8}>大肠 ({N_LARGE}节点)</SvgText>
+          <Circle cx={8} cy={22} r={3} fill="#33ccff" />
+          <SvgText x={15} y={25} fill="#33ccff" fontSize={8} opacity={0.8}>小肠 ({N_SMALL}节点)</SvgText>
+          <SvgText x={4} y={36} fill="#666666" fontSize={7} opacity={0.7}>虚线圈=自由范围  虚线=走向</SvgText>
+        </Svg>
       </View>
 
-      <View style={[styles.bottomBar, { paddingBottom: bottomPad + 6 }]}>
+      {/* ── Bottom bar ── */}
+      <View style={[styles.bottomBar, { paddingBottom: bottomPad + 4 }]}>
         <View style={styles.btnRow}>
           <TouchableOpacity
             style={[styles.btn, styles.btnCancel, !selected && styles.btnDisabled]}
-            onPress={handleCancel}
-            disabled={!selected}
+            onPress={handleCancel} disabled={!selected}
           >
-            <Text style={[styles.btnText, !selected && { color: '#555' }]}>取消</Text>
+            <Text style={[styles.btnText, !selected && styles.btnTextDim]}>取消</Text>
           </TouchableOpacity>
 
           <TouchableOpacity
             style={[styles.btn, styles.btnConfirm, !selected && styles.btnDisabled]}
-            onPress={handleConfirm}
-            disabled={!selected}
+            onPress={handleConfirm} disabled={!selected}
           >
-            <Text style={[styles.btnText, !selected && { color: '#555' }]}>确认</Text>
+            <Text style={[styles.btnText, !selected && styles.btnTextDim]}>确认</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.btn, styles.btnReset]}
+            onPress={handleReset}
+          >
+            <Text style={styles.btnText}>复位</Text>
           </TouchableOpacity>
 
           <TouchableOpacity
@@ -275,20 +367,9 @@ export function MesenteryEditorScreen({ onMenuPress }: Props) {
             disabled={saveStatus === 'saving'}
           >
             <Text style={styles.btnText}>
-              {saveStatus === 'saving' ? '保存中…' : saveStatus === 'saved' ? '已保存 ✓' : '保存'}
+              {saveStatus === 'saving' ? '…' : '保存'}
             </Text>
           </TouchableOpacity>
-        </View>
-
-        <View style={styles.legendRow}>
-          <View style={styles.legendItem}>
-            <View style={[styles.legendDot, { backgroundColor: '#ffaa33' }]} />
-            <Text style={styles.legendText}>大肠肠系膜 ({N_LARGE}节点)</Text>
-          </View>
-          <View style={styles.legendItem}>
-            <View style={[styles.legendDot, { backgroundColor: '#33ccff' }]} />
-            <Text style={styles.legendText}>小肠肠系膜 ({N_SMALL}节点)</Text>
-          </View>
         </View>
       </View>
     </View>
@@ -296,58 +377,50 @@ export function MesenteryEditorScreen({ onMenuPress }: Props) {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1 },
+  container: { flex: 1, backgroundColor: '#0a0404' },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 12,
-    paddingBottom: 10,
+    paddingHorizontal: 10,
+    paddingBottom: 8,
     borderBottomWidth: 1,
     borderBottomColor: '#2a1515',
     backgroundColor: '#140808',
-    gap: 8,
+    gap: 6,
   },
   backBtn: { padding: 4 },
   backBtnText: { color: '#ffaa33', fontSize: 13, fontFamily: 'Inter_400Regular' },
-  title: { flex: 1, fontSize: 14, fontFamily: 'Inter_600SemiBold', color: '#ffffff' },
-  selInfo: { fontSize: 10, fontFamily: 'Inter_400Regular', color: '#aaaaaa' },
+  title: { fontSize: 13, fontFamily: 'Inter_600SemiBold', color: '#ffffff' },
+  headerRight: { flex: 1, alignItems: 'flex-end', gap: 2 },
+  statusChip: {
+    fontSize: 10, fontFamily: 'Inter_600SemiBold',
+    color: '#44cc88', backgroundColor: 'rgba(20,60,30,0.7)',
+    paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4,
+  },
+  selInfo: {
+    fontSize: 11, fontFamily: 'Inter_400Regular', color: '#cccccc', textAlign: 'right',
+  },
+  hintLabel: {
+    fontSize: 10, fontFamily: 'Inter_400Regular', color: '#555555',
+  },
   canvasArea: { flex: 1, position: 'relative', overflow: 'hidden' },
-  hintBox: {
-    position: 'absolute',
-    bottom: 14,
-    left: 0, right: 0,
-    alignItems: 'center',
-  },
-  hintText: {
-    color: 'rgba(255,255,255,0.30)',
-    fontSize: 12,
-    fontFamily: 'Inter_400Regular',
-  },
   bottomBar: {
     borderTopWidth: 1,
     borderTopColor: '#2a1515',
     backgroundColor: '#140808',
-    paddingTop: 10,
-    paddingHorizontal: 14,
-    gap: 8,
+    paddingTop: 8,
+    paddingHorizontal: 10,
   },
-  btnRow: { flexDirection: 'row', gap: 10 },
+  btnRow: { flexDirection: 'row', gap: 8 },
   btn: {
-    flex: 1,
-    paddingVertical: 13,
-    borderRadius: 8,
-    alignItems: 'center',
-    justifyContent: 'center',
+    flex: 1, paddingVertical: 13,
+    borderRadius: 8, alignItems: 'center', justifyContent: 'center',
   },
-  btnCancel: { backgroundColor: '#3a1a1a' },
+  btnCancel:  { backgroundColor: '#3a1a1a' },
   btnConfirm: { backgroundColor: '#1a3a1a' },
-  btnSave: { backgroundColor: '#1a2a4a' },
-  btnDisabled: { opacity: 0.35 },
-  btnText: { color: '#ffffff', fontSize: 14, fontFamily: 'Inter_600SemiBold' },
-  legendRow: {
-    flexDirection: 'row', gap: 16, alignItems: 'center', justifyContent: 'center',
-  },
-  legendItem: { flexDirection: 'row', alignItems: 'center', gap: 5 },
-  legendDot: { width: 8, height: 8, borderRadius: 4 },
-  legendText: { color: '#666', fontSize: 10, fontFamily: 'Inter_400Regular' },
+  btnReset:   { backgroundColor: '#2a1a3a' },
+  btnSave:    { backgroundColor: '#1a2a4a' },
+  btnDisabled: { opacity: 0.30 },
+  btnText: { color: '#ffffff', fontSize: 13, fontFamily: 'Inter_600SemiBold' },
+  btnTextDim: { color: '#555555' },
 });
