@@ -198,6 +198,12 @@ uri = "file://artifacts/mobile/assets/images/weapon_127_barrett.png"
 type = "image"
 title = "Barrett M82A1 50cal side view"
 
+[[generated]]
+id = "VpKKkXzq67i5uA-BCwy4r"
+uri = "file://attached_assets/generated_images/app_icon_preview.png"
+type = "image"
+title = "anime character midriff icon"
+
 [[outputs]]
 id = "EvFH6bgGV0eFpaLTc_px6"
 uri = "file://artifacts/mobile/assets/images/icon.png"
@@ -269,3 +275,9 @@ id = "WzCCOpkNGyIhOnKYFBWch"
 uri = "file://artifacts/mobile/assets/images/weapon_127_barrett.png"
 type = "image"
 title = "12.7 Barrett M82A1 .50 BMG"
+
+[[outputs]]
+id = "j1ZnM8q5McKMVyrwF9dzY"
+uri = "file://attached_assets/generated_images/app_icon_preview.png"
+type = "image"
+title = "新App图标预览"
