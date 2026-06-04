@@ -102,6 +102,18 @@ uri = "file://artifacts/mobile/assets/images/bullet_hole_v3.png"
 type = "image"
 title = "wound texture game asset v3"
 
+[[generated]]
+id = "OQz8_S6DLaZvrxhe0NLpD"
+uri = "file://artifacts/mobile/assets/images/bullet_hole_v5.png"
+type = "image"
+title = "bullet hole no bruise v5"
+
+[[generated]]
+id = "nM_kCwXk2VGsxqjBe3UZN"
+uri = "file://artifacts/mobile/assets/images/bullet_hole_v6.png"
+type = "image"
+title = "bullet hole warm tones v6"
+
 [[outputs]]
 id = "EvFH6bgGV0eFpaLTc_px6"
 uri = "file://artifacts/mobile/assets/images/icon.png"
