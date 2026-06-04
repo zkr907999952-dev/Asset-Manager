@@ -2671,115 +2671,177 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
           const hr = hole.radius;
           const hx = hole.physX;
           const hy = hole.physY;
+          const gBlood = `bhg-${idx}`;
+          const gAbrase = `bhab-${idx}`;
+          const gCavity = `bhcav-${idx}`;
+          const gGlint  = `bhgl-${idx}`;
           return (
             <G key={`bh-${hole.id}`}>
               <Defs>
-                <RadialGradient id={`bhg-${idx}`} cx="50%" cy="50%" r="50%">
-                  <Stop offset="0%" stopColor="#000000" stopOpacity="0.95" />
-                  <Stop offset="40%" stopColor="#1a0000" stopOpacity="0.85" />
-                  <Stop offset="75%" stopColor="#3d0000" stopOpacity="0.55" />
-                  <Stop offset="100%" stopColor="#660000" stopOpacity="0" />
+                {/* Wide blood splash */}
+                <RadialGradient id={gBlood} cx="50%" cy="48%" r="50%">
+                  <Stop offset="0%"   stopColor="#3a0000" stopOpacity="0.82" />
+                  <Stop offset="30%"  stopColor="#5c0000" stopOpacity="0.68" />
+                  <Stop offset="65%"  stopColor="#800000" stopOpacity="0.38" />
+                  <Stop offset="100%" stopColor="#aa0000" stopOpacity="0"    />
+                </RadialGradient>
+                {/* Abrasion / contusion ring */}
+                <RadialGradient id={gAbrase} cx="50%" cy="50%" r="50%">
+                  <Stop offset="0%"   stopColor="#1a0000" stopOpacity="0"    />
+                  <Stop offset="55%"  stopColor="#1a0000" stopOpacity="0"    />
+                  <Stop offset="75%"  stopColor="#2e0000" stopOpacity="0.72" />
+                  <Stop offset="90%"  stopColor="#3d0000" stopOpacity="0.55" />
+                  <Stop offset="100%" stopColor="#3d0000" stopOpacity="0"    />
+                </RadialGradient>
+                {/* Dark cavity depth */}
+                <RadialGradient id={gCavity} cx="40%" cy="38%" r="50%">
+                  <Stop offset="0%"   stopColor="#1a1a1a" stopOpacity="1"    />
+                  <Stop offset="60%"  stopColor="#000000" stopOpacity="1"    />
+                  <Stop offset="100%" stopColor="#000000" stopOpacity="1"    />
+                </RadialGradient>
+                {/* Specular glint on rim */}
+                <RadialGradient id={gGlint} cx="35%" cy="30%" r="50%">
+                  <Stop offset="0%"   stopColor="#ffffff" stopOpacity="0.45" />
+                  <Stop offset="100%" stopColor="#ffffff" stopOpacity="0"    />
                 </RadialGradient>
               </Defs>
-              {/* Blood splash */}
-              <Circle cx={hx} cy={hy} r={hr * 3.5}
-                fill={`url(#bhg-${idx})`} />
-              {/* Entry hole */}
-              <Circle cx={hx} cy={hy} r={hr}
-                fill="#000000" fillOpacity={0.9} />
-              {/* Rim */}
-              <Circle cx={hx} cy={hy} r={hr}
+
+              {/* Layer 1: wide blood splash pool */}
+              <Circle cx={hx} cy={hy} r={hr * 5.5}
+                fill={`url(#${gBlood})`} />
+
+              {/* Layer 2: abrasion / bruise ring around wound */}
+              <Circle cx={hx} cy={hy} r={hr * 2.2}
+                fill={`url(#${gAbrase})`} />
+
+              {/* Layer 3: torn skin petals — 6 irregular lobes */}
+              {[0, 60, 120, 180, 240, 300].map((deg, pi) => {
+                const rad = (deg + (pi % 2 === 0 ? 8 : -6)) * Math.PI / 180;
+                const petalLen = hr * (1.35 + (pi * 0.07 % 0.3));
+                const px = hx + Math.cos(rad) * petalLen;
+                const py = hy + Math.sin(rad) * petalLen;
+                return (
+                  <Path key={`p-${pi}`}
+                    d={`M ${hx} ${hy} Q ${hx + Math.cos(rad + 0.4) * hr * 0.9} ${hy + Math.sin(rad + 0.4) * hr * 0.9} ${px} ${py} Q ${hx + Math.cos(rad - 0.4) * hr * 0.9} ${hy + Math.sin(rad - 0.4) * hr * 0.9} ${hx} ${hy} Z`}
+                    fill="#1a0000" fillOpacity={0.78}
+                  />
+                );
+              })}
+
+              {/* Layer 4: main wound cavity (dark depth) */}
+              <Circle cx={hx} cy={hy} r={hr * 1.05}
+                fill={`url(#${gCavity})`} />
+
+              {/* Layer 5: raised crushed-skin rim */}
+              <Circle cx={hx} cy={hy} r={hr * 1.05}
                 fill="none"
-                stroke="#1a0000" strokeWidth={hr * 0.4} strokeOpacity={0.7} />
+                stroke="#3d1010" strokeWidth={hr * 0.55} strokeOpacity={0.9} />
+
+              {/* Layer 6: crisp dark entry aperture */}
+              <Circle cx={hx} cy={hy} r={hr * 0.72}
+                fill="#000000" fillOpacity={0.97} />
+
+              {/* Layer 7: specular glint — upper-left arc highlight on rim */}
+              <Circle cx={hx} cy={hy} r={hr * 0.72}
+                fill={`url(#${gGlint})`} />
+
+              {/* Layer 8: tiny bright center glint (void depth illusion) */}
+              <Circle cx={hx - hr * 0.12} cy={hy - hr * 0.14} r={hr * 0.15}
+                fill="#ffffff" fillOpacity={0.18} />
             </G>
           );
         })}
 
         {/* Weapon aim sight overlay */}
         {gunAimOverlay && (() => {
-          const { aimPhysX, aimPhysY, sightType } = gunAimOverlay;
+          const { aimPhysX, aimPhysY, sightType, weaponId } = gunAimOverlay;
+
+          // Per-weapon sight colors and sizes
+          const sightColors: Record<string, { primary: string; ring: string; dot: string }> = {
+            '.22手枪':            { primary: 'rgba(255,70,70,0.92)',  ring: 'rgba(255,60,60,0.35)',  dot: 'rgba(255,60,60,0.95)' },
+            '9MM手枪':            { primary: 'rgba(255,165,30,0.92)', ring: 'rgba(255,145,20,0.38)', dot: 'rgba(255,155,20,0.95)' },
+            '7.62mm步枪':         { primary: 'rgba(60,230,180,0.95)', ring: 'rgba(40,210,160,0.45)', dot: 'rgba(50,230,180,1)'    },
+            '12.7mm反器材狙击枪': { primary: 'rgba(255,220,40,0.97)', ring: 'rgba(240,200,30,0.50)', dot: 'rgba(255,220,40,1)'    },
+          };
+          const col = sightColors[weaponId] ?? sightColors['.22手枪'];
+
           if (sightType === 'iron') {
-            // Iron sight: front post + U-notch rear sight
-            const postH = 22;
-            const postW = 4;
-            const notchW = 18;
-            const notchH = 14;
+            // Iron sight: clean crosshair + concentric rings, no hardware notch/post
+            const arm = 40;   // crosshair arm length
+            const gap = 10;   // center gap
             return (
               <G>
-                {/* Targeting reticle lines */}
-                <Line x1={aimPhysX - 28} y1={aimPhysY} x2={aimPhysX - 10} y2={aimPhysY}
-                  stroke="rgba(255,80,80,0.85)" strokeWidth={1.5} />
-                <Line x1={aimPhysX + 10} y1={aimPhysY} x2={aimPhysX + 28} y2={aimPhysY}
-                  stroke="rgba(255,80,80,0.85)" strokeWidth={1.5} />
-                <Line x1={aimPhysX} y1={aimPhysY - 28} x2={aimPhysX} y2={aimPhysY - 10}
-                  stroke="rgba(255,80,80,0.85)" strokeWidth={1.5} />
-                <Line x1={aimPhysX} y1={aimPhysY + 10} x2={aimPhysX} y2={aimPhysY + 28}
-                  stroke="rgba(255,80,80,0.85)" strokeWidth={1.5} />
-                {/* Outer ring */}
-                <Circle cx={aimPhysX} cy={aimPhysY} r={38}
-                  fill="none" stroke="rgba(255,60,60,0.45)" strokeWidth={1} />
-                {/* Front post (vertical bar) */}
-                <Rect
-                  x={aimPhysX - postW / 2} y={aimPhysY - 52 - postH}
-                  width={postW} height={postH}
-                  fill="rgba(20,20,20,0.9)" stroke="rgba(255,200,100,0.7)" strokeWidth={0.8} rx={1} />
-                {/* Rear U-notch */}
-                <Rect
-                  x={aimPhysX - notchW / 2} y={aimPhysY - 52 - notchH}
-                  width={notchW} height={notchH}
-                  fill="rgba(20,20,20,0.85)" stroke="rgba(255,200,100,0.55)" strokeWidth={0.8} rx={1} />
-                <Rect
-                  x={aimPhysX - 3} y={aimPhysY - 52 - notchH}
-                  width={6} height={notchH}
-                  fill="rgba(180,180,180,0.25)" />
+                {/* Outer faint ring */}
+                <Circle cx={aimPhysX} cy={aimPhysY} r={50}
+                  fill="none" stroke={col.ring} strokeWidth={1.2} />
+                {/* Inner ring */}
+                <Circle cx={aimPhysX} cy={aimPhysY} r={28}
+                  fill="none" stroke={col.ring} strokeWidth={0.8} />
+                {/* Crosshair arms */}
+                <Line x1={aimPhysX - arm - gap} y1={aimPhysY} x2={aimPhysX - gap} y2={aimPhysY}
+                  stroke={col.primary} strokeWidth={1.8} />
+                <Line x1={aimPhysX + gap} y1={aimPhysY} x2={aimPhysX + arm + gap} y2={aimPhysY}
+                  stroke={col.primary} strokeWidth={1.8} />
+                <Line x1={aimPhysX} y1={aimPhysY - arm - gap} x2={aimPhysX} y2={aimPhysY - gap}
+                  stroke={col.primary} strokeWidth={1.8} />
+                <Line x1={aimPhysX} y1={aimPhysY + gap} x2={aimPhysX} y2={aimPhysY + arm + gap}
+                  stroke={col.primary} strokeWidth={1.8} />
                 {/* Center dot */}
-                <Circle cx={aimPhysX} cy={aimPhysY} r={2.5}
-                  fill="rgba(255,60,60,0.9)" />
+                <Circle cx={aimPhysX} cy={aimPhysY} r={3}
+                  fill={col.dot} />
               </G>
             );
           } else {
-            // Scope sight: scope circle + mil-dot crosshair
-            const scopeR = 44;
+            // Scope sight — 7.62mm medium, 12.7mm large
+            const scopeR = weaponId === '12.7mm反器材狙击枪' ? 90 : 68;
+            const mdSpacing = weaponId === '12.7mm反器材狙击枪' ? 20 : 16;
+            const mdOffsets = [-mdSpacing * 2, -mdSpacing, mdSpacing, mdSpacing * 2];
+            const lineW = weaponId === '12.7mm反器材狙击枪' ? 1.6 : 1.3;
+            const elevOffsets = weaponId === '12.7mm反器材狙击枪' ? [20, 38, 56] : [16, 30, 44];
             return (
               <G>
-                {/* Scope outer ring */}
+                {/* Scope tube shadow ring */}
+                <Circle cx={aimPhysX} cy={aimPhysY} r={scopeR + 4}
+                  fill="rgba(0,0,0,0.28)" stroke="rgba(10,10,10,0.85)" strokeWidth={3.5} />
+                {/* Scope lens inner fill */}
                 <Circle cx={aimPhysX} cy={aimPhysY} r={scopeR}
-                  fill="rgba(0,0,0,0.18)" stroke="rgba(20,20,20,0.9)" strokeWidth={2.5} />
-                {/* Inner circle */}
-                <Circle cx={aimPhysX} cy={aimPhysY} r={scopeR - 4}
-                  fill="rgba(0,8,0,0.12)" stroke="rgba(80,220,80,0.5)" strokeWidth={0.8} />
-                {/* Crosshair lines (mil-dot style) */}
-                <Line x1={aimPhysX - scopeR + 5} y1={aimPhysY} x2={aimPhysX - 8} y2={aimPhysY}
-                  stroke="rgba(100,255,100,0.9)" strokeWidth={1.2} />
-                <Line x1={aimPhysX + 8} y1={aimPhysY} x2={aimPhysX + scopeR - 5} y2={aimPhysY}
-                  stroke="rgba(100,255,100,0.9)" strokeWidth={1.2} />
-                <Line x1={aimPhysX} y1={aimPhysY - scopeR + 5} x2={aimPhysX} y2={aimPhysY - 8}
-                  stroke="rgba(100,255,100,0.9)" strokeWidth={1.2} />
-                <Line x1={aimPhysX} y1={aimPhysY + 8} x2={aimPhysX} y2={aimPhysY + scopeR - 5}
-                  stroke="rgba(100,255,100,0.9)" strokeWidth={1.2} />
-                {/* Mil dots */}
-                {[-24, -12, 12, 24].map(offset => (
-                  <G key={`md-h-${offset}`}>
-                    <Circle cx={aimPhysX + offset} cy={aimPhysY} r={1.8}
-                      fill="rgba(100,255,100,0.8)" />
-                  </G>
+                  fill="rgba(0,6,4,0.22)" stroke={col.ring} strokeWidth={1.5} />
+                {/* Second inner ring */}
+                <Circle cx={aimPhysX} cy={aimPhysY} r={scopeR * 0.55}
+                  fill="none" stroke={col.ring} strokeWidth={0.7} strokeDasharray="4,6" />
+                {/* Horizontal crosshair */}
+                <Line x1={aimPhysX - scopeR + 4} y1={aimPhysY} x2={aimPhysX - 10} y2={aimPhysY}
+                  stroke={col.primary} strokeWidth={lineW} />
+                <Line x1={aimPhysX + 10} y1={aimPhysY} x2={aimPhysX + scopeR - 4} y2={aimPhysY}
+                  stroke={col.primary} strokeWidth={lineW} />
+                {/* Vertical crosshair */}
+                <Line x1={aimPhysX} y1={aimPhysY - scopeR + 4} x2={aimPhysX} y2={aimPhysY - 10}
+                  stroke={col.primary} strokeWidth={lineW} />
+                <Line x1={aimPhysX} y1={aimPhysY + 10} x2={aimPhysX} y2={aimPhysY + scopeR - 4}
+                  stroke={col.primary} strokeWidth={lineW} />
+                {/* Mil dots — horizontal */}
+                {mdOffsets.map(offset => (
+                  <Circle key={`mdh-${offset}`} cx={aimPhysX + offset} cy={aimPhysY} r={2.2}
+                    fill={col.primary} />
                 ))}
-                {[-24, -12, 12, 24].map(offset => (
-                  <G key={`md-v-${offset}`}>
-                    <Circle cx={aimPhysX} cy={aimPhysY + offset} r={1.8}
-                      fill="rgba(100,255,100,0.8)" />
-                  </G>
+                {/* Mil dots — vertical */}
+                {mdOffsets.map(offset => (
+                  <Circle key={`mdv-${offset}`} cx={aimPhysX} cy={aimPhysY + offset} r={2.2}
+                    fill={col.primary} />
                 ))}
                 {/* Center dot */}
-                <Circle cx={aimPhysX} cy={aimPhysY} r={2}
-                  fill="rgba(100,255,100,1)" />
-                {/* Elevation adjustment lines below */}
-                {[12, 24, 36].map((yOff, i) => (
-                  <Line key={`elev-${i}`}
-                    x1={aimPhysX - (6 - i * 2)} y1={aimPhysY + yOff + 8}
-                    x2={aimPhysX + (6 - i * 2)} y2={aimPhysY + yOff + 8}
-                    stroke="rgba(100,255,100,0.6)" strokeWidth={1} />
-                ))}
+                <Circle cx={aimPhysX} cy={aimPhysY} r={3.5}
+                  fill={col.dot} />
+                {/* Elevation stadia lines below center */}
+                {elevOffsets.map((yOff, i) => {
+                  const hw = 9 - i * 2;
+                  return (
+                    <Line key={`elev-${i}`}
+                      x1={aimPhysX - hw} y1={aimPhysY + yOff + 12}
+                      x2={aimPhysX + hw} y2={aimPhysY + yOff + 12}
+                      stroke={col.primary} strokeWidth={lineW * 0.85} strokeOpacity={0.75} />
+                  );
+                })}
               </G>
             );
           }
