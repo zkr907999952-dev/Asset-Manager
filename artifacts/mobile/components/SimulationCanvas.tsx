@@ -1290,23 +1290,23 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
             <Ellipse cx={CAVITY_CX} cy={CAVITY_CY} rx={CAVITY_RX - 2} ry={CAVITY_RY - 2}
               fill="none" stroke="#3a1010" strokeWidth={4} />
 
-            {/* ===== LARGE INTESTINE — smooth bezier segments ===== */}
-            {/* Mobile: 4 merged chunk paths. Web: 31 per-segment paths with full coloring. */}
-            {isMobile
-              ? largeChunkPaths.map((ch, c) => (
-                  <Path key={`lgc-${c}`} d={ch.d} stroke={ch.color} strokeWidth={ch.width} fill="none" strokeLinecap="round" strokeLinejoin="round" />
-                ))
-              : renderLargeSegs.map((seg, i) => {
-                  const d = largeSegPaths[i];
-                  if (!d) return null;
-                  const lPeriScale = (periScaleLarge?.[i] ?? 1);
-                  const w = LARGE_RADIUS * lPeriScale * 2 + (seg.pressure / LARGE_RUPTURE_PRESSURE) * LARGE_RADIUS * expansionScale;
-                  const col = segmentColor(seg.health, seg.pain, seg.pressure, seg.ruptured, seg.broken, seg.perforated, true, largeTransplantColor ?? undefined);
-                  return <Path key={`lg-${i}`} d={d} stroke={col} strokeWidth={w} fill="none" strokeLinecap="round" strokeLinejoin="round" />;
-                })
-            }
-            {/* Single merged highlight path */}
-            {largeCombinedHighlight ? <Path d={largeCombinedHighlight} stroke="rgba(255,200,175,0.22)" strokeWidth={LARGE_RADIUS * 0.65} fill="none" strokeLinecap="round" /> : null}
+            {/* ===== LARGE INTESTINE — per-segment rendering (original approach) ===== */}
+            {/* Each segment rendered independently: adjacent round caps overlap at midpoints
+                creating natural segment dividers without any explicit line marks. */}
+            {renderLargeSegs.map((seg, i) => {
+              const d = largeSegPaths[i];
+              if (!d) return null;
+              if (seg.broken) return null;
+              const lPeriScale = (periScaleLarge?.[i] ?? 1);
+              const w = LARGE_RADIUS * lPeriScale * 2 + (seg.pressure / LARGE_RUPTURE_PRESSURE) * LARGE_RADIUS * expansionScale;
+              const col = segmentColor(seg.health, seg.pain, seg.pressure, seg.ruptured, seg.broken, seg.perforated, true, largeTransplantColor ?? undefined);
+              return (
+                <G key={`lg-${i}`}>
+                  <Path d={d} stroke={col} strokeWidth={w} fill="none" strokeLinecap="round" strokeLinejoin="round" />
+                  <Path d={d} stroke="rgba(255,200,175,0.22)" strokeWidth={LARGE_RADIUS * 0.65} fill="none" strokeLinecap="round" />
+                </G>
+              );
+            })}
 
             {/* Ileocecal junction — visible tube connecting terminal ileum to cecum */}
             {renderSmallNodes.length > 0 && renderLargeNodes.length > 0 && (() => {
@@ -1380,28 +1380,38 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
               );
             })}
 
-            {/* ===== SMALL INTESTINE — outline casing (single merged path, replaces 65 individual Paths) ===== */}
-            {smallCombinedOutline ? (
-              <Path d={smallCombinedOutline} stroke="rgba(175, 100, 80, 0.55)" strokeWidth={SMALL_RADIUS * 2 + 4} fill="none" strokeLinecap="round" strokeLinejoin="round" />
-            ) : null}
-
-            {/* ===== SMALL INTESTINE — per-segment fill (color varies by health/pain/pressure) ===== */}
-            {/* Mobile: 8 merged chunk paths. Web: 65 per-segment paths with full coloring. */}
-            {isMobile
-              ? smallChunkPaths.map((ch, c) => (
-                  <Path key={`smc-${c}`} d={ch.d} stroke={ch.color} strokeWidth={ch.width} fill="none" strokeLinecap="round" strokeLinejoin="round" />
-                ))
-              : renderSmallSegs.map((seg, i) => {
-                  const d = smallSegPaths[i];
-                  if (!d) return null;
-                  const sPeriScale = (periScaleSmall?.[i] ?? 1);
-                  const w = SMALL_RADIUS * sPeriScale * 2 + (seg.pressure / 100) * SMALL_RADIUS * expansionScale;
-                  const col = segmentColor(seg.health, seg.pain, seg.pressure, seg.ruptured, seg.broken, seg.perforated, false, smallTransplantColor ?? undefined);
-                  return <Path key={`sm-${i}`} d={d} stroke={col} strokeWidth={w} fill="none" strokeLinecap="round" strokeLinejoin="round" />;
-                })
-            }
-            {/* Single merged highlight path */}
-            {smallCombinedHighlight ? <Path d={smallCombinedHighlight} stroke="rgba(255,220,200,0.18)" strokeWidth={SMALL_RADIUS * 0.7} fill="none" strokeLinecap="round" /> : null}
+            {/* ===== SMALL INTESTINE — per-segment rendering (original approach) ===== */}
+            {/* Pass 1: outline casing — per-segment, slightly wider than fill.
+                Adjacent outlines' round caps overlap at each segment midpoint,
+                creating the natural plicae circulares divider rings. */}
+            {renderSmallSegs.map((seg, i) => {
+              const d = smallSegPaths[i];
+              if (!d) return null;
+              if (seg.broken || seg.resected) return null;
+              const sPeriScale = (periScaleSmall?.[i] ?? 1);
+              const w = SMALL_RADIUS * sPeriScale * 2 + (seg.pressure / 100) * SMALL_RADIUS * expansionScale;
+              return (
+                <Path key={`sm-out-${i}`} d={d}
+                  stroke="rgba(175, 100, 80, 0.55)"
+                  strokeWidth={w + 3.5}
+                  fill="none" strokeLinecap="round" strokeLinejoin="round" />
+              );
+            })}
+            {/* Pass 2: fill + highlight — per-segment, same path, narrower */}
+            {renderSmallSegs.map((seg, i) => {
+              const d = smallSegPaths[i];
+              if (!d) return null;
+              if (seg.broken || seg.resected) return null;
+              const sPeriScale = (periScaleSmall?.[i] ?? 1);
+              const w = SMALL_RADIUS * sPeriScale * 2 + (seg.pressure / 100) * SMALL_RADIUS * expansionScale;
+              const col = segmentColor(seg.health, seg.pain, seg.pressure, seg.ruptured, seg.broken, seg.perforated, false, smallTransplantColor ?? undefined);
+              return (
+                <G key={`sm-${i}`}>
+                  <Path d={d} stroke={col} strokeWidth={w} fill="none" strokeLinecap="round" strokeLinejoin="round" />
+                  <Path d={d} stroke="rgba(255,220,200,0.18)" strokeWidth={SMALL_RADIUS * 0.7} fill="none" strokeLinecap="round" />
+                </G>
+              );
+            })}
 
             {/* Rupture burst markers */}
             {renderSmallSegs.map((seg, i) => {
