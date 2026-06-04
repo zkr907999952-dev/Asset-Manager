@@ -1,6 +1,6 @@
-import React from 'react';
+import React, { useState, useCallback } from 'react';
 import {
-  View, Text, TouchableOpacity, ScrollView, Switch, StyleSheet, Platform,
+  View, Text, TouchableOpacity, ScrollView, Switch, StyleSheet, Platform, Alert,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
@@ -8,6 +8,11 @@ import { useColors } from '@/hooks/useColors';
 import { useGame } from '@/contexts/GameContext';
 import { GameSlider } from '@/components/GameSlider';
 import { N_SMALL, N_LARGE } from '@/constants/gameConfig';
+import {
+  getDefaultMesenteryConfig,
+  saveMesenteryConfig,
+  applyMesenteryConfig,
+} from '../engine/mesenteryConfig';
 
 interface Props {
   onMenuPress: () => void;
@@ -84,9 +89,37 @@ export function SettingsScreen({ onMenuPress }: Props) {
     setMaxResectionSegments,
     setBellyStrikeImpulseScale, setBellyStrikeToolPower,
     setTouchOffsetY,
+    physicsRef,
   } = useGame();
   const topPad = Platform.OS === 'web' ? 67 : insets.top;
   const bottomPad = Platform.OS === 'web' ? 34 : insets.bottom;
+  const [resetStatus, setResetStatus] = useState<'idle' | 'saving' | 'done'>('idle');
+
+  const handleResetMesentery = useCallback(() => {
+    Alert.alert(
+      '重置肠系膜数据',
+      '将用内置的原始预设坐标覆盖当前已保存的肠系膜配置文件，并立即更新物理引擎。此操作不可撤销。',
+      [
+        { text: '取消', style: 'cancel' },
+        {
+          text: '确认重置',
+          style: 'destructive',
+          onPress: async () => {
+            setResetStatus('saving');
+            const defaults = getDefaultMesenteryConfig();
+            applyMesenteryConfig(physicsRef.current, defaults);
+            try {
+              await saveMesenteryConfig(defaults);
+              setResetStatus('done');
+              setTimeout(() => setResetStatus('idle'), 2500);
+            } catch {
+              setResetStatus('idle');
+            }
+          },
+        },
+      ]
+    );
+  }, [physicsRef]);
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
@@ -310,6 +343,26 @@ export function SettingsScreen({ onMenuPress }: Props) {
                 </Text>
               </View>
               <Feather name="edit-3" size={16} color={colors.primary} />
+            </View>
+          </TouchableOpacity>
+
+          <View style={[styles.divider, { backgroundColor: colors.border }]} />
+
+          <TouchableOpacity
+            style={styles.editorBtn}
+            onPress={handleResetMesentery}
+            disabled={resetStatus === 'saving'}
+          >
+            <View style={styles.editorBtnContent}>
+              <View style={{ flex: 1, flexShrink: 1, marginRight: 8 }}>
+                <Text style={[styles.editorBtnLabel, { color: resetStatus === 'done' ? '#44cc88' : '#cc4444' }]}>
+                  {resetStatus === 'done' ? '重置完成 ✓' : resetStatus === 'saving' ? '重置中…' : '重置肠系膜数据'}
+                </Text>
+                <Text style={[styles.editorBtnDesc, { color: colors.mutedForeground }]} numberOfLines={2}>
+                  用内置原始预设覆盖已保存的配置文件，并立即更新物理引擎
+                </Text>
+              </View>
+              <Feather name="rotate-ccw" size={16} color="#cc4444" />
             </View>
           </TouchableOpacity>
         </View>
