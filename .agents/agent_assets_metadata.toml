@@ -216,6 +216,12 @@ uri = "file://attached_assets/generated_images/app_icon_v3.png"
 type = "image"
 title = "game icon waist hero element v3"
 
+[[generated]]
+id = "1WxOT0PkRmxIVANg2GbP1"
+uri = "file://attached_assets/generated_images/intestines_preview.png"
+type = "image"
+title = "female abdominal anatomy intestines uterus"
+
 [[outputs]]
 id = "EvFH6bgGV0eFpaLTc_px6"
 uri = "file://artifacts/mobile/assets/images/icon.png"
@@ -305,3 +311,9 @@ id = "L4v4hF_m8Tc8xZuTPqADo"
 uri = "file://attached_assets/generated_images/app_icon_v3.png"
 type = "image"
 title = "变体 B"
+
+[[outputs]]
+id = "bQ73kmbD7g2_bVkwzt3ZE"
+uri = "file://attached_assets/generated_images/intestines_preview.png"
+type = "image"
+title = "女性腹腔透视图预览"
