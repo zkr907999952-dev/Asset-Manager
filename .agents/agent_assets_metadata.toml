@@ -132,6 +132,24 @@ uri = "file://artifacts/mobile/assets/images/bullet_hole_a3.png"
 type = "image"
 title = "bullet hole no blood a3"
 
+[[generated]]
+id = "5PLDz6tYAMOLph8A-77H5"
+uri = "file://artifacts/mobile/assets/images/bullet_hole_b1.png"
+type = "image"
+title = "wound only no skin bg b1"
+
+[[generated]]
+id = "BAmmwzikIPTQCIf8HoOKl"
+uri = "file://artifacts/mobile/assets/images/bullet_hole_b2.png"
+type = "image"
+title = "wound only no skin bg b2"
+
+[[generated]]
+id = "ukMsAQTVTsu-UOVynTUIZ"
+uri = "file://artifacts/mobile/assets/images/bullet_hole_b3.png"
+type = "image"
+title = "wound only no skin bg b3"
+
 [[outputs]]
 id = "EvFH6bgGV0eFpaLTc_px6"
 uri = "file://artifacts/mobile/assets/images/icon.png"
