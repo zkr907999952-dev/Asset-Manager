@@ -3,7 +3,7 @@ import { View, Image, StyleSheet } from 'react-native';
 import Svg, { Ellipse, Circle, Line, Path, G, Image as SvgImage } from 'react-native-svg';
 import { useGame } from '@/contexts/GameContext';
 import { useBreathAnimation } from '@/hooks/useBreathAnimation';
-import { LETHAL_WEAPONS, CANVAS_W, CANVAS_H } from '@/constants/gameConfig';
+import { LETHAL_WEAPONS, CANVAS_W, CAVITY_CX, CAVITY_CY } from '@/constants/gameConfig';
 
 const CHARACTER_IMG = require('@/assets/images/character.png');
 const BULLET_HOLE_SMALL = require('@/assets/images/bullet_hole_small.png');
@@ -129,13 +129,19 @@ export function CharacterView({ width, height }: Props) {
             />
           )}
 
-          {/* Bullet holes — synced from simulation (physics → CharacterView coords) */}
+          {/* Bullet holes — synced from simulation (physics → CharacterView coords)
+              Navel anchor: physics (CAVITY_CX, CAVITY_CY) → CV (width/2, height*BELLY_Y_FRAC)
+              xS: belly fills ~full view width   (width / CANVAS_W ≈ 0.53)
+              yS: physics is belly-zoomed in; full-body character compresses Y by ~0.55
+              Tune CV_HOLE_Y_SCALE if vertical placement drifts after screen size changes. */}
           {state.bulletHoles && state.bulletHoles.map((hole) => {
             const isLarge = hole.weaponId && LARGE_CALIBER_SET.has(hole.weaponId);
             const holeImg = isLarge ? BULLET_HOLE_LARGE : BULLET_HOLE_SMALL;
-            const cvX = hole.physX * (width / CANVAS_W);
-            const cvY = hole.physY * (height / CANVAS_H);
-            const size = hole.radius * (isLarge ? 11 : 9) * (width / CANVAS_W);
+            const xS = width / CANVAS_W;
+            const yS = xS * 0.55; // Y compressed: physics zoomed-belly vs full-body character
+            const cvX = width / 2 + (hole.physX - CAVITY_CX) * xS;
+            const cvY = height * BELLY_Y_FRAC + (hole.physY - CAVITY_CY) * yS;
+            const size = hole.radius * (isLarge ? 11 : 9) * xS;
             const half = size / 2;
             return (
               <SvgImage

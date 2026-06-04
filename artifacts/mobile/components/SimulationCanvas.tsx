@@ -27,6 +27,7 @@ import {
   BELLY_STRIKE_TOOL_LIST, type BellyStrikeToolId,
   LETHAL_WEAPON_LIST, LETHAL_WEAPONS, type LethalWeaponId,
   BELLY_HIT_CX, BELLY_HIT_CY, BELLY_HIT_RX, BELLY_HIT_RY,
+  BELLY_UPPER_LEFT, BELLY_UPPER_RIGHT, BELLY_UPPER_TOP, BELLY_UPPER_BOT,
 } from '../constants/gameConfig';
 import { buildSmoothPath } from '../engine/physics';
 import { useGame } from '../contexts/GameContext';
@@ -891,11 +892,13 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
         setGunAimOverlay(null);
         const def = LETHAL_WEAPON_LIST.find(w => w.id === s.selectedWeapon);
         if (def && !def.reserved && agsh) {
-          // Hit zone check — damage/physics only inside the belly ellipse
+          // Hit zone check — damage/physics only inside ellipse OR upper-belly rect
           const _dx = (aimPhysX - BELLY_HIT_CX) / BELLY_HIT_RX;
           const _dy = (aimPhysY - BELLY_HIT_CY) / BELLY_HIT_RY;
-          const _inZone = _dx * _dx + _dy * _dy <= 1;
-          if (_inZone) {
+          const _inEllipse = _dx * _dx + _dy * _dy <= 1;
+          const _inUpper = aimPhysX >= BELLY_UPPER_LEFT && aimPhysX <= BELLY_UPPER_RIGHT
+            && aimPhysY >= BELLY_UPPER_TOP && aimPhysY <= BELLY_UPPER_BOT;
+          if (_inEllipse || _inUpper) {
             agsh(aimPhysX, aimPhysY);
           }
 
@@ -1386,18 +1389,29 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
                 fill="rgba(140,20,20,0.55)" />
             ))}
 
-            {/* Debug: belly hit zone wireframe (blue dashed ellipse) */}
+            {/* Debug: belly hit zone wireframe (blue dashed) */}
             {state.debugMode && (
-              <Ellipse
-                cx={BELLY_HIT_CX}
-                cy={BELLY_HIT_CY}
-                rx={BELLY_HIT_RX}
-                ry={BELLY_HIT_RY}
-                fill="rgba(60,120,255,0.06)"
-                stroke="rgba(60,140,255,0.85)"
-                strokeWidth={1.5}
-                strokeDasharray="8 4"
-              />
+              <G>
+                {/* Lower zone — ellipse */}
+                <Ellipse
+                  cx={BELLY_HIT_CX} cy={BELLY_HIT_CY}
+                  rx={BELLY_HIT_RX} ry={BELLY_HIT_RY}
+                  fill="rgba(60,120,255,0.06)"
+                  stroke="rgba(60,140,255,0.85)"
+                  strokeWidth={1.5}
+                  strokeDasharray="8 4"
+                />
+                {/* Upper zone — rectangle */}
+                <Rect
+                  x={BELLY_UPPER_LEFT} y={BELLY_UPPER_TOP}
+                  width={BELLY_UPPER_RIGHT - BELLY_UPPER_LEFT}
+                  height={BELLY_UPPER_BOT - BELLY_UPPER_TOP}
+                  fill="rgba(60,120,255,0.06)"
+                  stroke="rgba(60,140,255,0.85)"
+                  strokeWidth={1.5}
+                  strokeDasharray="8 4"
+                />
+              </G>
             )}
           </G>
         )}
