@@ -218,7 +218,7 @@ export interface GameUIState {
   bellyStrikeToolPowers: Record<BellyStrikeToolId, number>;
   // Lethal weapons
   selectedWeapon: LethalWeaponId | null;
-  bulletHoles: { id: number; physX: number; physY: number; radius: number }[];
+  bulletHoles: { id: number; physX: number; physY: number; radius: number; weaponId: LethalWeaponId }[];
 }
 
 interface GameContextType {
@@ -2521,7 +2521,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       ...prev,
       bulletHoles: [
         ...prev.bulletHoles,
-        { id: holeId, physX, physY, radius: holeRadius },
+        { id: holeId, physX, physY, radius: holeRadius, weaponId: weapon },
       ].slice(-12), // keep last 12 holes
     }));
 

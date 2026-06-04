@@ -25,7 +25,7 @@ import {
   SMALL_RADIUS, LARGE_RADIUS, LARGE_RUPTURE_PRESSURE,
   TOOLS, N_SMALL, N_LARGE,
   BELLY_STRIKE_TOOL_LIST, type BellyStrikeToolId,
-  LETHAL_WEAPON_LIST, type LethalWeaponId,
+  LETHAL_WEAPON_LIST, LETHAL_WEAPONS, type LethalWeaponId,
 } from '../constants/gameConfig';
 import { buildSmoothPath } from '../engine/physics';
 import { useGame } from '../contexts/GameContext';
@@ -35,6 +35,11 @@ const NAVEL_X = CANVAS_W / 2;
 const NAVEL_Y_EXTERNAL = CAVITY_CY;
 const NAVEL_Y_INTERNAL = CAVITY_CY;
 const NAVEL_RADIUS = 28;
+
+// Bullet hole textures (transparent PNG, black background removed)
+const BULLET_HOLE_SMALL = require('../assets/images/bullet_hole_small.png'); // .22 / 9mm
+const BULLET_HOLE_LARGE = require('../assets/images/bullet_hole_large.png'); // 7.62 / 12.7mm
+const LARGE_CALIBER_IDS: LethalWeaponId[] = [LETHAL_WEAPONS.RIFLE_762, LETHAL_WEAPONS.SNIPER_127];
 
 function segmentColor(health: number, pain: number, pressure: number, ruptured: boolean, broken: boolean, perforated: boolean, isLarge: boolean, transplantBase?: { r: number; g: number; b: number }): string {
   if (broken) return '#bb0808';
@@ -2666,133 +2671,27 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
           }
         })}
 
-        {/* Bullet holes on external view */}
-        {!isInternal && state.bulletHoles && state.bulletHoles.map((hole, idx) => {
+        {/* Bullet holes on external view — AI-generated textures */}
+        {!isInternal && state.bulletHoles && state.bulletHoles.map((hole) => {
           const hr = hole.radius;
           const hx = hole.physX;
           const hy = hole.physY;
-          const seed = idx * 31 + (hole.id ?? 0);
-          const gBlood  = `bhb-${idx}`;
-          const gBruise = `bhbr-${idx}`;
-          const gCavity = `bhc-${idx}`;
-
-          // Precompute 7 irregular stellate tears (deterministic from seed)
-          const tearCount = 7;
-          const tears = Array.from({ length: tearCount }, (_, i) => {
-            const baseAngle = (i / tearCount) * Math.PI * 2;
-            const jitter = ((seed * 7 + i * 37) % 42 - 21) * Math.PI / 180;
-            const angle = baseAngle + jitter;
-            const lenMult = 1.15 + ((seed * 3 + i * 17) % 14) * 0.025;
-            const len = hr * lenMult;
-            const skinTone = i % 3 === 0 ? '#c06060' : i % 3 === 1 ? '#a84848' : '#983838';
-            return { angle, len, skinTone };
-          });
-
-          // 5 small satellite blood droplets
-          const drops = Array.from({ length: 5 }, (_, i) => {
-            const a = ((seed * 11 + i * 72) % 360) * Math.PI / 180;
-            const dist = hr * (2.2 + ((seed + i * 19) % 10) * 0.18);
-            const r2 = hr * (0.09 + (i % 3) * 0.06);
-            return { cx: hx + Math.cos(a) * dist, cy: hy + Math.sin(a) * dist, r2 };
-          });
-
+          const isLarge = hole.weaponId && LARGE_CALIBER_IDS.includes(hole.weaponId);
+          const holeImg = isLarge ? BULLET_HOLE_LARGE : BULLET_HOLE_SMALL;
+          // Image display size: large caliber wounds are visibly bigger
+          // radius: .22≈6.2  9mm≈7.1  7.62≈8.7  12.7≈10.9
+          const size = hr * (isLarge ? 11 : 9);
+          const half = size / 2;
           return (
             <G key={`bh-${hole.id}`}>
-              <Defs>
-                {/* Main blood pool — off-center for organic feel */}
-                <RadialGradient id={gBlood} cx="48%" cy="54%" r="50%">
-                  <Stop offset="0%"   stopColor="#1c0000" stopOpacity="0.98" />
-                  <Stop offset="20%"  stopColor="#300000" stopOpacity="0.90" />
-                  <Stop offset="50%"  stopColor="#560000" stopOpacity="0.65" />
-                  <Stop offset="75%"  stopColor="#7a0000" stopOpacity="0.32" />
-                  <Stop offset="100%" stopColor="#aa0000" stopOpacity="0"    />
-                </RadialGradient>
-                {/* Purple-red contusion / bruise ring */}
-                <RadialGradient id={gBruise} cx="50%" cy="50%" r="50%">
-                  <Stop offset="0%"   stopColor="#5a0030" stopOpacity="0"    />
-                  <Stop offset="42%"  stopColor="#5a0030" stopOpacity="0"    />
-                  <Stop offset="62%"  stopColor="#4a0028" stopOpacity="0.50" />
-                  <Stop offset="80%"  stopColor="#620038" stopOpacity="0.38" />
-                  <Stop offset="100%" stopColor="#3a0018" stopOpacity="0"    />
-                </RadialGradient>
-                {/* Wound cavity depth — slightly off-center for 3-D look */}
-                <RadialGradient id={gCavity} cx="38%" cy="34%" r="60%">
-                  <Stop offset="0%"   stopColor="#3a0a0a" stopOpacity="1"    />
-                  <Stop offset="35%"  stopColor="#100000" stopOpacity="1"    />
-                  <Stop offset="100%" stopColor="#000000" stopOpacity="1"    />
-                </RadialGradient>
-              </Defs>
-
-              {/* L1: primary blood pool (slightly elliptical, shifted down) */}
-              <Ellipse cx={hx + hr * 0.08} cy={hy + hr * 0.18}
-                rx={hr * 5.4} ry={hr * 4.7}
-                fill={`url(#${gBlood})`} />
-
-              {/* L2: secondary blood blotch — offset lobe for irregularity */}
-              <Ellipse cx={hx - hr * 0.35} cy={hy + hr * 0.55}
-                rx={hr * 3.0} ry={hr * 2.5}
-                fill="#2a0000" fillOpacity={0.28} />
-
-              {/* L3: contusion / bruise zone */}
-              <Circle cx={hx} cy={hy} r={hr * 2.7}
-                fill={`url(#${gBruise})`} />
-
-              {/* L4: stellate skin tears — reddish flesh flaps pulled back */}
-              {tears.map(({ angle, len, skinTone }, ti) => {
-                const tipX = hx + Math.cos(angle) * len;
-                const tipY = hy + Math.sin(angle) * len;
-                const lX = hx + Math.cos(angle + 0.48) * hr * 0.52;
-                const lY = hy + Math.sin(angle + 0.48) * hr * 0.52;
-                const rX = hx + Math.cos(angle - 0.48) * hr * 0.52;
-                const rY = hy + Math.sin(angle - 0.48) * hr * 0.52;
-                return (
-                  <G key={`t-${ti}`}>
-                    <Path
-                      d={`M ${hx} ${hy} Q ${lX} ${lY} ${tipX} ${tipY} Q ${rX} ${rY} ${hx} ${hy} Z`}
-                      fill={skinTone} fillOpacity={0.85}
-                    />
-                    <Path
-                      d={`M ${hx} ${hy} Q ${lX} ${lY} ${tipX} ${tipY} Q ${rX} ${rY} ${hx} ${hy} Z`}
-                      fill="#000000" fillOpacity={0.22}
-                      stroke="#2a0000" strokeWidth={hr * 0.10} strokeOpacity={0.55}
-                    />
-                  </G>
-                );
-              })}
-
-              {/* L5: abrasion collar — brownish-red, tight around entry */}
-              <Circle cx={hx} cy={hy} r={hr * 1.30}
-                fill="none"
-                stroke="#5a2200" strokeWidth={hr * 0.42} strokeOpacity={0.90} />
-              <Circle cx={hx} cy={hy} r={hr * 1.55}
-                fill="none"
-                stroke="#3a0800" strokeWidth={hr * 0.18} strokeOpacity={0.50} />
-
-              {/* L6: wound cavity with 3-D depth gradient */}
-              <Circle cx={hx} cy={hy} r={hr * 1.08}
-                fill={`url(#${gCavity})`} />
-
-              {/* L7: blood pooled inside wound — dark red fill */}
-              <Circle cx={hx} cy={hy} r={hr * 0.88}
-                fill="#160000" fillOpacity={0.97} />
-
-              {/* L8: ragged wound edge — dashed stroke for torn tissue illusion */}
-              <Circle cx={hx} cy={hy} r={hr * 0.82}
-                fill="none"
-                stroke="#5a0000" strokeWidth={hr * 0.28} strokeOpacity={0.70}
-                strokeDasharray={`${hr * 0.55} ${hr * 0.22}`}
+              <SvgImage
+                x={hx - half}
+                y={hy - half}
+                width={size}
+                height={size}
+                href={holeImg}
+                preserveAspectRatio="xMidYMid meet"
               />
-
-              {/* L9: satellite blood droplets scattered nearby */}
-              {drops.map(({ cx: dcx, cy: dcy, r2 }, di) => (
-                <Circle key={`d-${di}`}
-                  cx={dcx} cy={dcy} r={r2}
-                  fill="#3d0000" fillOpacity={0.72} />
-              ))}
-
-              {/* L10: faint wet sheen — upper-left highlight */}
-              <Circle cx={hx - hr * 0.22} cy={hy - hr * 0.24} r={hr * 0.20}
-                fill="#ffffff" fillOpacity={0.10} />
             </G>
           );
         })}
