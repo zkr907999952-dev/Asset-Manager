@@ -51,22 +51,6 @@ function segmentColor(health: number, pain: number, pressure: number, ruptured: 
   return `rgb(${r},${g},${b})`;
 }
 
-// Recreates the original per-segment outline junction effect in a single SVG element.
-// In the original rendering, each segment had its own outline path (strokeWidth = fill + 3.5px).
-// Adjacent segments' outlines overlapped at every node midpoint, creating a subtly thicker
-// "disc" at each junction — the natural segment boundary visible in the original.
-// Here: each node becomes an M x,y L x+1,y command; with strokeLinecap="round" and
-// strokeWidth = tube_outline_width, this renders as a filled circle at that node.
-// All nodes merged into ONE Path string → 2 SVG elements replaces 192+ segment paths.
-function buildNodeDotPath(nodes: Array<{ x: number; y: number }>, step = 1): string {
-  const parts: string[] = [];
-  for (let i = 0; i < nodes.length; i += step) {
-    const x = nodes[i].x | 0, y = nodes[i].y | 0;
-    // L x+1 ensures the zero-length segment renders as a round dot on all platforms
-    parts.push(`M${x},${y}L${x + 1},${y}`);
-  }
-  return parts.join(' ');
-}
 
 // Render intestine as smooth bezier segments with per-segment coloring.
 // Each segment is drawn as a quadratic bezier from mid(prev,curr) → Q(curr) → mid(curr,next),
@@ -1214,18 +1198,6 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
     }
   }
 
-  // === NODE DOT JUNCTION PATHS ===
-  // Recreates the original per-segment outline junction effect efficiently:
-  // the original drew each segment's outline (strokeWidth = fill + 3.5px) separately,
-  // causing adjacent outlines to naturally overlap at each node and produce a subtle
-  // "disc" boundary. Here, one M…L per node in a single merged Path achieves the
-  // same disc-at-junction visual with strokeLinecap="round" — 2 SVG elements total.
-  const smallNodeDotPath = isInternal
-    ? buildNodeDotPath(renderSmallNodes, 1)
-    : '';
-  const largeNodeDotPath = isInternal
-    ? buildNodeDotPath(renderLargeNodes, 1)
-    : '';
 
   return (
     <Animated.View
@@ -1319,15 +1291,7 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
               fill="none" stroke="#3a1010" strokeWidth={4} />
 
             {/* ===== LARGE INTESTINE — smooth bezier segments ===== */}
-            {/* Layer 1: Node junction discs — one per-node dot that recreates the per-segment
-                outline overlap effect: adjacent segment outlines met at every node midpoint,
-                creating a slightly thicker "haustrum boundary" disc at each junction. */}
-            {largeNodeDotPath ? (
-              <Path d={largeNodeDotPath}
-                stroke="rgba(185,100,72,0.70)" strokeWidth={LARGE_RADIUS * 2 + 4}
-                fill="none" strokeLinecap="round" />
-            ) : null}
-            {/* Layer 2: Fill — Mobile: 4 merged chunk paths. Web: 31 per-segment paths. */}
+            {/* Mobile: 4 merged chunk paths. Web: 31 per-segment paths with full coloring. */}
             {isMobile
               ? largeChunkPaths.map((ch, c) => (
                   <Path key={`lgc-${c}`} d={ch.d} stroke={ch.color} strokeWidth={ch.width} fill="none" strokeLinecap="round" strokeLinejoin="round" />
@@ -1341,8 +1305,8 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
                   return <Path key={`lg-${i}`} d={d} stroke={col} strokeWidth={w} fill="none" strokeLinecap="round" strokeLinejoin="round" />;
                 })
             }
-            {/* Layer 3: Specular highlight (solid, not dashed) — keeps large intestine surface clean */}
-            {largeCombinedHighlight ? <Path d={largeCombinedHighlight} stroke="rgba(255,215,190,0.25)" strokeWidth={LARGE_RADIUS * 0.6} fill="none" strokeLinecap="round" /> : null}
+            {/* Single merged highlight path */}
+            {largeCombinedHighlight ? <Path d={largeCombinedHighlight} stroke="rgba(255,200,175,0.22)" strokeWidth={LARGE_RADIUS * 0.65} fill="none" strokeLinecap="round" /> : null}
 
             {/* Ileocecal junction — visible tube connecting terminal ileum to cecum */}
             {renderSmallNodes.length > 0 && renderLargeNodes.length > 0 && (() => {
@@ -1436,16 +1400,8 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
                   return <Path key={`sm-${i}`} d={d} stroke={col} strokeWidth={w} fill="none" strokeLinecap="round" strokeLinejoin="round" />;
                 })
             }
-            {/* Node junction discs — one filled dot per node, same width as outline casing.
-                Recreates the original per-segment outline overlap: adjacent segment outlines
-                met and overlapped at each node creating a subtle disc. All nodes → 1 Path. */}
-            {smallNodeDotPath ? (
-              <Path d={smallNodeDotPath}
-                stroke="rgba(165,88,65,0.62)" strokeWidth={SMALL_RADIUS * 2 + 3.5}
-                fill="none" strokeLinecap="round" />
-            ) : null}
-            {/* Specular highlight — thin bright line for tube surface sheen */}
-            {smallCombinedHighlight ? <Path d={smallCombinedHighlight} stroke="rgba(255,228,210,0.20)" strokeWidth={SMALL_RADIUS * 0.7} fill="none" strokeLinecap="round" /> : null}
+            {/* Single merged highlight path */}
+            {smallCombinedHighlight ? <Path d={smallCombinedHighlight} stroke="rgba(255,220,200,0.18)" strokeWidth={SMALL_RADIUS * 0.7} fill="none" strokeLinecap="round" /> : null}
 
             {/* Rupture burst markers */}
             {renderSmallSegs.map((seg, i) => {
