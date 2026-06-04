@@ -1419,12 +1419,12 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
         {/* ===== INTERNAL ORGANS LAYER ===== */}
         {isInternal && (
           <G clipPath="url(#cavityClip)">
-            {/* Intestine anatomical background image — female anatomy, 3:4 portrait, slice to fill cavity */}
+            {/* Intestine anatomical background image — female anatomy 3:4, sized to exact ratio */}
             <SvgImage
               href={INTESTINES_REF}
-              x={CAVITY_CX - CAVITY_RX * 1.08} y={CAVITY_CY - CAVITY_RY * 1.12}
-              width={CAVITY_RX * 1.08 * 2} height={CAVITY_RY * 1.12 * 2}
-              preserveAspectRatio="xMidYMid slice" opacity={0.48} />
+              x={CAVITY_CX - CAVITY_RY * 0.92} y={CAVITY_CY - CAVITY_RY * 1.22}
+              width={CAVITY_RY * 1.84} height={CAVITY_RY * 2.44}
+              preserveAspectRatio="xMidYMid meet" opacity={0.52} />
             <Ellipse cx={CAVITY_CX} cy={CAVITY_CY} rx={CAVITY_RX - 2} ry={CAVITY_RY - 2}
               fill="none" stroke="#3a1010" strokeWidth={4} />
 
