@@ -240,6 +240,24 @@ uri = "file://attached_assets/generated_images/intestines_v3.png"
 type = "image"
 title = "hourglass waist female anatomy v3"
 
+[[generated]]
+id = "t_ulk-09OXmel_YSuiD_u"
+uri = "file://attached_assets/generated_images/intestines_b1.png"
+type = "image"
+title = "bare female anatomy hourglass v1"
+
+[[generated]]
+id = "STU_L0x1HNLnOZ5xOTszN"
+uri = "file://attached_assets/generated_images/intestines_b2.png"
+type = "image"
+title = "bare female anatomy hourglass v2"
+
+[[generated]]
+id = "crb0nzk9F1BCHRlgXh1Bf"
+uri = "file://attached_assets/generated_images/intestines_b3.png"
+type = "image"
+title = "bare female anatomy uterus hourglass v3"
+
 [[outputs]]
 id = "EvFH6bgGV0eFpaLTc_px6"
 uri = "file://artifacts/mobile/assets/images/icon.png"
@@ -351,5 +369,23 @@ title = "变体 2"
 [[outputs]]
 id = "-4LDKaCuEzCCq1wxDDGgO"
 uri = "file://attached_assets/generated_images/intestines_v3.png"
+type = "image"
+title = "变体 3"
+
+[[outputs]]
+id = "XSx-HDXuy9-ulBRVL8bTM"
+uri = "file://attached_assets/generated_images/intestines_b1.png"
+type = "image"
+title = "变体 1"
+
+[[outputs]]
+id = "V5NaT6sdjrcxePnsxawIQ"
+uri = "file://attached_assets/generated_images/intestines_b2.png"
+type = "image"
+title = "变体 2"
+
+[[outputs]]
+id = "RttEPSKIGuxtX2JsdPN0D"
+uri = "file://attached_assets/generated_images/intestines_b3.png"
 type = "image"
 title = "变体 3"
