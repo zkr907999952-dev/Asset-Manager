@@ -86,6 +86,7 @@ export interface PhysicsState {
   relaxFrames: number;
   laxativeFrames: number;
   hpBonus: number;
+  hpPenalty: number;    // cumulative direct damage (guns, parasites) — persists through syncFromPhysics
   transfusionFrames: number;
   repairMarks: number[];
   sutureMarks: number[];

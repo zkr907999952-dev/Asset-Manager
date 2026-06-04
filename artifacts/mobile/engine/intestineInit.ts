@@ -200,6 +200,7 @@ export function createInitialPhysicsState(): PhysicsState {
     relaxFrames: 0,
     laxativeFrames: 0,
     hpBonus: 0,
+    hpPenalty: 0,
     transfusionFrames: 0,
     repairMarks: [],
     sutureMarks: [],

@@ -572,7 +572,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       if (largeSegs[i].broken) breaks++;
     }
 
-    const hp = Math.min(100, Math.max(0, 100 - totalPain * 0.7 - breaks * 5 + (p.hpBonus ?? 0)));
+    const hp = Math.min(100, Math.max(0, 100 - totalPain * 0.7 - breaks * 5 + (p.hpBonus ?? 0) - (p.hpPenalty ?? 0)));
     const pleasure = Math.min(100, snap.avgSensitivity * 0.6 + (snap.avgPressure > 40 ? (snap.avgPressure - 40) * 0.5 : 0));
 
     let heartRate: number;
@@ -1820,7 +1820,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     const p = physicsRef.current;
     const totalPain = p.smallSegs.reduce((a, s) => a + s.pain, 0) / p.smallSegs.length;
     const breaks = [...p.smallSegs, ...p.largeSegs].filter(s => s.broken).length;
-    const curHp = Math.min(100, Math.max(0, 100 - totalPain * 0.7 - breaks * 5 + (p.hpBonus ?? 0)));
+    const curHp = Math.min(100, Math.max(0, 100 - totalPain * 0.7 - breaks * 5 + (p.hpBonus ?? 0) - (p.hpPenalty ?? 0)));
     if (curHp < 5) {
       p.hpBonus = Math.min(100, (p.hpBonus ?? 0) + 25);
       setState(prev => ({ ...prev, hpBonus: p.hpBonus }));
@@ -2225,10 +2225,12 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         }
       });
 
+      // Accumulate into hpPenalty (physics-side) so syncFromPhysics always includes it
+      p.hpPenalty = Math.min(200, (p.hpPenalty ?? 0) + hpLoss);
+
       setState(prev => ({
         ...prev,
         parasites: [],
-        hp: Math.max(1, prev.hp - hpLoss),
         parasiteSurgeryPhase: 2,
       }));
 
@@ -2504,10 +2506,11 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     const holeId = ++bulletHoleIdRef.current;
     const holeRadius = 4 + def.shockwaveRange * 0.06;
 
+    // Accumulate into hpPenalty (physics-side) so syncFromPhysics always includes it
+    p.hpPenalty = Math.min(200, (p.hpPenalty ?? 0) + hpLoss);
+
     setState(prev => ({
       ...prev,
-      hp: Math.max(0, prev.hp - hpLoss),
-      pleasure: Math.min(100, prev.pleasure + pleasureGain),
       bulletHoles: [
         ...prev.bulletHoles,
         { id: holeId, physX, physY, radius: holeRadius },
