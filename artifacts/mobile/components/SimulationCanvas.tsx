@@ -51,6 +51,30 @@ function segmentColor(health: number, pain: number, pressure: number, ruptured: 
   return `rgb(${r},${g},${b})`;
 }
 
+// Build a merged path of short perpendicular cross-strokes at each intestine node —
+// simulates plicae circulares (small) or haustra (large) folds without extra SVG elements.
+// `halfLen` is the half-length of each stroke (tip to center). `step` skips nodes for sparser folds.
+function buildFoldPath(
+  nodes: Array<{ x: number; y: number }>,
+  halfLen: number,
+  step = 1,
+): string {
+  const parts: string[] = [];
+  for (let i = step; i < nodes.length - step; i += step) {
+    const prev = nodes[i - step];
+    const next = nodes[i + step];
+    const dx = next.x - prev.x;
+    const dy = next.y - prev.y;
+    const len = Math.sqrt(dx * dx + dy * dy);
+    if (len < 0.5) continue;
+    const px = (-dy / len) * halfLen;
+    const py = (dx / len) * halfLen;
+    const x = nodes[i].x, y = nodes[i].y;
+    parts.push(`M${(x + px) | 0},${(y + py) | 0}L${(x - px) | 0},${(y - py) | 0}`);
+  }
+  return parts.join(' ');
+}
+
 // Render intestine as smooth bezier segments with per-segment coloring.
 // Each segment is drawn as a quadratic bezier from mid(prev,curr) → Q(curr) → mid(curr,next),
 // giving smooth curved corners while preserving per-segment health/pain colors.
@@ -1197,6 +1221,17 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
     }
   }
 
+  // === FOLD TEXTURE PATHS ===
+  // Pre-compute perpendicular cross-strokes at each node (plicae circulares / haustra).
+  // All strokes merged into 1 Path per intestine → zero extra SVG element overhead.
+  // Computed outside the isMobile branch so folds render on both platforms.
+  const smallFoldPath = isInternal
+    ? buildFoldPath(renderSmallNodes, SMALL_RADIUS * 0.85, 1)
+    : '';
+  const largeFoldPath = isInternal
+    ? buildFoldPath(renderLargeNodes, LARGE_RADIUS * 0.75, 1)
+    : '';
+
   return (
     <Animated.View
       style={[styles.container, { transform: [{ translateX: shakeAnim }] }]}
@@ -1303,8 +1338,10 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
                   return <Path key={`lg-${i}`} d={d} stroke={col} strokeWidth={w} fill="none" strokeLinecap="round" strokeLinejoin="round" />;
                 })
             }
-            {/* Single merged highlight path — replaces 31 individual highlight Paths */}
-            {largeCombinedHighlight ? <Path d={largeCombinedHighlight} stroke="rgba(255,200,175,0.22)" strokeWidth={LARGE_RADIUS * 0.65} fill="none" strokeLinecap="round" /> : null}
+            {/* Haustra fold marks — 1 merged Path of perpendicular cross-strokes at each large node */}
+            {largeFoldPath ? <Path d={largeFoldPath} stroke="rgba(165,80,55,0.50)" strokeWidth={2.2} fill="none" strokeLinecap="round" /> : null}
+            {/* Highlight with dash array — gaps between dashes simulate the creases between haustra */}
+            {largeCombinedHighlight ? <Path d={largeCombinedHighlight} stroke="rgba(255,210,185,0.28)" strokeWidth={LARGE_RADIUS * 0.65} strokeDasharray="9 11" fill="none" strokeLinecap="round" /> : null}
 
             {/* Ileocecal junction — visible tube connecting terminal ileum to cecum */}
             {renderSmallNodes.length > 0 && renderLargeNodes.length > 0 && (() => {
@@ -1398,8 +1435,10 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
                   return <Path key={`sm-${i}`} d={d} stroke={col} strokeWidth={w} fill="none" strokeLinecap="round" strokeLinejoin="round" />;
                 })
             }
-            {/* Single merged highlight path — replaces 65 individual highlight Paths */}
-            {smallCombinedHighlight ? <Path d={smallCombinedHighlight} stroke="rgba(255,220,200,0.18)" strokeWidth={SMALL_RADIUS * 0.7} fill="none" strokeLinecap="round" /> : null}
+            {/* Plicae circulares fold marks — 1 merged Path of perpendicular cross-strokes at each small node */}
+            {smallFoldPath ? <Path d={smallFoldPath} stroke="rgba(155,70,50,0.42)" strokeWidth={1.5} fill="none" strokeLinecap="round" /> : null}
+            {/* Highlight with dash array — gaps between dashes simulate the creases between circular folds */}
+            {smallCombinedHighlight ? <Path d={smallCombinedHighlight} stroke="rgba(255,228,210,0.22)" strokeWidth={SMALL_RADIUS * 0.7} strokeDasharray="5 8" fill="none" strokeLinecap="round" /> : null}
 
             {/* Rupture burst markers */}
             {renderSmallSegs.map((seg, i) => {
