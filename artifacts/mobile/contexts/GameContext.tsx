@@ -1,6 +1,7 @@
 import React, {
   createContext, useContext, useRef, useState, useCallback, useEffect,
 } from 'react';
+import { Platform } from 'react-native';
 import { createInitialPhysicsState } from '../engine/intestineInit';
 import type { PhysicsState } from '../engine/physics';
 import { applyBellyStrikePhysics as applyBellyStrikePhysicsFunc } from '../engine/physics';
@@ -402,7 +403,8 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     peristalsisWaveSpeed: PERISTALSIS_WAVE_SPEED_DEFAULT,
     breathAmplitude: BREATH_AMPLITUDE_DEFAULT,
     expansionScale: EXPANSION_SCALE_DEFAULT,
-    debugMode: false, showCollisionBoxes: false, physicsFps: PHYSICS_FPS,
+    debugMode: false, showCollisionBoxes: false,
+    physicsFps: Platform.OS !== 'web' ? 20 : PHYSICS_FPS,
     renderSmallNodes: physicsRef.current.smallNodes.map(n => ({ x: n.x, y: n.y })),
     renderLargeNodes: physicsRef.current.largeNodes.map(n => ({ x: n.x, y: n.y })),
     renderSmallSegs: physicsRef.current.smallSegs.map(s => ({ ...s })),

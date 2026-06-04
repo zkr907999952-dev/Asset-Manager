@@ -140,7 +140,10 @@ export function SimulationScreen({ onMenuPress }: Props) {
           fpsLastMsRef.current = now;
         }
 
-        if (frameCount.current % 2 === 0) {
+        // On mobile (Hermes, no JIT): sync every 3 physics steps to reduce React
+        // reconciliation overhead. On web (V8): keep every 2 steps for smoother visuals.
+        const syncEvery = Platform.OS === 'web' ? 2 : 3;
+        if (frameCount.current % syncEvery === 0) {
           syncFromPhysics();
         }
         if (frameCount.current % Math.max(1, fps) === 0) {
