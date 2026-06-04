@@ -150,6 +150,30 @@ uri = "file://artifacts/mobile/assets/images/bullet_hole_b3.png"
 type = "image"
 title = "wound only no skin bg b3"
 
+[[generated]]
+id = "dt9AzGUPzHvfqj62ggaZG"
+uri = "file://artifacts/mobile/assets/images/bullet_hole_c1.png"
+type = "image"
+title = "wound with circular hole center c1"
+
+[[generated]]
+id = "K2dgeSsIO6bqtcPUiABNM"
+uri = "file://artifacts/mobile/assets/images/bullet_hole_c2.png"
+type = "image"
+title = "wound with circular hole center c2"
+
+[[generated]]
+id = "nMxrFmZsli3GyJPQ-vhXV"
+uri = "file://artifacts/mobile/assets/images/bullet_hole_c1_white.png"
+type = "image"
+title = "wound circular hole white bg c1"
+
+[[generated]]
+id = "6HoeQC6F25NAzTvvHaMrI"
+uri = "file://artifacts/mobile/assets/images/bullet_hole_c2_white.png"
+type = "image"
+title = "wound circular hole white bg c2"
+
 [[outputs]]
 id = "EvFH6bgGV0eFpaLTc_px6"
 uri = "file://artifacts/mobile/assets/images/icon.png"
@@ -185,3 +209,15 @@ id = "9HRtzAIBKScDHb17UTWJH"
 uri = "file://attached_assets/generated_images/strike_fist_anim_v2.png"
 type = "image"
 title = "拳头动画素材（俧视下击）"
+
+[[outputs]]
+id = "gFDz-f_a2pcr4MG5FCqh4"
+uri = "file://artifacts/mobile/assets/images/bullet_hole_c1_white.png"
+type = "image"
+title = "弹孔 C1 — 宽瓣+深腔（白底）"
+
+[[outputs]]
+id = "XF8u-C-k2-bZQ9HVSmhsP"
+uri = "file://artifacts/mobile/assets/images/bullet_hole_c2_white.png"
+type = "image"
+title = "弹孔 C2 — 尖锐星形+圆孔（白底）"
