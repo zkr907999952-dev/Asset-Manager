@@ -222,6 +222,24 @@ uri = "file://attached_assets/generated_images/intestines_preview.png"
 type = "image"
 title = "female abdominal anatomy intestines uterus"
 
+[[generated]]
+id = "oc4m6N5JedOMupdGaFL5E"
+uri = "file://attached_assets/generated_images/intestines_v1.png"
+type = "image"
+title = "hourglass waist female anatomy v1"
+
+[[generated]]
+id = "B4ELMu9N_VMfhqlYXlBjI"
+uri = "file://attached_assets/generated_images/intestines_v2.png"
+type = "image"
+title = "hourglass waist female anatomy v2"
+
+[[generated]]
+id = "Y42mjrrFu6Q6G5hnnDf7M"
+uri = "file://attached_assets/generated_images/intestines_v3.png"
+type = "image"
+title = "hourglass waist female anatomy v3"
+
 [[outputs]]
 id = "EvFH6bgGV0eFpaLTc_px6"
 uri = "file://artifacts/mobile/assets/images/icon.png"
@@ -317,3 +335,21 @@ id = "bQ73kmbD7g2_bVkwzt3ZE"
 uri = "file://attached_assets/generated_images/intestines_preview.png"
 type = "image"
 title = "女性腹腔透视图预览"
+
+[[outputs]]
+id = "6MQ9Tm-nXTLzpjl4BAtVW"
+uri = "file://attached_assets/generated_images/intestines_v1.png"
+type = "image"
+title = "变体 1"
+
+[[outputs]]
+id = "KnL56N8iNrXM3AEyZfQt5"
+uri = "file://attached_assets/generated_images/intestines_v2.png"
+type = "image"
+title = "变体 2"
+
+[[outputs]]
+id = "-4LDKaCuEzCCq1wxDDGgO"
+uri = "file://attached_assets/generated_images/intestines_v3.png"
+type = "image"
+title = "变体 3"
