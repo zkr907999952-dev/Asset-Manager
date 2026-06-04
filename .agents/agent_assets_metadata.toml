@@ -174,6 +174,30 @@ uri = "file://artifacts/mobile/assets/images/bullet_hole_c2_white.png"
 type = "image"
 title = "wound circular hole white bg c2"
 
+[[generated]]
+id = "ys4obq-Bat7kyhMkY4d56"
+uri = "file://artifacts/mobile/assets/images/weapon_22_pistol.png"
+type = "image"
+title = "silenced 22 pistol icon"
+
+[[generated]]
+id = "hR9mWUyhA7Kr2BQO7nJtg"
+uri = "file://artifacts/mobile/assets/images/weapon_9mm_pistol.png"
+type = "image"
+title = "M9 9mm pistol icon"
+
+[[generated]]
+id = "GwAZ6MJI3hqyqFyfrtBat"
+uri = "file://artifacts/mobile/assets/images/weapon_762_rifle.png"
+type = "image"
+title = "98K bolt action rifle icon"
+
+[[generated]]
+id = "r99--iHcfrK8miuab4bRi"
+uri = "file://artifacts/mobile/assets/images/weapon_127_barrett.png"
+type = "image"
+title = "Barrett 127 sniper rifle icon"
+
 [[outputs]]
 id = "EvFH6bgGV0eFpaLTc_px6"
 uri = "file://artifacts/mobile/assets/images/icon.png"
@@ -221,3 +245,27 @@ id = "XF8u-C-k2-bZQ9HVSmhsP"
 uri = "file://artifacts/mobile/assets/images/bullet_hole_c2_white.png"
 type = "image"
 title = "弹孔 C2 — 尖锐星形+圆孔（白底）"
+
+[[outputs]]
+id = "imaFwKvqDL5tc-1WU50ii"
+uri = "file://artifacts/mobile/assets/images/weapon_22_pistol.png"
+type = "image"
+title = ".22 消音小手枪"
+
+[[outputs]]
+id = "ZvCQUiaR_rlCQ1oY0X-01"
+uri = "file://artifacts/mobile/assets/images/weapon_9mm_pistol.png"
+type = "image"
+title = "9mm M9手枪"
+
+[[outputs]]
+id = "UNVzewIAtazCzsxxxcI53"
+uri = "file://artifacts/mobile/assets/images/weapon_762_rifle.png"
+type = "image"
+title = "7.62 98K栓动步枪"
+
+[[outputs]]
+id = "WzCCOpkNGyIhOnKYFBWch"
+uri = "file://artifacts/mobile/assets/images/weapon_127_barrett.png"
+type = "image"
+title = "12.7 巴雷特反器材狙击枪"
