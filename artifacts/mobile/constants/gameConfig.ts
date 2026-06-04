@@ -5,6 +5,14 @@ export const CAVITY_CY = 248;
 export const CAVITY_RX = 148;
 export const CAVITY_RY = 175;
 
+// Belly hit detection zone (external view, physics coordinate space)
+// Weapons only count as a hit when the aim point lands inside this ellipse.
+// Flash and screen shake still fire for any shot regardless.
+export const BELLY_HIT_CX = 170;  // horizontal center (= CAVITY_CX)
+export const BELLY_HIT_CY = 248;  // vertical center   (= CAVITY_CY / navel)
+export const BELLY_HIT_RX = 118;  // horizontal radius — matches visible belly width
+export const BELLY_HIT_RY = 92;   // vertical radius   — matches belly height (ribs→hips)
+
 export const N_SMALL = 66;
 export const N_LARGE = 32;
 export const SMALL_SEG_LENGTH = 20;

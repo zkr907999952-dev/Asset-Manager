@@ -1,10 +1,14 @@
 import React from 'react';
 import { View, Image, StyleSheet } from 'react-native';
-import Svg, { Ellipse, Circle, Line, Path, G } from 'react-native-svg';
+import Svg, { Ellipse, Circle, Line, Path, G, Image as SvgImage } from 'react-native-svg';
 import { useGame } from '@/contexts/GameContext';
 import { useBreathAnimation } from '@/hooks/useBreathAnimation';
+import { LETHAL_WEAPONS, CANVAS_W, CANVAS_H } from '@/constants/gameConfig';
 
 const CHARACTER_IMG = require('@/assets/images/character.png');
+const BULLET_HOLE_SMALL = require('@/assets/images/bullet_hole_small.png');
+const BULLET_HOLE_LARGE = require('@/assets/images/bullet_hole_large.png');
+const LARGE_CALIBER_SET = new Set<string>([LETHAL_WEAPONS.RIFLE_762, LETHAL_WEAPONS.SNIPER_127]);
 
 interface Props {
   width: number;
@@ -124,6 +128,27 @@ export function CharacterView({ width, height }: Props) {
               strokeLinecap="round"
             />
           )}
+
+          {/* Bullet holes — synced from simulation (physics → CharacterView coords) */}
+          {state.bulletHoles && state.bulletHoles.map((hole) => {
+            const isLarge = hole.weaponId && LARGE_CALIBER_SET.has(hole.weaponId);
+            const holeImg = isLarge ? BULLET_HOLE_LARGE : BULLET_HOLE_SMALL;
+            const cvX = hole.physX * (width / CANVAS_W);
+            const cvY = hole.physY * (height / CANVAS_H);
+            const size = hole.radius * (isLarge ? 11 : 9) * (width / CANVAS_W);
+            const half = size / 2;
+            return (
+              <SvgImage
+                key={`ch-bh-${hole.id}`}
+                x={cvX - half}
+                y={cvY - half}
+                width={size}
+                height={size}
+                href={holeImg}
+                preserveAspectRatio="xMidYMid meet"
+              />
+            );
+          })}
         </G>
 
         {/* Cheek blush */}

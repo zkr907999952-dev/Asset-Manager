@@ -26,6 +26,7 @@ import {
   TOOLS, N_SMALL, N_LARGE,
   BELLY_STRIKE_TOOL_LIST, type BellyStrikeToolId,
   LETHAL_WEAPON_LIST, LETHAL_WEAPONS, type LethalWeaponId,
+  BELLY_HIT_CX, BELLY_HIT_CY, BELLY_HIT_RX, BELLY_HIT_RY,
 } from '../constants/gameConfig';
 import { buildSmoothPath } from '../engine/physics';
 import { useGame } from '../contexts/GameContext';
@@ -890,9 +891,15 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
         setGunAimOverlay(null);
         const def = LETHAL_WEAPON_LIST.find(w => w.id === s.selectedWeapon);
         if (def && !def.reserved && agsh) {
-          agsh(aimPhysX, aimPhysY);
+          // Hit zone check — damage/physics only inside the belly ellipse
+          const _dx = (aimPhysX - BELLY_HIT_CX) / BELLY_HIT_RX;
+          const _dy = (aimPhysY - BELLY_HIT_CY) / BELLY_HIT_RY;
+          const _inZone = _dx * _dx + _dy * _dy <= 1;
+          if (_inZone) {
+            agsh(aimPhysX, aimPhysY);
+          }
 
-          // Flash intensity based on weapon power
+          // Flash intensity based on weapon power (always fires)
           const fi = def.flashIntensity;
           const flashR = Math.round(255);
           const flashG = Math.round(255 * (1 - fi * 0.7));
@@ -1378,6 +1385,20 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
                 rx={14 + i * 3} ry={8 + i * 2}
                 fill="rgba(140,20,20,0.55)" />
             ))}
+
+            {/* Debug: belly hit zone wireframe (blue dashed ellipse) */}
+            {state.debugMode && (
+              <Ellipse
+                cx={BELLY_HIT_CX}
+                cy={BELLY_HIT_CY}
+                rx={BELLY_HIT_RX}
+                ry={BELLY_HIT_RY}
+                fill="rgba(60,120,255,0.06)"
+                stroke="rgba(60,140,255,0.85)"
+                strokeWidth={1.5}
+                strokeDasharray="8 4"
+              />
+            )}
           </G>
         )}
 
