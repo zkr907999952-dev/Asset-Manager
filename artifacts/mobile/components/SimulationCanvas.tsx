@@ -51,41 +51,19 @@ function segmentColor(health: number, pain: number, pressure: number, ruptured: 
   return `rgb(${r},${g},${b})`;
 }
 
-// Build a merged path of curved fold arcs at each intestine node.
-// Each arc is a quadratic bezier spanning the tube width, with its control point
-// offset alternately forward/backward along the tube tangent — simulating plicae
-// circulares (small intestine) or haustra folds (large intestine) that curve naturally
-// with the tube shape rather than being rigid straight lines.
-// `halfLen`   — half the arc span (edge to center, should be ≤ tube radius)
-// `curveFactor` — how much the arc bows: 0=straight, 0.5=moderate, 1.0=strong C-curve
-// `step`      — sample every Nth node (1=dense, 2=sparse)
-function buildCurvedFoldPath(
-  nodes: Array<{ x: number; y: number }>,
-  halfLen: number,
-  curveFactor: number,
-  step = 1,
-): string {
+// Recreates the original per-segment outline junction effect in a single SVG element.
+// In the original rendering, each segment had its own outline path (strokeWidth = fill + 3.5px).
+// Adjacent segments' outlines overlapped at every node midpoint, creating a subtly thicker
+// "disc" at each junction — the natural segment boundary visible in the original.
+// Here: each node becomes an M x,y L x+1,y command; with strokeLinecap="round" and
+// strokeWidth = tube_outline_width, this renders as a filled circle at that node.
+// All nodes merged into ONE Path string → 2 SVG elements replaces 192+ segment paths.
+function buildNodeDotPath(nodes: Array<{ x: number; y: number }>, step = 1): string {
   const parts: string[] = [];
-  for (let i = step; i < nodes.length - step; i += step) {
-    const prev = nodes[i - step];
-    const next = nodes[i + step];
-    const dx = next.x - prev.x;
-    const dy = next.y - prev.y;
-    const len = Math.sqrt(dx * dx + dy * dy);
-    if (len < 0.5) continue;
-    const tx = dx / len, ty = dy / len;     // unit tangent
-    const perp_x = -ty, perp_y = tx;        // unit perpendicular (across tube)
-
-    const x = nodes[i].x, y = nodes[i].y;
-    // Arc endpoints span the tube width (perpendicular to travel)
-    const x1 = x + perp_x * halfLen, y1 = y + perp_y * halfLen;
-    const x2 = x - perp_x * halfLen, y2 = y - perp_y * halfLen;
-    // Control point alternates forward/backward along the tangent — gives natural
-    // variation so adjacent folds don't all bow the same direction.
-    const sign = (Math.floor(i / step) % 2 === 0) ? 1 : -1;
-    const cpx = x + tx * halfLen * curveFactor * sign;
-    const cpy = y + ty * halfLen * curveFactor * sign;
-    parts.push(`M${x1 | 0},${y1 | 0} Q${cpx | 0},${cpy | 0} ${x2 | 0},${y2 | 0}`);
+  for (let i = 0; i < nodes.length; i += step) {
+    const x = nodes[i].x | 0, y = nodes[i].y | 0;
+    // L x+1 ensures the zero-length segment renders as a round dot on all platforms
+    parts.push(`M${x},${y}L${x + 1},${y}`);
   }
   return parts.join(' ');
 }
@@ -1236,20 +1214,17 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
     }
   }
 
-  // === FOLD TEXTURE PATHS ===
-  // Curved arc folds: each mark is a quadratic bezier that bows with the tube direction,
-  // creating natural plicae circulares / haustra instead of mechanical straight lines.
-  // All marks merged into 1 Path per intestine type → total 2 extra SVG elements.
-  const smallFoldPath = isInternal
-    ? buildCurvedFoldPath(renderSmallNodes, SMALL_RADIUS * 0.92, 0.52, 2)
+  // === NODE DOT JUNCTION PATHS ===
+  // Recreates the original per-segment outline junction effect efficiently:
+  // the original drew each segment's outline (strokeWidth = fill + 3.5px) separately,
+  // causing adjacent outlines to naturally overlap at each node and produce a subtle
+  // "disc" boundary. Here, one M…L per node in a single merged Path achieves the
+  // same disc-at-junction visual with strokeLinecap="round" — 2 SVG elements total.
+  const smallNodeDotPath = isInternal
+    ? buildNodeDotPath(renderSmallNodes, 1)
     : '';
-  const largeFoldPath = isInternal
-    ? buildCurvedFoldPath(renderLargeNodes, LARGE_RADIUS * 0.82, 0.70, 2)
-    : '';
-  // Large intestine haustra outline: a single continuous path with strokeDasharray
-  // produces the "sausage-chain" bumpy surface without any per-segment elements.
-  const largeHaustraOutline = isInternal && renderLargeNodes.length > 1
-    ? buildSmoothPath(renderLargeNodes)
+  const largeNodeDotPath = isInternal
+    ? buildNodeDotPath(renderLargeNodes, 1)
     : '';
 
   return (
@@ -1344,12 +1319,13 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
               fill="none" stroke="#3a1010" strokeWidth={4} />
 
             {/* ===== LARGE INTESTINE — smooth bezier segments ===== */}
-            {/* Layer 1: Haustra outline — continuous path with strokeDasharray creates the
-                sausage-chain bumpy profile: dashes = haustrum bulge, gaps = taenia pinch. */}
-            {largeHaustraOutline ? (
-              <Path d={largeHaustraOutline}
-                stroke="rgba(200,110,80,0.82)" strokeWidth={LARGE_RADIUS * 2 + 10}
-                strokeDasharray="28 9" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+            {/* Layer 1: Node junction discs — one per-node dot that recreates the per-segment
+                outline overlap effect: adjacent segment outlines met at every node midpoint,
+                creating a slightly thicker "haustrum boundary" disc at each junction. */}
+            {largeNodeDotPath ? (
+              <Path d={largeNodeDotPath}
+                stroke="rgba(185,100,72,0.70)" strokeWidth={LARGE_RADIUS * 2 + 4}
+                fill="none" strokeLinecap="round" />
             ) : null}
             {/* Layer 2: Fill — Mobile: 4 merged chunk paths. Web: 31 per-segment paths. */}
             {isMobile
@@ -1365,10 +1341,8 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
                   return <Path key={`lg-${i}`} d={d} stroke={col} strokeWidth={w} fill="none" strokeLinecap="round" strokeLinejoin="round" />;
                 })
             }
-            {/* Layer 3: Haustra curved fold marks — bezier arcs that bow with the tube direction */}
-            {largeFoldPath ? <Path d={largeFoldPath} stroke="rgba(145,65,45,0.55)" strokeWidth={2.5} fill="none" strokeLinecap="round" /> : null}
-            {/* Layer 4: Dashed specular highlight — gaps between dashes create inter-fold shadow */}
-            {largeCombinedHighlight ? <Path d={largeCombinedHighlight} stroke="rgba(255,215,190,0.32)" strokeWidth={LARGE_RADIUS * 0.6} strokeDasharray="10 12" fill="none" strokeLinecap="round" /> : null}
+            {/* Layer 3: Specular highlight (solid, not dashed) — keeps large intestine surface clean */}
+            {largeCombinedHighlight ? <Path d={largeCombinedHighlight} stroke="rgba(255,215,190,0.25)" strokeWidth={LARGE_RADIUS * 0.6} fill="none" strokeLinecap="round" /> : null}
 
             {/* Ileocecal junction — visible tube connecting terminal ileum to cecum */}
             {renderSmallNodes.length > 0 && renderLargeNodes.length > 0 && (() => {
@@ -1462,10 +1436,16 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
                   return <Path key={`sm-${i}`} d={d} stroke={col} strokeWidth={w} fill="none" strokeLinecap="round" strokeLinejoin="round" />;
                 })
             }
-            {/* Plicae circulares: curved bezier arcs bowing alternately with tube direction */}
-            {smallFoldPath ? <Path d={smallFoldPath} stroke="rgba(148,65,45,0.48)" strokeWidth={1.4} fill="none" strokeLinecap="round" /> : null}
-            {/* Dashed specular highlight — alternating bright spots simulate light between each fold */}
-            {smallCombinedHighlight ? <Path d={smallCombinedHighlight} stroke="rgba(255,228,210,0.24)" strokeWidth={SMALL_RADIUS * 0.7} strokeDasharray="4 7" fill="none" strokeLinecap="round" /> : null}
+            {/* Node junction discs — one filled dot per node, same width as outline casing.
+                Recreates the original per-segment outline overlap: adjacent segment outlines
+                met and overlapped at each node creating a subtle disc. All nodes → 1 Path. */}
+            {smallNodeDotPath ? (
+              <Path d={smallNodeDotPath}
+                stroke="rgba(165,88,65,0.62)" strokeWidth={SMALL_RADIUS * 2 + 3.5}
+                fill="none" strokeLinecap="round" />
+            ) : null}
+            {/* Specular highlight — thin bright line for tube surface sheen */}
+            {smallCombinedHighlight ? <Path d={smallCombinedHighlight} stroke="rgba(255,228,210,0.20)" strokeWidth={SMALL_RADIUS * 0.7} fill="none" strokeLinecap="round" /> : null}
 
             {/* Rupture burst markers */}
             {renderSmallSegs.map((seg, i) => {
