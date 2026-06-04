@@ -204,6 +204,18 @@ uri = "file://attached_assets/generated_images/app_icon_preview.png"
 type = "image"
 title = "game icon demon girl midriff"
 
+[[generated]]
+id = "kCqOSoZRiOsO9tAog3sAX"
+uri = "file://attached_assets/generated_images/app_icon_v2.png"
+type = "image"
+title = "demon girl navel focal point icon v2"
+
+[[generated]]
+id = "nsVE3DPi0CaeQRdNZJ5c1"
+uri = "file://attached_assets/generated_images/app_icon_v3.png"
+type = "image"
+title = "game icon waist hero element v3"
+
 [[outputs]]
 id = "EvFH6bgGV0eFpaLTc_px6"
 uri = "file://artifacts/mobile/assets/images/icon.png"
@@ -281,3 +293,15 @@ id = "j1ZnM8q5McKMVyrwF9dzY"
 uri = "file://attached_assets/generated_images/app_icon_preview.png"
 type = "image"
 title = "新App图标预览"
+
+[[outputs]]
+id = "JFYaNY3Yvj2e9vTJwE7SQ"
+uri = "file://attached_assets/generated_images/app_icon_v2.png"
+type = "image"
+title = "变体 A"
+
+[[outputs]]
+id = "L4v4hF_m8Tc8xZuTPqADo"
+uri = "file://attached_assets/generated_images/app_icon_v3.png"
+type = "image"
+title = "变体 B"
