@@ -51,12 +51,18 @@ function segmentColor(health: number, pain: number, pressure: number, ruptured: 
   return `rgb(${r},${g},${b})`;
 }
 
-// Build a merged path of short perpendicular cross-strokes at each intestine node —
-// simulates plicae circulares (small) or haustra (large) folds without extra SVG elements.
-// `halfLen` is the half-length of each stroke (tip to center). `step` skips nodes for sparser folds.
-function buildFoldPath(
+// Build a merged path of curved fold arcs at each intestine node.
+// Each arc is a quadratic bezier spanning the tube width, with its control point
+// offset alternately forward/backward along the tube tangent — simulating plicae
+// circulares (small intestine) or haustra folds (large intestine) that curve naturally
+// with the tube shape rather than being rigid straight lines.
+// `halfLen`   — half the arc span (edge to center, should be ≤ tube radius)
+// `curveFactor` — how much the arc bows: 0=straight, 0.5=moderate, 1.0=strong C-curve
+// `step`      — sample every Nth node (1=dense, 2=sparse)
+function buildCurvedFoldPath(
   nodes: Array<{ x: number; y: number }>,
   halfLen: number,
+  curveFactor: number,
   step = 1,
 ): string {
   const parts: string[] = [];
@@ -67,10 +73,19 @@ function buildFoldPath(
     const dy = next.y - prev.y;
     const len = Math.sqrt(dx * dx + dy * dy);
     if (len < 0.5) continue;
-    const px = (-dy / len) * halfLen;
-    const py = (dx / len) * halfLen;
+    const tx = dx / len, ty = dy / len;     // unit tangent
+    const perp_x = -ty, perp_y = tx;        // unit perpendicular (across tube)
+
     const x = nodes[i].x, y = nodes[i].y;
-    parts.push(`M${(x + px) | 0},${(y + py) | 0}L${(x - px) | 0},${(y - py) | 0}`);
+    // Arc endpoints span the tube width (perpendicular to travel)
+    const x1 = x + perp_x * halfLen, y1 = y + perp_y * halfLen;
+    const x2 = x - perp_x * halfLen, y2 = y - perp_y * halfLen;
+    // Control point alternates forward/backward along the tangent — gives natural
+    // variation so adjacent folds don't all bow the same direction.
+    const sign = (Math.floor(i / step) % 2 === 0) ? 1 : -1;
+    const cpx = x + tx * halfLen * curveFactor * sign;
+    const cpy = y + ty * halfLen * curveFactor * sign;
+    parts.push(`M${x1 | 0},${y1 | 0} Q${cpx | 0},${cpy | 0} ${x2 | 0},${y2 | 0}`);
   }
   return parts.join(' ');
 }
@@ -1222,14 +1237,19 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
   }
 
   // === FOLD TEXTURE PATHS ===
-  // Pre-compute perpendicular cross-strokes at each node (plicae circulares / haustra).
-  // All strokes merged into 1 Path per intestine → zero extra SVG element overhead.
-  // Computed outside the isMobile branch so folds render on both platforms.
+  // Curved arc folds: each mark is a quadratic bezier that bows with the tube direction,
+  // creating natural plicae circulares / haustra instead of mechanical straight lines.
+  // All marks merged into 1 Path per intestine type → total 2 extra SVG elements.
   const smallFoldPath = isInternal
-    ? buildFoldPath(renderSmallNodes, SMALL_RADIUS * 0.85, 1)
+    ? buildCurvedFoldPath(renderSmallNodes, SMALL_RADIUS * 0.92, 0.52, 2)
     : '';
   const largeFoldPath = isInternal
-    ? buildFoldPath(renderLargeNodes, LARGE_RADIUS * 0.75, 1)
+    ? buildCurvedFoldPath(renderLargeNodes, LARGE_RADIUS * 0.82, 0.70, 2)
+    : '';
+  // Large intestine haustra outline: a single continuous path with strokeDasharray
+  // produces the "sausage-chain" bumpy surface without any per-segment elements.
+  const largeHaustraOutline = isInternal && renderLargeNodes.length > 1
+    ? buildSmoothPath(renderLargeNodes)
     : '';
 
   return (
@@ -1324,7 +1344,14 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
               fill="none" stroke="#3a1010" strokeWidth={4} />
 
             {/* ===== LARGE INTESTINE — smooth bezier segments ===== */}
-            {/* Mobile: 4 merged chunk paths. Web: 31 per-segment paths with full coloring. */}
+            {/* Layer 1: Haustra outline — continuous path with strokeDasharray creates the
+                sausage-chain bumpy profile: dashes = haustrum bulge, gaps = taenia pinch. */}
+            {largeHaustraOutline ? (
+              <Path d={largeHaustraOutline}
+                stroke="rgba(200,110,80,0.82)" strokeWidth={LARGE_RADIUS * 2 + 10}
+                strokeDasharray="28 9" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+            ) : null}
+            {/* Layer 2: Fill — Mobile: 4 merged chunk paths. Web: 31 per-segment paths. */}
             {isMobile
               ? largeChunkPaths.map((ch, c) => (
                   <Path key={`lgc-${c}`} d={ch.d} stroke={ch.color} strokeWidth={ch.width} fill="none" strokeLinecap="round" strokeLinejoin="round" />
@@ -1338,10 +1365,10 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
                   return <Path key={`lg-${i}`} d={d} stroke={col} strokeWidth={w} fill="none" strokeLinecap="round" strokeLinejoin="round" />;
                 })
             }
-            {/* Haustra fold marks — 1 merged Path of perpendicular cross-strokes at each large node */}
-            {largeFoldPath ? <Path d={largeFoldPath} stroke="rgba(165,80,55,0.50)" strokeWidth={2.2} fill="none" strokeLinecap="round" /> : null}
-            {/* Highlight with dash array — gaps between dashes simulate the creases between haustra */}
-            {largeCombinedHighlight ? <Path d={largeCombinedHighlight} stroke="rgba(255,210,185,0.28)" strokeWidth={LARGE_RADIUS * 0.65} strokeDasharray="9 11" fill="none" strokeLinecap="round" /> : null}
+            {/* Layer 3: Haustra curved fold marks — bezier arcs that bow with the tube direction */}
+            {largeFoldPath ? <Path d={largeFoldPath} stroke="rgba(145,65,45,0.55)" strokeWidth={2.5} fill="none" strokeLinecap="round" /> : null}
+            {/* Layer 4: Dashed specular highlight — gaps between dashes create inter-fold shadow */}
+            {largeCombinedHighlight ? <Path d={largeCombinedHighlight} stroke="rgba(255,215,190,0.32)" strokeWidth={LARGE_RADIUS * 0.6} strokeDasharray="10 12" fill="none" strokeLinecap="round" /> : null}
 
             {/* Ileocecal junction — visible tube connecting terminal ileum to cecum */}
             {renderSmallNodes.length > 0 && renderLargeNodes.length > 0 && (() => {
@@ -1435,10 +1462,10 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
                   return <Path key={`sm-${i}`} d={d} stroke={col} strokeWidth={w} fill="none" strokeLinecap="round" strokeLinejoin="round" />;
                 })
             }
-            {/* Plicae circulares fold marks — 1 merged Path of perpendicular cross-strokes at each small node */}
-            {smallFoldPath ? <Path d={smallFoldPath} stroke="rgba(155,70,50,0.42)" strokeWidth={1.5} fill="none" strokeLinecap="round" /> : null}
-            {/* Highlight with dash array — gaps between dashes simulate the creases between circular folds */}
-            {smallCombinedHighlight ? <Path d={smallCombinedHighlight} stroke="rgba(255,228,210,0.22)" strokeWidth={SMALL_RADIUS * 0.7} strokeDasharray="5 8" fill="none" strokeLinecap="round" /> : null}
+            {/* Plicae circulares: curved bezier arcs bowing alternately with tube direction */}
+            {smallFoldPath ? <Path d={smallFoldPath} stroke="rgba(148,65,45,0.48)" strokeWidth={1.4} fill="none" strokeLinecap="round" /> : null}
+            {/* Dashed specular highlight — alternating bright spots simulate light between each fold */}
+            {smallCombinedHighlight ? <Path d={smallCombinedHighlight} stroke="rgba(255,228,210,0.24)" strokeWidth={SMALL_RADIUS * 0.7} strokeDasharray="4 7" fill="none" strokeLinecap="round" /> : null}
 
             {/* Rupture burst markers */}
             {renderSmallSegs.map((seg, i) => {
