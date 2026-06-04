@@ -96,7 +96,7 @@ export function LethalWeaponPanel() {
         return (
           <View style={[styles.hintBox, { borderColor: `${colors.border}44`, backgroundColor: 'rgba(232,64,64,0.05)' }]}>
             <Text style={[styles.hintText, { color: '#e84040aa' }]}>
-              {'按住并拖拽定位瞄准位置\n瞄准点位于拖拽点上方\n松开即触发开火'}
+              {'按住并拖拽定位瞄准位置\n瞄准点偏移可在设置中调整\n松开即触发开火'}
             </Text>
           </View>
         );

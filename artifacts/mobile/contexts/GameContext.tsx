@@ -145,6 +145,7 @@ export interface GameUIState {
   debugMode: boolean;
   showCollisionBoxes: boolean;
   physicsFps: number;
+  touchOffsetY: number;
   renderSmallNodes: { x: number; y: number }[];
   renderLargeNodes: { x: number; y: number }[];
   renderSmallSegs: RenderSegment[];
@@ -286,6 +287,7 @@ interface GameContextType {
   performResectionSurgery: () => void;
   setResectionSelection: (intestine: 'small' | 'large', startSeg: number, endSeg: number) => void;
   setMaxResectionSegments: (v: number) => void;
+  setTouchOffsetY: (v: number) => void;
   setBellyStrikeTool: (tool: BellyStrikeToolId | null) => void;
   setBellyStrikeForce: (v: number) => void;
   setBellyStrikeRange: (v: number) => void;
@@ -470,6 +472,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     bellyStrikeRange: 50,
     bellyStrikeImpulseScale: 100,
     bellyStrikeToolPowers: { '拳头': 100, '棒球棒': 100, '撞钟锤': 100 },
+    touchOffsetY: 0,
     selectedWeapon: null,
     bulletHoles: [],
     resectedSmallRanges: [],
@@ -1509,6 +1512,10 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     setState(prev => ({ ...prev, physicsFps: v }));
   }, []);
 
+  const setTouchOffsetY = useCallback((v: number) => {
+    setState(prev => ({ ...prev, touchOffsetY: v }));
+  }, []);
+
   const addElectrode = useCallback((x: number, y: number) => {
     if (physicsRef.current.electrodes.length >= 8) {
       physicsRef.current.electrodes.shift();
@@ -2542,7 +2549,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       toggleMesenteryNode,
       takeParasiteEgg, setHatchDuration, setParasiteDamageInterval, setParasitePerforationChance, performParasiteSurgery,
       enterResectionSelection, cancelResectionSelection, performResectionSurgery,
-      setResectionSelection, setMaxResectionSegments,
+      setResectionSelection, setMaxResectionSegments, setTouchOffsetY,
       setBellyStrikeTool, setBellyStrikeForce, setBellyStrikeRange,
       setBellyStrikeImpulseScale, setBellyStrikeToolPower, applyBellyStrike,
       setSelectedWeapon, applyGunshot,

@@ -30,8 +30,6 @@ import {
 import { buildSmoothPath } from '../engine/physics';
 import { useGame } from '../contexts/GameContext';
 
-// Vertical offset (screen pixels) between finger touch and aim point
-const AIM_SCREEN_OFFSET_Y = 82;
 
 const NAVEL_X = CANVAS_W / 2;
 const NAVEL_Y_EXTERNAL = CAVITY_CY;
@@ -269,7 +267,7 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
   // Weapon aiming drag state
   const gunAimDragRef = useRef<{
     active: boolean;
-    aimPhysX: number;  // aim point in physics coords (above finger)
+    aimPhysX: number;  // aim point in physics coords (offset by touchOffsetY)
     aimPhysY: number;
     fingerScreenX: number;
     fingerScreenY: number;
@@ -402,13 +400,14 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
               toggleMesenteryNode: tmn } = hrRef.current;
       isDragging.current = true;
       const { locationX, locationY } = evt.nativeEvent;
-      const pos = tpc(locationX, locationY);
+      const touchOfsY = s.touchOffsetY ?? 0;
+      const pos = tpc(locationX, locationY - touchOfsY);
 
-      // Weapon aiming mode: finger down starts aiming; aim point is above finger
+      // Weapon aiming mode: finger down starts aiming; aim point offset by touchOffsetY
       if (s.selectedWeapon && !s.resectionSelectionMode && !s.mesenterySelectionMode && !s.bellyStrikeTool) {
         const def = LETHAL_WEAPON_LIST.find(w => w.id === s.selectedWeapon);
         if (def && !def.reserved) {
-          const aimPos = tpc(locationX, locationY - AIM_SCREEN_OFFSET_Y);
+          const aimPos = tpc(locationX, locationY - touchOfsY);
           gunAimDragRef.current = { active: true, aimPhysX: aimPos.x, aimPhysY: aimPos.y, fingerScreenX: locationX, fingerScreenY: locationY };
           setGunAimOverlay({ aimPhysX: aimPos.x, aimPhysY: aimPos.y, sightType: def.sightType, weaponId: def.id, shockwaveRange: def.shockwaveRange });
           return;
@@ -642,11 +641,12 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
     onPanResponderMove: (evt) => {
       const { state: s, toPhysicsCoords: tpc, triggerDialogue: td } = hrRef.current;
       const { locationX, locationY } = evt.nativeEvent;
-      const pos = tpc(locationX, locationY);
+      const touchOfsY = s.touchOffsetY ?? 0;
+      const pos = tpc(locationX, locationY - touchOfsY);
 
       // Weapon aiming drag: update aim position
       if (gunAimDragRef.current.active) {
-        const aimPos = tpc(locationX, locationY - AIM_SCREEN_OFFSET_Y);
+        const aimPos = tpc(locationX, locationY - touchOfsY);
         gunAimDragRef.current.aimPhysX = aimPos.x;
         gunAimDragRef.current.aimPhysY = aimPos.y;
         gunAimDragRef.current.fingerScreenX = locationX;

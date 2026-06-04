@@ -82,6 +82,7 @@ export function SettingsScreen({ onMenuPress }: Props) {
     setDrugDuration, setHatchDuration, setParasiteDamageInterval, setParasitePerforationChance,
     setMaxResectionSegments,
     setBellyStrikeImpulseScale, setBellyStrikeToolPower,
+    setTouchOffsetY,
   } = useGame();
   const topPad = Platform.OS === 'web' ? 67 : insets.top;
   const bottomPad = Platform.OS === 'web' ? 34 : insets.bottom;
@@ -100,6 +101,26 @@ export function SettingsScreen({ onMenuPress }: Props) {
         contentContainerStyle={[styles.content, { paddingBottom: bottomPad + 20 }]}
         showsVerticalScrollIndicator={false}
       >
+        {/* Touch control settings */}
+        <Text style={[styles.sectionTitle, { color: colors.primary }]}>操控设置</Text>
+        <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
+          <SliderRow
+            label="触摸点垂直偏移"
+            value={state.touchOffsetY}
+            displayValue={`${state.touchOffsetY > 0 ? '+' : ''}${state.touchOffsetY} px`}
+            min={-150} max={150} step={5}
+            onValueChange={setTouchOffsetY}
+            trackColor={colors.toolActive}
+          />
+          <View style={[styles.divider, { backgroundColor: colors.border }]} />
+          <View style={styles.infoRow}>
+            <Text style={[styles.infoLabel, { color: colors.mutedForeground }]}>说明</Text>
+            <Text style={[{ fontSize: 11, fontFamily: 'Inter_400Regular', flex: 1, textAlign: 'right' }, { color: colors.mutedForeground }]}>
+              正值使实际操作点在手指上方，负值在下方
+            </Text>
+          </View>
+        </View>
+
         {/* Simulation parameters */}
         <Text style={[styles.sectionTitle, { color: colors.primary }]}>模拟参数</Text>
         <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
