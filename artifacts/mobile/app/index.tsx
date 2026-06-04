@@ -7,6 +7,7 @@ import { SimulationScreen } from '@/screens/SimulationScreen';
 import { ConsoleScreen } from '@/screens/ConsoleScreen';
 import { SettingsScreen } from '@/screens/SettingsScreen';
 import { HelpScreen } from '@/screens/HelpScreen';
+import { MesenteryEditorScreen } from '@/screens/MesenteryEditorScreen';
 import { useColors } from '@/hooks/useColors';
 
 export default function App() {
@@ -21,6 +22,7 @@ export default function App() {
       case 'console': return <ConsoleScreen {...props} />;
       case 'settings': return <SettingsScreen {...props} />;
       case 'help': return <HelpScreen {...props} />;
+      case 'mesenteryEditor': return <MesenteryEditorScreen {...props} />;
       default: return <SimulationScreen {...props} />;
     }
   };

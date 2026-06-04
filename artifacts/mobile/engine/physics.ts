@@ -228,7 +228,7 @@ function applyElectricPhysics(state: PhysicsState, param1: number, param2: numbe
 
 // Per-node mesentery stiffness + dead zone for large intestine (N_LARGE=32)
 // Indices: 0(cecum,unpinned), 9(hepatic flex), 15(splenic flex), 23-26(sigmoid), 27-30(rectum bends), 31(anus,pinned)
-function largeNodeMesentery(idx: number): { stiffness: number; deadZone: number } {
+export function largeNodeMesentery(idx: number): { stiffness: number; deadZone: number } {
   // Cecum (unpinned): very strong spring so it rebounds after being dragged
   if (idx === 0) return { stiffness: 0.38, deadZone: 0 };
   // Rectum bends + approach to anus: maximum stiffness, zero dead zone

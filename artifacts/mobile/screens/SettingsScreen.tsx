@@ -7,6 +7,7 @@ import { Feather } from '@expo/vector-icons';
 import { useColors } from '@/hooks/useColors';
 import { useGame } from '@/contexts/GameContext';
 import { GameSlider } from '@/components/GameSlider';
+import { N_SMALL, N_LARGE } from '@/constants/gameConfig';
 
 interface Props {
   onMenuPress: () => void;
@@ -75,7 +76,7 @@ export function SettingsScreen({ onMenuPress }: Props) {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const {
-    state,
+    state, setScreen,
     setDebugMode, setShowCollisionBoxes, setPhysicsFps,
     setPeriSpeed, setPeriWaveAmplitude, setPeriWaveSpeed,
     setBreathAmplitude, setExpansionScale, setPressureDiffusionRate,
@@ -296,6 +297,21 @@ export function SettingsScreen({ onMenuPress }: Props) {
             onValueChange={setPhysicsFps}
             trackColor={colors.pleasure}
           />
+          <View style={[styles.divider, { backgroundColor: colors.border }]} />
+          <TouchableOpacity
+            style={styles.editorBtn}
+            onPress={() => setScreen('mesenteryEditor')}
+          >
+            <View style={styles.editorBtnContent}>
+              <View>
+                <Text style={[styles.editorBtnLabel, { color: colors.foreground }]}>肠系膜编辑模式</Text>
+                <Text style={[styles.editorBtnDesc, { color: colors.mutedForeground }]}>
+                  编辑大肠/小肠各节点的肠系膜初始坐标（{N_LARGE + N_SMALL} 个节点）
+                </Text>
+              </View>
+              <Feather name="edit-3" size={16} color={colors.primary} />
+            </View>
+          </TouchableOpacity>
         </View>
 
         {state.debugMode && (
@@ -442,4 +458,14 @@ const styles = StyleSheet.create({
   },
   aboutTitle: { fontSize: 16, fontFamily: 'Inter_700Bold', marginBottom: 8 },
   aboutText: { fontSize: 12, fontFamily: 'Inter_400Regular', textAlign: 'center', lineHeight: 20 },
+  editorBtn: {
+    paddingVertical: 12,
+  },
+  editorBtnContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  editorBtnLabel: { fontSize: 14, fontFamily: 'Inter_500Medium', marginBottom: 2 },
+  editorBtnDesc: { fontSize: 11, fontFamily: 'Inter_400Regular' },
 });

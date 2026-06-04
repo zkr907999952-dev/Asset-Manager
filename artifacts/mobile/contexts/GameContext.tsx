@@ -17,6 +17,7 @@ import type { ToolType, BellyStrikeToolId, LethalWeaponId } from '../constants/g
 import { getRandomDialogue, type DialogueTrigger } from '../constants/dialogues';
 import { initDialoguesFromExcel } from '../constants/dialogueLoader';
 import type { ComaState } from '../components/HeartRateMonitor';
+import { loadMesenteryConfig, applyMesenteryConfig } from '../engine/mesenteryConfig';
 
 export interface ParasiteEntity {
   id: number;
@@ -90,7 +91,7 @@ function getReachableRange(segIdx: number, intestine: 'small' | 'large', p: { sm
   return { leftLimit, rightLimit, canCrossToLarge, canCrossToSmall };
 }
 
-export type ScreenName = 'character' | 'simulation' | 'console' | 'settings' | 'help';
+export type ScreenName = 'character' | 'simulation' | 'console' | 'settings' | 'help' | 'mesenteryEditor';
 
 export interface RenderSegment {
   health: number; sensitivity: number; pain: number; pressure: number;
@@ -329,6 +330,9 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
   // 如需修改对话，编辑 /chat/dialogues.xlsx 后运行 `node chat/generate-dialogues.js` 同步
   useEffect(() => {
     initDialoguesFromExcel();
+    loadMesenteryConfig().then(cfg => {
+      if (cfg) applyMesenteryConfig(physicsRef.current, cfg);
+    });
   }, []);
 
   // Drug system state (ref for timestamp logs, modifier values mirrored to UI state)
