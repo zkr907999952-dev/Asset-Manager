@@ -114,6 +114,24 @@ uri = "file://artifacts/mobile/assets/images/bullet_hole_v6.png"
 type = "image"
 title = "bullet hole warm tones v6"
 
+[[generated]]
+id = "r6ZU9kE3dUAPxKTaLxdcF"
+uri = "file://artifacts/mobile/assets/images/bullet_hole_a1.png"
+type = "image"
+title = "bullet hole no blood a1"
+
+[[generated]]
+id = "7s_XZ1v2PJCqaJoaTxYkx"
+uri = "file://artifacts/mobile/assets/images/bullet_hole_a2.png"
+type = "image"
+title = "bullet hole no blood a2"
+
+[[generated]]
+id = "nHWitwU4MkCzSxF-zVJ57"
+uri = "file://artifacts/mobile/assets/images/bullet_hole_a3.png"
+type = "image"
+title = "bullet hole no blood a3"
+
 [[outputs]]
 id = "EvFH6bgGV0eFpaLTc_px6"
 uri = "file://artifacts/mobile/assets/images/icon.png"
