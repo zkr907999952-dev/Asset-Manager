@@ -22,7 +22,7 @@ export function SimulationScreen({ onMenuPress }: Props) {
   const insets = useSafeAreaInsets();
   const {
     state, physicsRef, syncFromPhysics, setViewMode,
-    triggerDialogue, resetPositions, clearComaByShock, renderSnapshotRef,
+    triggerDialogue, resetPhysics, clearComaByShock, renderSnapshotRef,
   } = useGame();
   const rafRef = useRef<number | null>(null);
   const frameCount = useRef(0);
@@ -171,7 +171,7 @@ export function SimulationScreen({ onMenuPress }: Props) {
         <Text style={[styles.title, { color: colors.foreground }]}>腹部交互</Text>
         <TouchableOpacity
           style={[styles.resetBtn, { borderColor: colors.border }]}
-          onPress={resetPositions}
+          onPress={resetPhysics}
         >
           <Feather name="refresh-cw" size={14} color={colors.mutedForeground} />
         </TouchableOpacity>

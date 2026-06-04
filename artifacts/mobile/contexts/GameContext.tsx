@@ -1791,6 +1791,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       stimulantTimeLeft: 0,
       sedativeTimeLeft: 0,
       parasites: [],
+      bulletHoles: [],
     }));
   }, []);
 

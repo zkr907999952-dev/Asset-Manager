@@ -2671,83 +2671,128 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
           const hr = hole.radius;
           const hx = hole.physX;
           const hy = hole.physY;
-          const gBlood = `bhg-${idx}`;
-          const gAbrase = `bhab-${idx}`;
-          const gCavity = `bhcav-${idx}`;
-          const gGlint  = `bhgl-${idx}`;
+          const seed = idx * 31 + (hole.id ?? 0);
+          const gBlood  = `bhb-${idx}`;
+          const gBruise = `bhbr-${idx}`;
+          const gCavity = `bhc-${idx}`;
+
+          // Precompute 7 irregular stellate tears (deterministic from seed)
+          const tearCount = 7;
+          const tears = Array.from({ length: tearCount }, (_, i) => {
+            const baseAngle = (i / tearCount) * Math.PI * 2;
+            const jitter = ((seed * 7 + i * 37) % 42 - 21) * Math.PI / 180;
+            const angle = baseAngle + jitter;
+            const lenMult = 1.15 + ((seed * 3 + i * 17) % 14) * 0.025;
+            const len = hr * lenMult;
+            const skinTone = i % 3 === 0 ? '#c06060' : i % 3 === 1 ? '#a84848' : '#983838';
+            return { angle, len, skinTone };
+          });
+
+          // 5 small satellite blood droplets
+          const drops = Array.from({ length: 5 }, (_, i) => {
+            const a = ((seed * 11 + i * 72) % 360) * Math.PI / 180;
+            const dist = hr * (2.2 + ((seed + i * 19) % 10) * 0.18);
+            const r2 = hr * (0.09 + (i % 3) * 0.06);
+            return { cx: hx + Math.cos(a) * dist, cy: hy + Math.sin(a) * dist, r2 };
+          });
+
           return (
             <G key={`bh-${hole.id}`}>
               <Defs>
-                {/* Wide blood splash */}
-                <RadialGradient id={gBlood} cx="50%" cy="48%" r="50%">
-                  <Stop offset="0%"   stopColor="#3a0000" stopOpacity="0.82" />
-                  <Stop offset="30%"  stopColor="#5c0000" stopOpacity="0.68" />
-                  <Stop offset="65%"  stopColor="#800000" stopOpacity="0.38" />
+                {/* Main blood pool — off-center for organic feel */}
+                <RadialGradient id={gBlood} cx="48%" cy="54%" r="50%">
+                  <Stop offset="0%"   stopColor="#1c0000" stopOpacity="0.98" />
+                  <Stop offset="20%"  stopColor="#300000" stopOpacity="0.90" />
+                  <Stop offset="50%"  stopColor="#560000" stopOpacity="0.65" />
+                  <Stop offset="75%"  stopColor="#7a0000" stopOpacity="0.32" />
                   <Stop offset="100%" stopColor="#aa0000" stopOpacity="0"    />
                 </RadialGradient>
-                {/* Abrasion / contusion ring */}
-                <RadialGradient id={gAbrase} cx="50%" cy="50%" r="50%">
-                  <Stop offset="0%"   stopColor="#1a0000" stopOpacity="0"    />
-                  <Stop offset="55%"  stopColor="#1a0000" stopOpacity="0"    />
-                  <Stop offset="75%"  stopColor="#2e0000" stopOpacity="0.72" />
-                  <Stop offset="90%"  stopColor="#3d0000" stopOpacity="0.55" />
-                  <Stop offset="100%" stopColor="#3d0000" stopOpacity="0"    />
+                {/* Purple-red contusion / bruise ring */}
+                <RadialGradient id={gBruise} cx="50%" cy="50%" r="50%">
+                  <Stop offset="0%"   stopColor="#5a0030" stopOpacity="0"    />
+                  <Stop offset="42%"  stopColor="#5a0030" stopOpacity="0"    />
+                  <Stop offset="62%"  stopColor="#4a0028" stopOpacity="0.50" />
+                  <Stop offset="80%"  stopColor="#620038" stopOpacity="0.38" />
+                  <Stop offset="100%" stopColor="#3a0018" stopOpacity="0"    />
                 </RadialGradient>
-                {/* Dark cavity depth */}
-                <RadialGradient id={gCavity} cx="40%" cy="38%" r="50%">
-                  <Stop offset="0%"   stopColor="#1a1a1a" stopOpacity="1"    />
-                  <Stop offset="60%"  stopColor="#000000" stopOpacity="1"    />
+                {/* Wound cavity depth — slightly off-center for 3-D look */}
+                <RadialGradient id={gCavity} cx="38%" cy="34%" r="60%">
+                  <Stop offset="0%"   stopColor="#3a0a0a" stopOpacity="1"    />
+                  <Stop offset="35%"  stopColor="#100000" stopOpacity="1"    />
                   <Stop offset="100%" stopColor="#000000" stopOpacity="1"    />
-                </RadialGradient>
-                {/* Specular glint on rim */}
-                <RadialGradient id={gGlint} cx="35%" cy="30%" r="50%">
-                  <Stop offset="0%"   stopColor="#ffffff" stopOpacity="0.45" />
-                  <Stop offset="100%" stopColor="#ffffff" stopOpacity="0"    />
                 </RadialGradient>
               </Defs>
 
-              {/* Layer 1: wide blood splash pool */}
-              <Circle cx={hx} cy={hy} r={hr * 5.5}
+              {/* L1: primary blood pool (slightly elliptical, shifted down) */}
+              <Ellipse cx={hx + hr * 0.08} cy={hy + hr * 0.18}
+                rx={hr * 5.4} ry={hr * 4.7}
                 fill={`url(#${gBlood})`} />
 
-              {/* Layer 2: abrasion / bruise ring around wound */}
-              <Circle cx={hx} cy={hy} r={hr * 2.2}
-                fill={`url(#${gAbrase})`} />
+              {/* L2: secondary blood blotch — offset lobe for irregularity */}
+              <Ellipse cx={hx - hr * 0.35} cy={hy + hr * 0.55}
+                rx={hr * 3.0} ry={hr * 2.5}
+                fill="#2a0000" fillOpacity={0.28} />
 
-              {/* Layer 3: torn skin petals — 6 irregular lobes */}
-              {[0, 60, 120, 180, 240, 300].map((deg, pi) => {
-                const rad = (deg + (pi % 2 === 0 ? 8 : -6)) * Math.PI / 180;
-                const petalLen = hr * (1.35 + (pi * 0.07 % 0.3));
-                const px = hx + Math.cos(rad) * petalLen;
-                const py = hy + Math.sin(rad) * petalLen;
+              {/* L3: contusion / bruise zone */}
+              <Circle cx={hx} cy={hy} r={hr * 2.7}
+                fill={`url(#${gBruise})`} />
+
+              {/* L4: stellate skin tears — reddish flesh flaps pulled back */}
+              {tears.map(({ angle, len, skinTone }, ti) => {
+                const tipX = hx + Math.cos(angle) * len;
+                const tipY = hy + Math.sin(angle) * len;
+                const lX = hx + Math.cos(angle + 0.48) * hr * 0.52;
+                const lY = hy + Math.sin(angle + 0.48) * hr * 0.52;
+                const rX = hx + Math.cos(angle - 0.48) * hr * 0.52;
+                const rY = hy + Math.sin(angle - 0.48) * hr * 0.52;
                 return (
-                  <Path key={`p-${pi}`}
-                    d={`M ${hx} ${hy} Q ${hx + Math.cos(rad + 0.4) * hr * 0.9} ${hy + Math.sin(rad + 0.4) * hr * 0.9} ${px} ${py} Q ${hx + Math.cos(rad - 0.4) * hr * 0.9} ${hy + Math.sin(rad - 0.4) * hr * 0.9} ${hx} ${hy} Z`}
-                    fill="#1a0000" fillOpacity={0.78}
-                  />
+                  <G key={`t-${ti}`}>
+                    <Path
+                      d={`M ${hx} ${hy} Q ${lX} ${lY} ${tipX} ${tipY} Q ${rX} ${rY} ${hx} ${hy} Z`}
+                      fill={skinTone} fillOpacity={0.85}
+                    />
+                    <Path
+                      d={`M ${hx} ${hy} Q ${lX} ${lY} ${tipX} ${tipY} Q ${rX} ${rY} ${hx} ${hy} Z`}
+                      fill="#000000" fillOpacity={0.22}
+                      stroke="#2a0000" strokeWidth={hr * 0.10} strokeOpacity={0.55}
+                    />
+                  </G>
                 );
               })}
 
-              {/* Layer 4: main wound cavity (dark depth) */}
-              <Circle cx={hx} cy={hy} r={hr * 1.05}
+              {/* L5: abrasion collar — brownish-red, tight around entry */}
+              <Circle cx={hx} cy={hy} r={hr * 1.30}
+                fill="none"
+                stroke="#5a2200" strokeWidth={hr * 0.42} strokeOpacity={0.90} />
+              <Circle cx={hx} cy={hy} r={hr * 1.55}
+                fill="none"
+                stroke="#3a0800" strokeWidth={hr * 0.18} strokeOpacity={0.50} />
+
+              {/* L6: wound cavity with 3-D depth gradient */}
+              <Circle cx={hx} cy={hy} r={hr * 1.08}
                 fill={`url(#${gCavity})`} />
 
-              {/* Layer 5: raised crushed-skin rim */}
-              <Circle cx={hx} cy={hy} r={hr * 1.05}
+              {/* L7: blood pooled inside wound — dark red fill */}
+              <Circle cx={hx} cy={hy} r={hr * 0.88}
+                fill="#160000" fillOpacity={0.97} />
+
+              {/* L8: ragged wound edge — dashed stroke for torn tissue illusion */}
+              <Circle cx={hx} cy={hy} r={hr * 0.82}
                 fill="none"
-                stroke="#3d1010" strokeWidth={hr * 0.55} strokeOpacity={0.9} />
+                stroke="#5a0000" strokeWidth={hr * 0.28} strokeOpacity={0.70}
+                strokeDasharray={`${hr * 0.55} ${hr * 0.22}`}
+              />
 
-              {/* Layer 6: crisp dark entry aperture */}
-              <Circle cx={hx} cy={hy} r={hr * 0.72}
-                fill="#000000" fillOpacity={0.97} />
+              {/* L9: satellite blood droplets scattered nearby */}
+              {drops.map(({ cx: dcx, cy: dcy, r2 }, di) => (
+                <Circle key={`d-${di}`}
+                  cx={dcx} cy={dcy} r={r2}
+                  fill="#3d0000" fillOpacity={0.72} />
+              ))}
 
-              {/* Layer 7: specular glint — upper-left arc highlight on rim */}
-              <Circle cx={hx} cy={hy} r={hr * 0.72}
-                fill={`url(#${gGlint})`} />
-
-              {/* Layer 8: tiny bright center glint (void depth illusion) */}
-              <Circle cx={hx - hr * 0.12} cy={hy - hr * 0.14} r={hr * 0.15}
-                fill="#ffffff" fillOpacity={0.18} />
+              {/* L10: faint wet sheen — upper-left highlight */}
+              <Circle cx={hx - hr * 0.22} cy={hy - hr * 0.24} r={hr * 0.20}
+                fill="#ffffff" fillOpacity={0.10} />
             </G>
           );
         })}
