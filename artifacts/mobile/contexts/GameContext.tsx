@@ -404,7 +404,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     breathAmplitude: BREATH_AMPLITUDE_DEFAULT,
     expansionScale: EXPANSION_SCALE_DEFAULT,
     debugMode: false, showCollisionBoxes: false,
-    physicsFps: Platform.OS !== 'web' ? 20 : PHYSICS_FPS,
+    physicsFps: PHYSICS_FPS,
     renderSmallNodes: physicsRef.current.smallNodes.map(n => ({ x: n.x, y: n.y })),
     renderLargeNodes: physicsRef.current.largeNodes.map(n => ({ x: n.x, y: n.y })),
     renderSmallSegs: physicsRef.current.smallSegs.map(s => ({ ...s })),

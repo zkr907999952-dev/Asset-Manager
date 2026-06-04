@@ -1,5 +1,5 @@
 import React, { useRef, useCallback, useState, useEffect } from 'react';
-import { View, PanResponder, StyleSheet, Animated, Easing, Image } from 'react-native';
+import { View, PanResponder, StyleSheet, Animated, Easing, Image, Platform } from 'react-native';
 
 import Svg, {
   Ellipse, Circle, Line, Path, Rect, Defs, RadialGradient, LinearGradient, Stop, G,
@@ -1134,6 +1134,69 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
   const smallCombinedHighlight = smallCombinedOutline;
   const largeCombinedHighlight = _largeHighParts.join(' ');
 
+  // === MOBILE: CHUNK-BASED INTESTINE RENDERING ===
+  // react-native-svg creates a native view per SVG element — 96 individual Path elements
+  // per frame (65 small + 31 large) saturates the React Native bridge at 10fps on device.
+  // Solution: on mobile, merge segments into 8 chunks (small) + 4 chunks (large) = 12 paths.
+  // Each chunk uses the average color & width of its segments; peristalsis motion is preserved
+  // (node positions still move). Web keeps full per-segment rendering unchanged.
+  const isMobile = Platform.OS !== 'web';
+  type ChunkPath = { d: string; color: string; width: number };
+  const smallChunkPaths: ChunkPath[] = [];
+  const largeChunkPaths: ChunkPath[] = [];
+
+  if (isMobile) {
+    const S_CHUNKS = 8;
+    const sChunkSize = Math.ceil(nSmallSegs / S_CHUNKS);
+    for (let c = 0; c < S_CHUNKS; c++) {
+      const start = c * sChunkSize;
+      const end = Math.min(start + sChunkSize, nSmallSegs);
+      let chunkD = '';
+      let sumH = 0, sumPa = 0, sumPr = 0, sumPeri = 0, cnt = 0;
+      for (let i = start; i < end; i++) {
+        const seg = renderSmallSegs[i];
+        if (!smallSegPaths[i] || seg.broken || seg.resected) continue;
+        chunkD += (chunkD ? ' ' : '') + smallSegPaths[i];
+        sumH += seg.health; sumPa += seg.pain; sumPr += seg.pressure;
+        sumPeri += (periScaleSmall?.[i] ?? 1);
+        cnt++;
+      }
+      if (cnt > 0 && chunkD) {
+        const avgH = sumH / cnt, avgPa = sumPa / cnt, avgPr = sumPr / cnt, avgPeri = sumPeri / cnt;
+        smallChunkPaths.push({
+          d: chunkD,
+          color: segmentColor(avgH, avgPa, avgPr, false, false, false, false, smallTransplantColor ?? undefined),
+          width: SMALL_RADIUS * avgPeri * 2 + (avgPr / 100) * SMALL_RADIUS * expansionScale,
+        });
+      }
+    }
+
+    const L_CHUNKS = 4;
+    const lChunkSize = Math.ceil(nLargeSegs / L_CHUNKS);
+    for (let c = 0; c < L_CHUNKS; c++) {
+      const start = c * lChunkSize;
+      const end = Math.min(start + lChunkSize, nLargeSegs);
+      let chunkD = '';
+      let sumH = 0, sumPa = 0, sumPr = 0, sumPeri = 0, cnt = 0;
+      for (let i = start; i < end; i++) {
+        const seg = renderLargeSegs[i];
+        if (!largeSegPaths[i] || seg.broken || seg.resected) continue;
+        chunkD += (chunkD ? ' ' : '') + largeSegPaths[i];
+        sumH += seg.health; sumPa += seg.pain; sumPr += seg.pressure;
+        sumPeri += (periScaleLarge?.[i] ?? 1);
+        cnt++;
+      }
+      if (cnt > 0 && chunkD) {
+        const avgH = sumH / cnt, avgPa = sumPa / cnt, avgPr = sumPr / cnt, avgPeri = sumPeri / cnt;
+        largeChunkPaths.push({
+          d: chunkD,
+          color: segmentColor(avgH, avgPa, avgPr, false, false, false, true, largeTransplantColor ?? undefined),
+          width: LARGE_RADIUS * avgPeri * 2 + (avgPr / LARGE_RUPTURE_PRESSURE) * LARGE_RADIUS * expansionScale,
+        });
+      }
+    }
+  }
+
   return (
     <Animated.View
       style={[styles.container, { transform: [{ translateX: shakeAnim }] }]}
@@ -1226,15 +1289,20 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
               fill="none" stroke="#3a1010" strokeWidth={4} />
 
             {/* ===== LARGE INTESTINE — smooth bezier segments ===== */}
-            {/* Per-segment fill paths (color varies by health/pain/pressure) */}
-            {renderLargeSegs.map((seg, i) => {
-              const d = largeSegPaths[i];
-              if (!d) return null;
-              const lPeriScale = (periScaleLarge?.[i] ?? 1);
-              const w = LARGE_RADIUS * lPeriScale * 2 + (seg.pressure / LARGE_RUPTURE_PRESSURE) * LARGE_RADIUS * expansionScale;
-              const col = segmentColor(seg.health, seg.pain, seg.pressure, seg.ruptured, seg.broken, seg.perforated, true, largeTransplantColor ?? undefined);
-              return <Path key={`lg-${i}`} d={d} stroke={col} strokeWidth={w} fill="none" strokeLinecap="round" strokeLinejoin="round" />;
-            })}
+            {/* Mobile: 4 merged chunk paths. Web: 31 per-segment paths with full coloring. */}
+            {isMobile
+              ? largeChunkPaths.map((ch, c) => (
+                  <Path key={`lgc-${c}`} d={ch.d} stroke={ch.color} strokeWidth={ch.width} fill="none" strokeLinecap="round" strokeLinejoin="round" />
+                ))
+              : renderLargeSegs.map((seg, i) => {
+                  const d = largeSegPaths[i];
+                  if (!d) return null;
+                  const lPeriScale = (periScaleLarge?.[i] ?? 1);
+                  const w = LARGE_RADIUS * lPeriScale * 2 + (seg.pressure / LARGE_RUPTURE_PRESSURE) * LARGE_RADIUS * expansionScale;
+                  const col = segmentColor(seg.health, seg.pain, seg.pressure, seg.ruptured, seg.broken, seg.perforated, true, largeTransplantColor ?? undefined);
+                  return <Path key={`lg-${i}`} d={d} stroke={col} strokeWidth={w} fill="none" strokeLinecap="round" strokeLinejoin="round" />;
+                })
+            }
             {/* Single merged highlight path — replaces 31 individual highlight Paths */}
             {largeCombinedHighlight ? <Path d={largeCombinedHighlight} stroke="rgba(255,200,175,0.22)" strokeWidth={LARGE_RADIUS * 0.65} fill="none" strokeLinecap="round" /> : null}
 
@@ -1316,14 +1384,20 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
             ) : null}
 
             {/* ===== SMALL INTESTINE — per-segment fill (color varies by health/pain/pressure) ===== */}
-            {renderSmallSegs.map((seg, i) => {
-              const d = smallSegPaths[i];
-              if (!d) return null;
-              const sPeriScale = (periScaleSmall?.[i] ?? 1);
-              const w = SMALL_RADIUS * sPeriScale * 2 + (seg.pressure / 100) * SMALL_RADIUS * expansionScale;
-              const col = segmentColor(seg.health, seg.pain, seg.pressure, seg.ruptured, seg.broken, seg.perforated, false, smallTransplantColor ?? undefined);
-              return <Path key={`sm-${i}`} d={d} stroke={col} strokeWidth={w} fill="none" strokeLinecap="round" strokeLinejoin="round" />;
-            })}
+            {/* Mobile: 8 merged chunk paths. Web: 65 per-segment paths with full coloring. */}
+            {isMobile
+              ? smallChunkPaths.map((ch, c) => (
+                  <Path key={`smc-${c}`} d={ch.d} stroke={ch.color} strokeWidth={ch.width} fill="none" strokeLinecap="round" strokeLinejoin="round" />
+                ))
+              : renderSmallSegs.map((seg, i) => {
+                  const d = smallSegPaths[i];
+                  if (!d) return null;
+                  const sPeriScale = (periScaleSmall?.[i] ?? 1);
+                  const w = SMALL_RADIUS * sPeriScale * 2 + (seg.pressure / 100) * SMALL_RADIUS * expansionScale;
+                  const col = segmentColor(seg.health, seg.pain, seg.pressure, seg.ruptured, seg.broken, seg.perforated, false, smallTransplantColor ?? undefined);
+                  return <Path key={`sm-${i}`} d={d} stroke={col} strokeWidth={w} fill="none" strokeLinecap="round" strokeLinejoin="round" />;
+                })
+            }
             {/* Single merged highlight path — replaces 65 individual highlight Paths */}
             {smallCombinedHighlight ? <Path d={smallCombinedHighlight} stroke="rgba(255,220,200,0.18)" strokeWidth={SMALL_RADIUS * 0.7} fill="none" strokeLinecap="round" /> : null}
 
