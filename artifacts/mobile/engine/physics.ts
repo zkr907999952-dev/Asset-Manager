@@ -116,6 +116,9 @@ export interface PhysicsState {
   // === Pre-built Sets for mesentery disable lookups (avoids new Set() every frame) ===
   mesenteryDisabledSet: Set<number>;
   smallMesenteryDisabledSet: Set<number>;
+  // === Bullet hit counters (for .22 / 9mm progressive damage) ===
+  bulletHitSmall: number[];  // length N_SMALL-1
+  bulletHitLarge: number[];  // length N_LARGE-1
 }
 
 function clamp(v: number, min: number, max: number) {
@@ -1450,6 +1453,108 @@ export function applyBellyStrikePhysics(
   const growRate = Math.max(4, rangePx * 0.065);
   const maxRadius = rangePx * 1.8;
   state.strikeWave = { x: physX, y: physY, radius: 0, maxRadius, strength: baseDamage * impulseScale, growRate };
+}
+
+// ─── Gunshot physics ─────────────────────────────────────────────────────────
+// directHitRadius  — px from aimPoint for a "direct hit"
+// shockwaveRange   — overall shockwave radius
+// shockwavePower   — base impulse damage
+// perfThreshold    — how many direct hits before perforation (-1 = never)
+// breakThreshold   — how many direct hits before break (1 = first hit)
+// breakAllInRange  — break every segment within shockwaveRange (12.7mm)
+export function applyGunshotPhysics(
+  state: PhysicsState,
+  physX: number,
+  physY: number,
+  directHitRadius: number,
+  shockwaveRange: number,
+  shockwavePower: number,
+  perfThreshold: number,
+  breakThreshold: number,
+  breakAllInRange: boolean,
+): void {
+  const applyToNodes = (
+    nodes: PhysicsNode[],
+    segs: SegmentProps[],
+    hitCounts: number[],
+  ) => {
+    for (let i = 0; i < segs.length; i++) {
+      const seg = segs[i];
+      if (!seg) continue;
+
+      // Use midpoint of segment i (between node i and i+1)
+      const na = nodes[i];
+      const nb = nodes[i + 1];
+      if (!na || !nb) continue;
+      const mx = (na.x + nb.x) / 2;
+      const my = (na.y + nb.y) / 2;
+      const d = Math.hypot(mx - physX, my - physY);
+
+      const isDirectHit = d <= directHitRadius;
+      const isInRange   = d <= shockwaveRange;
+
+      // 12.7mm: break all in shockwave range
+      if (breakAllInRange && isInRange && !seg.resected) {
+        seg.broken = true;
+        seg.pain = clamp(seg.pain + 40, 0, 100);
+        seg.health = 0;
+        continue;
+      }
+
+      if (isDirectHit && !seg.resected) {
+        hitCounts[i] = (hitCounts[i] ?? 0) + 1;
+        const hits = hitCounts[i];
+
+        if (breakThreshold > 0 && hits >= breakThreshold) {
+          seg.broken = true;
+          seg.health = 0;
+          seg.pain = clamp(seg.pain + 55, 0, 100);
+        } else if (perfThreshold > 0 && hits >= perfThreshold) {
+          seg.perforated = true;
+          seg.health = clamp(seg.health - 25, 0, 100);
+          seg.pain = clamp(seg.pain + 30, 0, 100);
+        } else {
+          seg.health = clamp(seg.health - 15, 0, 100);
+          seg.pain = clamp(seg.pain + 20, 0, 100);
+        }
+      }
+
+      // Shockwave impulse for nodes in range
+      if (isInRange) {
+        const factor = 1 - d / shockwaveRange;
+        const dmg = shockwavePower * factor;
+        if (!seg.broken) {
+          seg.pain = clamp(seg.pain + dmg * 0.25, 0, 100);
+          seg.health = clamp(seg.health - dmg * 0.18, 0, 100);
+        }
+        // Push node away from impact point
+        const pushNode = (n: PhysicsNode) => {
+          if (n.pinned) return;
+          const nx = n.x - physX, ny = n.y - physY;
+          const nd = Math.hypot(nx, ny);
+          const push = dmg * 0.06;
+          const n2 = n as PhysicsNode;
+          if (nd > 0.1) {
+            n2.px -= (nx / nd) * push;
+            n2.py -= (ny / nd) * push;
+          } else {
+            n2.px -= (Math.random() - 0.5) * push;
+            n2.py -= (Math.random() - 0.5) * push;
+          }
+        };
+        pushNode(na);
+        pushNode(nb);
+      }
+    }
+  };
+
+  applyToNodes(state.smallNodes, state.smallSegs, state.bulletHitSmall);
+  applyToNodes(state.largeNodes, state.largeSegs, state.bulletHitLarge);
+
+  // Launch shockwave ring (same visual system as belly strike)
+  const growRate = Math.max(5, shockwaveRange * 0.08);
+  const maxRadius = shockwaveRange * 1.6;
+  state.strikeWave = { x: physX, y: physY, radius: 0, maxRadius, strength: shockwavePower, growRate };
 }
 
 export function buildSmoothPath(nodes: { x: number; y: number }[]): string {

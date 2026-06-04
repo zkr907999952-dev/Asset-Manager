@@ -4,16 +4,16 @@ import React, {
 import { Platform } from 'react-native';
 import { createInitialPhysicsState } from '../engine/intestineInit';
 import type { PhysicsState } from '../engine/physics';
-import { applyBellyStrikePhysics as applyBellyStrikePhysicsFunc } from '../engine/physics';
+import { applyBellyStrikePhysics as applyBellyStrikePhysicsFunc, applyGunshotPhysics as applyGunshotPhysicsFunc } from '../engine/physics';
 import {
   TOOLS, N_LARGE, N_SMALL, CAVITY_CX, CAVITY_CY,
   BREATH_AMPLITUDE_DEFAULT, EXPANSION_SCALE_DEFAULT,
   PRESSURE_DIFFUSION_RATE_DEFAULT,
   PERISTALSIS_WAVE_AMPLITUDE_DEFAULT, PERISTALSIS_WAVE_SPEED_DEFAULT,
   MAX_RESECTION_SEGMENTS_DEFAULT, PHYSICS_FPS,
-  BELLY_STRIKE_TOOL_LIST,
+  BELLY_STRIKE_TOOL_LIST, LETHAL_WEAPON_LIST,
 } from '../constants/gameConfig';
-import type { ToolType, BellyStrikeToolId } from '../constants/gameConfig';
+import type { ToolType, BellyStrikeToolId, LethalWeaponId } from '../constants/gameConfig';
 import { getRandomDialogue, type DialogueTrigger } from '../constants/dialogues';
 import { initDialoguesFromExcel } from '../constants/dialogueLoader';
 import type { ComaState } from '../components/HeartRateMonitor';
@@ -215,6 +215,9 @@ export interface GameUIState {
   bellyStrikeRange: number;
   bellyStrikeImpulseScale: number;
   bellyStrikeToolPowers: Record<BellyStrikeToolId, number>;
+  // Lethal weapons
+  selectedWeapon: LethalWeaponId | null;
+  bulletHoles: { id: number; physX: number; physY: number; radius: number }[];
 }
 
 interface GameContextType {
@@ -289,6 +292,9 @@ interface GameContextType {
   setBellyStrikeImpulseScale: (v: number) => void;
   setBellyStrikeToolPower: (tool: BellyStrikeToolId, v: number) => void;
   applyBellyStrike: (physX: number, physY: number) => void;
+  // Lethal weapons
+  setSelectedWeapon: (weapon: LethalWeaponId | null) => void;
+  applyGunshot: (physX: number, physY: number) => void;
 }
 
 const DEFAULT_TOOL_POS = { x: CAVITY_CX, y: CAVITY_CY - 40 };
@@ -464,6 +470,8 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     bellyStrikeRange: 50,
     bellyStrikeImpulseScale: 100,
     bellyStrikeToolPowers: { '拳头': 100, '棒球棒': 100, '撞钟锤': 100 },
+    selectedWeapon: null,
+    bulletHoles: [],
     resectedSmallRanges: [],
     resectedLargeRanges: [],
     resectedCount: 0,
@@ -2463,6 +2471,52 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     triggerDialogue(trigger);
   }, [triggerDialogue]);
 
+  const selectedWeaponRef = useRef<LethalWeaponId | null>(null);
+  const bulletHoleIdRef = useRef(0);
+
+  const setSelectedWeapon = useCallback((weapon: LethalWeaponId | null) => {
+    selectedWeaponRef.current = weapon;
+    setState(prev => ({ ...prev, selectedWeapon: weapon }));
+  }, []);
+
+  const applyGunshot = useCallback((physX: number, physY: number) => {
+    const weapon = selectedWeaponRef.current;
+    if (!weapon) return;
+    const def = LETHAL_WEAPON_LIST.find(w => w.id === weapon);
+    if (!def || def.reserved) return;
+
+    const p = physicsRef.current;
+
+    // Apply physics
+    applyGunshotPhysicsFunc(
+      p, physX, physY,
+      def.directHitRadius, def.shockwaveRange, def.shockwavePower,
+      def.perfThreshold, def.breakThreshold, def.breakAllInRange,
+    );
+
+    // HP damage
+    const hpLoss = def.hpDamageRatio === -1 ? 9999 : def.hpDamageRatio * 100;
+
+    // Pleasure gain
+    const pleasureGain = def.pleasureGain;
+
+    // Add bullet hole record
+    const holeId = ++bulletHoleIdRef.current;
+    const holeRadius = 4 + def.shockwaveRange * 0.06;
+
+    setState(prev => ({
+      ...prev,
+      hp: Math.max(0, prev.hp - hpLoss),
+      pleasure: Math.min(100, prev.pleasure + pleasureGain),
+      bulletHoles: [
+        ...prev.bulletHoles,
+        { id: holeId, physX, physY, radius: holeRadius },
+      ].slice(-12), // keep last 12 holes
+    }));
+
+    triggerDialogue('pain_high');
+  }, [triggerDialogue]);
+
   return (
     <GameContext.Provider value={{
       state, physicsRef, renderSnapshotRef, renderVersionRef,
@@ -2488,6 +2542,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       setResectionSelection, setMaxResectionSegments,
       setBellyStrikeTool, setBellyStrikeForce, setBellyStrikeRange,
       setBellyStrikeImpulseScale, setBellyStrikeToolPower, applyBellyStrike,
+      setSelectedWeapon, applyGunshot,
     }}>
       {children}
     </GameContext.Provider>

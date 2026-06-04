@@ -224,5 +224,7 @@ export function createInitialPhysicsState(): PhysicsState {
     strikeWave: null,
     mesenteryDisabledSet: new Set<number>(),
     smallMesenteryDisabledSet: new Set<number>(),
+    bulletHitSmall: new Array(N_SMALL - 1).fill(0),
+    bulletHitLarge: new Array(N_LARGE - 1).fill(0),
   };
 }

@@ -114,3 +114,126 @@ export function createDefaultToolStates(): Record<string, { active: boolean; par
   }
   return result;
 }
+
+export const LETHAL_WEAPONS = {
+  PISTOL_22:    '.22手枪',
+  PISTOL_9MM:   '9MM手枪',
+  RIFLE_762:    '7.62mm步枪',
+  SNIPER_127:   '12.7mm反器材狙击枪',
+  KATANA:       '武士刀',
+  CAPSULE_BOMB: '胶囊炸弹',
+} as const;
+
+export type LethalWeaponId = typeof LETHAL_WEAPONS[keyof typeof LETHAL_WEAPONS];
+
+export interface LethalWeaponDef {
+  id: LethalWeaponId;
+  desc: string;
+  reserved?: boolean;
+  hpDamageRatio: number;    // fraction of 100 HP; -1 = instant kill
+  directHitRadius: number;  // px — segment must be within this to count as direct hit
+  shockwaveRange: number;   // px — expanding shockwave radius
+  shockwavePower: number;   // base impulse/damage of shockwave
+  sightType: 'iron' | 'scope';
+  flashIntensity: number;   // 0-1
+  shakeStrength: number;    // 0 = no shake
+  pleasureGain: number;
+  perfThreshold: number;    // hit count → perforation (-1 = never perf)
+  breakThreshold: number;   // hit count → break (1 = 1st hit breaks)
+  breakAllInRange: boolean; // 12.7mm: breaks every seg in shockwave range
+}
+
+export const LETHAL_WEAPON_LIST: LethalWeaponDef[] = [
+  {
+    id: LETHAL_WEAPONS.PISTOL_22,
+    desc: '小口径，低噪，低威力',
+    hpDamageRatio: 1 / 8,
+    directHitRadius: 18,
+    shockwaveRange: 36,
+    shockwavePower: 28,
+    sightType: 'iron',
+    flashIntensity: 0.22,
+    shakeStrength: 0,
+    pleasureGain: 3,
+    perfThreshold: 1,
+    breakThreshold: 3,
+    breakAllInRange: false,
+  },
+  {
+    id: LETHAL_WEAPONS.PISTOL_9MM,
+    desc: '军用制式，均衡性能',
+    hpDamageRatio: 1 / 5,
+    directHitRadius: 20,
+    shockwaveRange: 52,
+    shockwavePower: 50,
+    sightType: 'iron',
+    flashIntensity: 0.40,
+    shakeStrength: 0,
+    pleasureGain: 6,
+    perfThreshold: 1,
+    breakThreshold: 2,
+    breakAllInRange: false,
+  },
+  {
+    id: LETHAL_WEAPONS.RIFLE_762,
+    desc: '中间型步枪弹，高穿透高伤害',
+    hpDamageRatio: 1 / 3,
+    directHitRadius: 22,
+    shockwaveRange: 78,
+    shockwavePower: 90,
+    sightType: 'scope',
+    flashIntensity: 0.65,
+    shakeStrength: 8,
+    pleasureGain: 12,
+    perfThreshold: -1,
+    breakThreshold: 1,
+    breakAllInRange: false,
+  },
+  {
+    id: LETHAL_WEAPONS.SNIPER_127,
+    desc: '反器材狙击，绝对动能，无法幸存',
+    hpDamageRatio: -1,
+    directHitRadius: 28,
+    shockwaveRange: 115,
+    shockwavePower: 160,
+    sightType: 'scope',
+    flashIntensity: 1.0,
+    shakeStrength: 18,
+    pleasureGain: 22,
+    perfThreshold: -1,
+    breakThreshold: 1,
+    breakAllInRange: true,
+  },
+  {
+    id: LETHAL_WEAPONS.KATANA,
+    desc: '（预留）',
+    reserved: true,
+    hpDamageRatio: 0,
+    directHitRadius: 0,
+    shockwaveRange: 0,
+    shockwavePower: 0,
+    sightType: 'iron',
+    flashIntensity: 0,
+    shakeStrength: 0,
+    pleasureGain: 0,
+    perfThreshold: -1,
+    breakThreshold: 1,
+    breakAllInRange: false,
+  },
+  {
+    id: LETHAL_WEAPONS.CAPSULE_BOMB,
+    desc: '（预留）',
+    reserved: true,
+    hpDamageRatio: 0,
+    directHitRadius: 0,
+    shockwaveRange: 0,
+    shockwavePower: 0,
+    sightType: 'iron',
+    flashIntensity: 0,
+    shakeStrength: 0,
+    pleasureGain: 0,
+    perfThreshold: -1,
+    breakThreshold: 1,
+    breakAllInRange: false,
+  },
+];

@@ -25,9 +25,13 @@ import {
   SMALL_RADIUS, LARGE_RADIUS, LARGE_RUPTURE_PRESSURE,
   TOOLS, N_SMALL, N_LARGE,
   BELLY_STRIKE_TOOL_LIST, type BellyStrikeToolId,
+  LETHAL_WEAPON_LIST, type LethalWeaponId,
 } from '../constants/gameConfig';
 import { buildSmoothPath } from '../engine/physics';
 import { useGame } from '../contexts/GameContext';
+
+// Vertical offset (screen pixels) between finger touch and aim point
+const AIM_SCREEN_OFFSET_Y = 82;
 
 const NAVEL_X = CANVAS_W / 2;
 const NAVEL_Y_EXTERNAL = CAVITY_CY;
@@ -238,7 +242,7 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
     setEnemaInSmall, setEnemaSmallHeadIdx, setEnemaTarget,
     setSiliconeTarget, setBeadsTarget, setEggTarget,
     toggleMesenteryNode, setResectionSelection,
-    applyBellyStrike,
+    applyBellyStrike, applyGunshot,
   } = useGame();
   const lastDialogueTime = useRef(0);
   const isDragging = useRef(false);
@@ -261,6 +265,26 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
       if (canvasRafRef.current !== null) cancelAnimationFrame(canvasRafRef.current);
     };
   }, []); // intentionally empty — runs once, refs are stable
+
+  // Weapon aiming drag state
+  const gunAimDragRef = useRef<{
+    active: boolean;
+    aimPhysX: number;  // aim point in physics coords (above finger)
+    aimPhysY: number;
+    fingerScreenX: number;
+    fingerScreenY: number;
+  }>({ active: false, aimPhysX: 0, aimPhysY: 0, fingerScreenX: 0, fingerScreenY: 0 });
+
+  type GunAimOverlay = {
+    aimPhysX: number; aimPhysY: number;
+    sightType: 'iron' | 'scope';
+    weaponId: LethalWeaponId;
+    shockwaveRange: number;
+  };
+  const [gunAimOverlay, setGunAimOverlay] = useState<GunAimOverlay | null>(null);
+
+  // Bullet holes (external view, persistent)
+  const [bulletHoleAnims] = useState<Map<number, Animated.Value>>(() => new Map());
 
   // Belly strike drag state
   const bellyStrikeDragRef = useRef<{
@@ -331,6 +355,7 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
     toggleMesenteryNode,
     setResectionSelection,
     applyBellyStrike,
+    applyGunshot,
   });
   hrRef.current.state = state;
   hrRef.current.toPhysicsCoords = toPhysicsCoords;
@@ -348,6 +373,7 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
   hrRef.current.toggleMesenteryNode = toggleMesenteryNode;
   hrRef.current.setResectionSelection = setResectionSelection;
   hrRef.current.applyBellyStrike = applyBellyStrike;
+  hrRef.current.applyGunshot = applyGunshot;
 
   const findNearestLargeNodeIdx = (pos: { x: number; y: number }) => {
     let best = -1, bestD = 9999;
@@ -377,6 +403,17 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
       isDragging.current = true;
       const { locationX, locationY } = evt.nativeEvent;
       const pos = tpc(locationX, locationY);
+
+      // Weapon aiming mode: finger down starts aiming; aim point is above finger
+      if (s.selectedWeapon && !s.resectionSelectionMode && !s.mesenterySelectionMode && !s.bellyStrikeTool) {
+        const def = LETHAL_WEAPON_LIST.find(w => w.id === s.selectedWeapon);
+        if (def && !def.reserved) {
+          const aimPos = tpc(locationX, locationY - AIM_SCREEN_OFFSET_Y);
+          gunAimDragRef.current = { active: true, aimPhysX: aimPos.x, aimPhysY: aimPos.y, fingerScreenX: locationX, fingerScreenY: locationY };
+          setGunAimOverlay({ aimPhysX: aimPos.x, aimPhysY: aimPos.y, sightType: def.sightType, weaponId: def.id, shockwaveRange: def.shockwaveRange });
+          return;
+        }
+      }
 
       // Belly strike mode: capture position, show preview outline
       if (s.bellyStrikeTool && !s.resectionSelectionMode && !s.mesenterySelectionMode) {
@@ -607,6 +644,20 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
       const { locationX, locationY } = evt.nativeEvent;
       const pos = tpc(locationX, locationY);
 
+      // Weapon aiming drag: update aim position
+      if (gunAimDragRef.current.active) {
+        const aimPos = tpc(locationX, locationY - AIM_SCREEN_OFFSET_Y);
+        gunAimDragRef.current.aimPhysX = aimPos.x;
+        gunAimDragRef.current.aimPhysY = aimPos.y;
+        gunAimDragRef.current.fingerScreenX = locationX;
+        gunAimDragRef.current.fingerScreenY = locationY;
+        const def = LETHAL_WEAPON_LIST.find(w => w.id === s.selectedWeapon);
+        if (def && !def.reserved) {
+          setGunAimOverlay({ aimPhysX: aimPos.x, aimPhysY: aimPos.y, sightType: def.sightType, weaponId: def.id, shockwaveRange: def.shockwaveRange });
+        }
+        return;
+      }
+
       // Belly strike drag: update overlay position
       if (bellyStrikeDragRef.current.active) {
         bellyStrikeDragRef.current.physX = pos.x;
@@ -825,6 +876,53 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
     },
     onPanResponderRelease: () => {
       isDragging.current = false;
+
+      // Weapon fire on release: instant fire at aim point
+      if (gunAimDragRef.current.active) {
+        gunAimDragRef.current.active = false;
+        const { aimPhysX, aimPhysY } = gunAimDragRef.current;
+        const { state: s, applyGunshot: agsh } = hrRef.current;
+        setGunAimOverlay(null);
+        const def = LETHAL_WEAPON_LIST.find(w => w.id === s.selectedWeapon);
+        if (def && !def.reserved && agsh) {
+          agsh(aimPhysX, aimPhysY);
+
+          // Flash intensity based on weapon power
+          const fi = def.flashIntensity;
+          const flashR = Math.round(255);
+          const flashG = Math.round(255 * (1 - fi * 0.7));
+          const flashB = Math.round(255 * (1 - fi * 0.9));
+          const flashA = (0.08 + fi * 0.45).toFixed(2);
+          setFlashColor(`rgba(${flashR},${flashG},${flashB},${flashA})`);
+          strikeFlashAnim.setValue(1);
+          Animated.timing(strikeFlashAnim, { toValue: 0, duration: fi > 0.5 ? 280 : 180, useNativeDriver: false }).start();
+
+          // Screen shake for rifles
+          if (def.shakeStrength > 0) {
+            const d = def.shakeStrength;
+            shakeAnim.setValue(0);
+            Animated.sequence([
+              Animated.timing(shakeAnim, { toValue: d, duration: 30, useNativeDriver: true }),
+              Animated.timing(shakeAnim, { toValue: -d * 0.8, duration: 40, useNativeDriver: true }),
+              Animated.timing(shakeAnim, { toValue: d * 0.45, duration: 30, useNativeDriver: true }),
+              Animated.timing(shakeAnim, { toValue: -d * 0.2, duration: 24, useNativeDriver: true }),
+              Animated.timing(shakeAnim, { toValue: 0, duration: 18, useNativeDriver: true }),
+            ]).start();
+          }
+
+          // Expanding shockwave ring
+          const maxR = def.shockwaveRange * 1.6;
+          const waveId = ++waveIdRef.current;
+          const waveAnim = new Animated.Value(0);
+          setStrikeWaves(prev => [...prev, { id: waveId, physX: aimPhysX, physY: aimPhysY, maxR, anim: waveAnim }]);
+          Animated.timing(waveAnim, {
+            toValue: 1,
+            duration: 350,
+            useNativeDriver: false,
+          }).start(() => setStrikeWaves(prev => prev.filter(w => w.id !== waveId)));
+        }
+        return;
+      }
 
       // Belly strike on release: start charge animation, then apply at delayMs
       if (bellyStrikeDragRef.current.active) {
@@ -2567,6 +2665,125 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
             );
           }
         })}
+
+        {/* Bullet holes on external view */}
+        {!isInternal && state.bulletHoles && state.bulletHoles.map((hole, idx) => {
+          const hr = hole.radius;
+          const hx = hole.physX;
+          const hy = hole.physY;
+          return (
+            <G key={`bh-${hole.id}`}>
+              <Defs>
+                <RadialGradient id={`bhg-${idx}`} cx="50%" cy="50%" r="50%">
+                  <Stop offset="0%" stopColor="#000000" stopOpacity="0.95" />
+                  <Stop offset="40%" stopColor="#1a0000" stopOpacity="0.85" />
+                  <Stop offset="75%" stopColor="#3d0000" stopOpacity="0.55" />
+                  <Stop offset="100%" stopColor="#660000" stopOpacity="0" />
+                </RadialGradient>
+              </Defs>
+              {/* Blood splash */}
+              <Circle cx={hx} cy={hy} r={hr * 3.5}
+                fill={`url(#bhg-${idx})`} />
+              {/* Entry hole */}
+              <Circle cx={hx} cy={hy} r={hr}
+                fill="#000000" fillOpacity={0.9} />
+              {/* Rim */}
+              <Circle cx={hx} cy={hy} r={hr}
+                fill="none"
+                stroke="#1a0000" strokeWidth={hr * 0.4} strokeOpacity={0.7} />
+            </G>
+          );
+        })}
+
+        {/* Weapon aim sight overlay */}
+        {gunAimOverlay && (() => {
+          const { aimPhysX, aimPhysY, sightType } = gunAimOverlay;
+          if (sightType === 'iron') {
+            // Iron sight: front post + U-notch rear sight
+            const postH = 22;
+            const postW = 4;
+            const notchW = 18;
+            const notchH = 14;
+            return (
+              <G>
+                {/* Targeting reticle lines */}
+                <Line x1={aimPhysX - 28} y1={aimPhysY} x2={aimPhysX - 10} y2={aimPhysY}
+                  stroke="rgba(255,80,80,0.85)" strokeWidth={1.5} />
+                <Line x1={aimPhysX + 10} y1={aimPhysY} x2={aimPhysX + 28} y2={aimPhysY}
+                  stroke="rgba(255,80,80,0.85)" strokeWidth={1.5} />
+                <Line x1={aimPhysX} y1={aimPhysY - 28} x2={aimPhysX} y2={aimPhysY - 10}
+                  stroke="rgba(255,80,80,0.85)" strokeWidth={1.5} />
+                <Line x1={aimPhysX} y1={aimPhysY + 10} x2={aimPhysX} y2={aimPhysY + 28}
+                  stroke="rgba(255,80,80,0.85)" strokeWidth={1.5} />
+                {/* Outer ring */}
+                <Circle cx={aimPhysX} cy={aimPhysY} r={38}
+                  fill="none" stroke="rgba(255,60,60,0.45)" strokeWidth={1} />
+                {/* Front post (vertical bar) */}
+                <Rect
+                  x={aimPhysX - postW / 2} y={aimPhysY - 52 - postH}
+                  width={postW} height={postH}
+                  fill="rgba(20,20,20,0.9)" stroke="rgba(255,200,100,0.7)" strokeWidth={0.8} rx={1} />
+                {/* Rear U-notch */}
+                <Rect
+                  x={aimPhysX - notchW / 2} y={aimPhysY - 52 - notchH}
+                  width={notchW} height={notchH}
+                  fill="rgba(20,20,20,0.85)" stroke="rgba(255,200,100,0.55)" strokeWidth={0.8} rx={1} />
+                <Rect
+                  x={aimPhysX - 3} y={aimPhysY - 52 - notchH}
+                  width={6} height={notchH}
+                  fill="rgba(180,180,180,0.25)" />
+                {/* Center dot */}
+                <Circle cx={aimPhysX} cy={aimPhysY} r={2.5}
+                  fill="rgba(255,60,60,0.9)" />
+              </G>
+            );
+          } else {
+            // Scope sight: scope circle + mil-dot crosshair
+            const scopeR = 44;
+            return (
+              <G>
+                {/* Scope outer ring */}
+                <Circle cx={aimPhysX} cy={aimPhysY} r={scopeR}
+                  fill="rgba(0,0,0,0.18)" stroke="rgba(20,20,20,0.9)" strokeWidth={2.5} />
+                {/* Inner circle */}
+                <Circle cx={aimPhysX} cy={aimPhysY} r={scopeR - 4}
+                  fill="rgba(0,8,0,0.12)" stroke="rgba(80,220,80,0.5)" strokeWidth={0.8} />
+                {/* Crosshair lines (mil-dot style) */}
+                <Line x1={aimPhysX - scopeR + 5} y1={aimPhysY} x2={aimPhysX - 8} y2={aimPhysY}
+                  stroke="rgba(100,255,100,0.9)" strokeWidth={1.2} />
+                <Line x1={aimPhysX + 8} y1={aimPhysY} x2={aimPhysX + scopeR - 5} y2={aimPhysY}
+                  stroke="rgba(100,255,100,0.9)" strokeWidth={1.2} />
+                <Line x1={aimPhysX} y1={aimPhysY - scopeR + 5} x2={aimPhysX} y2={aimPhysY - 8}
+                  stroke="rgba(100,255,100,0.9)" strokeWidth={1.2} />
+                <Line x1={aimPhysX} y1={aimPhysY + 8} x2={aimPhysX} y2={aimPhysY + scopeR - 5}
+                  stroke="rgba(100,255,100,0.9)" strokeWidth={1.2} />
+                {/* Mil dots */}
+                {[-24, -12, 12, 24].map(offset => (
+                  <G key={`md-h-${offset}`}>
+                    <Circle cx={aimPhysX + offset} cy={aimPhysY} r={1.8}
+                      fill="rgba(100,255,100,0.8)" />
+                  </G>
+                ))}
+                {[-24, -12, 12, 24].map(offset => (
+                  <G key={`md-v-${offset}`}>
+                    <Circle cx={aimPhysX} cy={aimPhysY + offset} r={1.8}
+                      fill="rgba(100,255,100,0.8)" />
+                  </G>
+                ))}
+                {/* Center dot */}
+                <Circle cx={aimPhysX} cy={aimPhysY} r={2}
+                  fill="rgba(100,255,100,1)" />
+                {/* Elevation adjustment lines below */}
+                {[12, 24, 36].map((yOff, i) => (
+                  <Line key={`elev-${i}`}
+                    x1={aimPhysX - (6 - i * 2)} y1={aimPhysY + yOff + 8}
+                    x2={aimPhysX + (6 - i * 2)} y2={aimPhysY + yOff + 8}
+                    stroke="rgba(100,255,100,0.6)" strokeWidth={1} />
+                ))}
+              </G>
+            );
+          }
+        })()}
       </Svg>
 
       {/* Strike image animations — tool rushes from large ghost → impact size → fade */}

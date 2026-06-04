@@ -7,14 +7,15 @@ import { TOOL_LIST, type ToolType } from '../constants/gameConfig';
 import { CommandPanel } from './CommandPanel';
 import { SurgeryPanel } from './SurgeryPanel';
 import { BellyStrikePanel } from './BellyStrikePanel';
+import { LethalWeaponPanel } from './LethalWeaponPanel';
 
 const PANEL_WIDTH = 210;
 const TAB_WIDTH = 32;
 const PANEL_MAX_HEIGHT = 400;
-const WRAPPER_HEIGHT = 440;
-const TAB_SPACING = 72;
+const WRAPPER_HEIGHT = 510;
+const TAB_SPACING = 66;
 
-type TabId = 'tools' | 'commands' | 'surgery' | 'strike';
+type TabId = 'tools' | 'commands' | 'surgery' | 'strike' | 'lethal';
 
 const TOOL_ICONS: Record<string, string> = {
   '金属棒':   'minus',
@@ -35,6 +36,7 @@ const TABS: { id: TabId; icon: string; label: string }[] = [
   { id: 'commands', icon: 'command', label: '命令' },
   { id: 'surgery', icon: 'scissors', label: '手术' },
   { id: 'strike', icon: 'target', label: '腹击' },
+  { id: 'lethal', icon: 'crosshair', label: '武器' },
 ];
 
 const PANEL_BG = 'rgba(34,9,26,0.88)';
@@ -114,7 +116,8 @@ export function ToolBar() {
   const commandsX = useRef(new Animated.Value(PANEL_WIDTH + TAB_WIDTH)).current;
   const surgeryX = useRef(new Animated.Value(PANEL_WIDTH + TAB_WIDTH)).current;
   const strikeX = useRef(new Animated.Value(PANEL_WIDTH + TAB_WIDTH)).current;
-  const animMap: Record<TabId, Animated.Value> = { tools: toolsX, commands: commandsX, surgery: surgeryX, strike: strikeX };
+  const lethalX = useRef(new Animated.Value(PANEL_WIDTH + TAB_WIDTH)).current;
+  const animMap: Record<TabId, Animated.Value> = { tools: toolsX, commands: commandsX, surgery: surgeryX, strike: strikeX, lethal: lethalX };
 
   useEffect(() => {
     const target = PANEL_WIDTH + TAB_WIDTH;
@@ -132,6 +135,7 @@ export function ToolBar() {
   const anyToolEnabled = (state.enabledTools ?? []).length > 0;
   const anyToolRunning = Object.values(state.toolStates ?? {}).some(ts => ts.active);
   const inSelMode = state.mesenterySelectionMode;
+  const hasWeapon = !!state.selectedWeapon;
 
   // On native: wrapper uses "box-none" prop — wrapper itself ignores events, children receive them normally.
   // On web: wrapper uses style "none" (CSS pointer-events: none), then each interactive child
@@ -178,16 +182,27 @@ export function ToolBar() {
         <BellyStrikePanel />
       </Animated.View>
 
-      {/* 4 tab buttons — always interactive, evenly spaced */}
+      {/* Lethal weapons panel */}
+      <Animated.View
+        style={[styles.panel, { top: 0, transform: [{ translateX: lethalX }], backgroundColor: PANEL_BG, borderColor: '#e8404066' },
+          Platform.OS === 'web' && { pointerEvents: openTab === 'lethal' ? 'auto' : 'none' } as any,
+        ]}
+      >
+        <LethalWeaponPanel />
+      </Animated.View>
+
+      {/* 5 tab buttons — always interactive, evenly spaced */}
       {TABS.map((tab, i) => {
         const isOpen = openTab === tab.id;
         const hasDot = tab.id === 'tools' && (anyToolEnabled || anyToolRunning);
         const hasSel = tab.id === 'surgery' && inSelMode;
         const hasStrike = tab.id === 'strike' && !!state.bellyStrikeTool;
+        const hasLethal = tab.id === 'lethal' && hasWeapon;
         const dotColor = tab.id === 'tools'
           ? (anyToolRunning ? colors.primary : `${colors.primary}88`)
           : hasSel ? '#e05050'
           : hasStrike ? '#ff8844'
+          : hasLethal ? '#e84040'
           : colors.primary;
 
         return (
@@ -197,9 +212,11 @@ export function ToolBar() {
               styles.tab,
               {
                 top: i * TAB_SPACING,
-                backgroundColor: isOpen ? TAB_BG_OPEN : TAB_BG_CLOSED,
+                backgroundColor: isOpen
+                  ? (tab.id === 'lethal' ? 'rgba(232,64,64,0.15)' : TAB_BG_OPEN)
+                  : TAB_BG_CLOSED,
                 borderColor: isOpen
-                  ? (tab.id === 'strike' ? '#ff884488' : `${colors.primary}cc`)
+                  ? (tab.id === 'strike' ? '#ff884488' : tab.id === 'lethal' ? '#e8404088' : `${colors.primary}cc`)
                   : `${colors.border}99`,
               },
               Platform.OS === 'web' && { pointerEvents: 'auto' },
@@ -211,15 +228,15 @@ export function ToolBar() {
               name={isOpen ? 'chevron-right' : (tab.icon as any)}
               size={15}
               color={isOpen
-                ? (tab.id === 'strike' ? '#ff8844' : colors.primary)
+                ? (tab.id === 'strike' ? '#ff8844' : tab.id === 'lethal' ? '#e84040' : colors.primary)
                 : colors.mutedForeground}
             />
             <Text style={[styles.tabLabel, { color: isOpen
-              ? (tab.id === 'strike' ? '#ff8844' : colors.primary)
+              ? (tab.id === 'strike' ? '#ff8844' : tab.id === 'lethal' ? '#e84040' : colors.primary)
               : colors.mutedForeground }]}>
               {tab.label}
             </Text>
-            {(hasDot || hasSel || hasStrike) && (
+            {(hasDot || hasSel || hasStrike || hasLethal) && (
               <View style={[styles.tabDot, { backgroundColor: dotColor }]} />
             )}
           </TouchableOpacity>
