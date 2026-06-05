@@ -264,6 +264,12 @@ uri = "file://artifacts/mobile/assets/images/main_menu_cover.png"
 type = "image"
 title = "dark fantasy menu background"
 
+[[generated]]
+id = "HCaInlTyPIXcoA-Jab8XK"
+uri = "file://attached_assets/generated_images/main_menu_cover_preview.png"
+type = "image"
+title = "main menu cover preview"
+
 [[outputs]]
 id = "EvFH6bgGV0eFpaLTc_px6"
 uri = "file://artifacts/mobile/assets/images/icon.png"
