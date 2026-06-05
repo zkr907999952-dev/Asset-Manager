@@ -26,7 +26,8 @@ interface Props        { onMenuPress: () => void }
 
 export function MesenteryEditorScreen({ onMenuPress }: Props) {
   const insets = useSafeAreaInsets();
-  const { physicsRef, setScreen, state, setShowBackground } = useGame();
+  const { physicsRef, setScreen, state } = useGame();
+  const [editorBg, setEditorBg] = useState<0 | 1 | 2>(state.showBackground);
   const topPad    = Platform.OS === 'web' ? 67 : insets.top;
   const bottomPad = Platform.OS === 'web' ? 34 : insets.bottom;
 
@@ -392,13 +393,13 @@ export function MesenteryEditorScreen({ onMenuPress }: Props) {
         )}
         {/* Spacer pushes bg toggle to right */}
         <View style={{ flex: 1 }} />
-        {/* Background toggle — cycles 0→1→2→0 */}
+        {/* Background toggle — cycles 0→1→2→0 (editor-local, does not affect simulation) */}
         <TouchableOpacity
-          style={[styles.bgToggleBtn, state.showBackground > 0 && styles.bgToggleBtnOn]}
-          onPress={() => setShowBackground(((state.showBackground + 1) % 3) as 0 | 1 | 2)}
+          style={[styles.bgToggleBtn, editorBg > 0 && styles.bgToggleBtnOn]}
+          onPress={() => setEditorBg(((editorBg + 1) % 3) as 0 | 1 | 2)}
         >
-          <Text style={[styles.bgToggleText, state.showBackground > 0 && styles.bgToggleTextOn]}>
-            {state.showBackground === 0 ? '背景 ○' : state.showBackground === 1 ? '角色 ●' : '透视 ●'}
+          <Text style={[styles.bgToggleText, editorBg > 0 && styles.bgToggleTextOn]}>
+            {editorBg === 0 ? '背景 ○' : editorBg === 1 ? '角色 ●' : '透视 ●'}
           </Text>
         </TouchableOpacity>
       </View>
@@ -419,8 +420,8 @@ export function MesenteryEditorScreen({ onMenuPress }: Props) {
         >
           <Rect x={0} y={0} width={CANVAS_W} height={CANVAS_H} fill="#0a0404" />
 
-          {/* Background — state 1: character, state 2: perspective */}
-          {state.showBackground === 1 && (
+          {/* Background — editorBg 1: character, 2: perspective (local only) */}
+          {editorBg === 1 && (
             <SvgImage
               href={BELLY_EXTERNAL_IMG}
               x={-80} y={-172}
@@ -428,7 +429,7 @@ export function MesenteryEditorScreen({ onMenuPress }: Props) {
               preserveAspectRatio="xMidYMid meet"
             />
           )}
-          {state.showBackground === 2 && (
+          {editorBg === 2 && (
             <SvgImage
               href={INTESTINES_REF}
               x={CAVITY_CX - CANVAS_W * 0.9} y={CAVITY_CY - CANVAS_W * 1.32}
