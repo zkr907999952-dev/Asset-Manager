@@ -260,7 +260,6 @@ export function MesenteryEditorScreen({ onMenuPress }: Props) {
 
       {/* ── Canvas ── */}
       <View
-        ref={canvasViewRef}
         style={styles.canvasArea}
         onLayout={handleLayout}
         {...panResponder.panHandlers}
