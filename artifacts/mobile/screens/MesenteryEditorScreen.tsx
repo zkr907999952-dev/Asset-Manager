@@ -3,7 +3,7 @@ import {
   View, Text, TouchableOpacity, StyleSheet, Platform, PanResponder,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import Svg, { Circle, Line, Ellipse, Rect, Text as SvgText, Polyline } from 'react-native-svg';
+import Svg, { Circle, Line, Ellipse, Rect, Text as SvgText, Polyline, Image as SvgImage } from 'react-native-svg';
 import { useGame } from '@/contexts/GameContext';
 import {
   CANVAS_W, CANVAS_H, CAVITY_CX, CAVITY_CY, CAVITY_RX, CAVITY_RY,
@@ -17,6 +17,7 @@ import {
 } from '../engine/mesenteryConfig';
 
 const HIT_THRESHOLD = 20;
+const BELLY_EXTERNAL_IMG = require('@/assets/images/belly_external.png');
 
 interface NodePos      { rx: number; ry: number }
 interface SelectedNode { type: 'large' | 'small'; idx: number }
@@ -416,6 +417,16 @@ export function MesenteryEditorScreen({ onMenuPress }: Props) {
           viewBox={`0 0 ${CANVAS_W} ${CANVAS_H}`}
         >
           <Rect x={0} y={0} width={CANVAS_W} height={CANVAS_H} fill="#0a0404" />
+
+          {/* Background belly image */}
+          {state.showBackground && (
+            <SvgImage
+              href={BELLY_EXTERNAL_IMG}
+              x={-80} y={-170}
+              width={500} height={715}
+              preserveAspectRatio="xMidYMid meet"
+            />
+          )}
 
           {/* Cavity reference ellipse */}
           <Ellipse
