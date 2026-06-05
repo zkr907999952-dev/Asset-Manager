@@ -423,8 +423,8 @@ export function MesenteryEditorScreen({ onMenuPress }: Props) {
           {state.showBackground === 1 && (
             <SvgImage
               href={BELLY_EXTERNAL_IMG}
-              x={-80} y={-170}
-              width={500} height={715}
+              x={-80} y={-172}
+              width={500} height={722}
               preserveAspectRatio="xMidYMid meet"
             />
           )}

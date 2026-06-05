@@ -411,7 +411,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     activeTool: null, enabledTools: [], toolActive: false, toolParam1: 50, toolParam2: 50,
     toolStates: physicsRef.current.toolStates,
     pressureDiffusionRate: physicsRef.current.pressureDiffusionRate,
-    viewMode: 'internal', showBackground: 0, currentScreen: 'simulation',
+    viewMode: 'internal', showBackground: 1, currentScreen: 'simulation',
     currentDialogue: null, peristalsisSpeed: 1.5,
     peristalsisWaveAmplitude: PERISTALSIS_WAVE_AMPLITUDE_DEFAULT,
     peristalsisWaveSpeed: PERISTALSIS_WAVE_SPEED_DEFAULT,
