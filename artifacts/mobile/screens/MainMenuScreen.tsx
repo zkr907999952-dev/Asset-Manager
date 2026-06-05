@@ -231,10 +231,13 @@ const styles = StyleSheet.create({
     marginBottom: 7,
   },
   titleSub: {
-    fontSize: 10,
-    fontFamily: 'Inter_400Regular',
-    color: 'rgba(255,180,220,0.5)',
-    letterSpacing: 5,
+    fontSize: 11,
+    fontFamily: 'Inter_500Medium',
+    color: 'rgba(255,200,230,0.92)',
+    letterSpacing: 3,
+    textShadowColor: 'rgba(0,0,0,0.85)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 6,
   },
 
   /* Buttons */
