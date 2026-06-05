@@ -73,8 +73,8 @@ export function MainMenuScreen() {
     ]).start();
   }, []);
 
-  const bottomPad = Platform.OS === 'web' ? 34 : insets.bottom;
-  const topPad    = Platform.OS === 'web' ? 67 : insets.top;
+  const bottomPad = Platform.OS === 'web' ? 20 : insets.bottom;
+  const topPad    = Platform.OS === 'web' ? 20 : insets.top;
 
   const ctx = { setScreen, setWip: (l: string) => setWipLabel(l) };
 
