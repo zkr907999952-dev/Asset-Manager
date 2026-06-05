@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet, Platform,
-  ImageBackground, Animated, Modal, Pressable,
+  Image, Animated, Modal, Pressable,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useGame } from '@/contexts/GameContext';
@@ -79,7 +79,8 @@ export function MainMenuScreen() {
   const ctx = { setScreen, setWip: (l: string) => setWipLabel(l) };
 
   return (
-    <ImageBackground source={COVER_IMG} style={styles.bg} resizeMode="cover">
+    <View style={styles.bg}>
+      <Image source={COVER_IMG} style={styles.bgImage} resizeMode="cover" />
       <View style={styles.overlay} />
 
       <View style={[styles.root, { paddingTop: topPad, paddingBottom: bottomPad }]}>
@@ -131,7 +132,7 @@ export function MainMenuScreen() {
         onClose={() => setWipLabel(null)}
       />
       <DevInfoModal visible={devInfoOpen} onClose={() => setDevInfoOpen(false)} />
-    </ImageBackground>
+    </View>
   );
 }
 
@@ -140,9 +141,14 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#05010c',
   },
+  bgImage: {
+    ...StyleSheet.absoluteFillObject,
+    width: '100%',
+    height: '100%',
+  },
   overlay: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(3,1,10,0.62)',
+    backgroundColor: 'rgba(2,1,8,0.72)',
   },
   root: {
     flex: 1,
@@ -196,20 +202,20 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingVertical: 13,
     paddingHorizontal: 20,
-    backgroundColor: 'rgba(5,2,14,0.78)',
+    backgroundColor: 'rgba(4,2,12,0.92)',
     borderRadius: 3,
     borderWidth: 1,
-    borderColor: 'rgba(180,140,60,0.42)',
+    borderColor: 'rgba(180,140,60,0.55)',
   },
   menuBtnHighlight: {
-    backgroundColor: 'rgba(55,18,4,0.88)',
-    borderColor: 'rgba(240,160,30,0.82)',
-    borderWidth: 1,
+    backgroundColor: 'rgba(40,14,2,0.95)',
+    borderColor: 'rgba(240,160,30,0.90)',
+    borderWidth: 1.5,
   },
   menuBtnLabel: {
     fontSize: 15,
     fontFamily: 'Inter_600SemiBold',
-    color: '#dcc888',
+    color: '#e8d49a',
     letterSpacing: 5,
     textAlign: 'center',
   },
