@@ -10,7 +10,7 @@ import {
   N_SMALL, N_LARGE,
 } from '../constants/gameConfig';
 import { largeNodeMesentery } from '../engine/physics';
-import { saveMesenteryConfig } from '../engine/mesenteryConfig';
+import { saveMesenteryConfig, applyMesenteryConfig } from '../engine/mesenteryConfig';
 
 const SMALL_MESENTERY_DEAD_ZONE = 5.0;
 const HIT_THRESHOLD = 28; // physics coords
@@ -28,24 +28,18 @@ export function MesenteryEditorScreen({ onMenuPress }: Props) {
 
   // ── Layout ───────────────────────────────────────────────────────────────────
   const [canvasSize, setCanvasSize] = useState({ w: 1, h: 1 });
-  const canvasViewRef = useRef<View>(null);
 
   const scale   = Math.min(canvasSize.w / CANVAS_W, canvasSize.h / CANVAS_H);
   const svgOffX = (canvasSize.w - CANVAS_W * scale) / 2;
   const svgOffY = (canvasSize.h - CANVAS_H * scale) / 2;
 
   // All layout values read by PanResponder via this ref (avoids stale closures)
-  const layoutRef = useRef({ scale: 1, svgOffX: 0, svgOffY: 0, absX: 0, absY: 0 });
-  layoutRef.current = { scale, svgOffX, svgOffY, absX: layoutRef.current.absX, absY: layoutRef.current.absY };
+  const layoutRef = useRef({ scale: 1, svgOffX: 0, svgOffY: 0 });
+  layoutRef.current = { scale, svgOffX, svgOffY };
 
   const handleLayout = useCallback((e: any) => {
     const { width, height } = e.nativeEvent.layout;
     setCanvasSize({ w: width, h: height });
-    // Measure absolute screen position so pageX/Y can be converted correctly
-    canvasViewRef.current?.measureInWindow((x, y) => {
-      layoutRef.current.absX = x;
-      layoutRef.current.absY = y;
-    });
   }, []);
 
   // ── Node state ───────────────────────────────────────────────────────────────
@@ -69,14 +63,14 @@ export function MesenteryEditorScreen({ onMenuPress }: Props) {
   // ── Status ───────────────────────────────────────────────────────────────────
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle');
 
-  // ── Coordinate helper ────────────────────────────────────────────────────────
-  // pageX/pageY are absolute screen coords from React Native events.
-  // Subtract the canvas View's absolute position and the SVG centering offset,
-  // then divide by scale to get physics space.
-  const pageToPhys = (px: number, py: number) => {
-    const { scale: sc, svgOffX: ox, svgOffY: oy, absX, absY } = layoutRef.current;
-    return { physX: (px - absX - ox) / sc, physY: (py - absY - oy) / sc };
-  };
+  // ── Drag-delta tracking ───────────────────────────────────────────────────────
+  // Store the node's physics position at touch-start alongside the page coords.
+  // On each move we compute the delta in page-pixels and convert to physics units.
+  // This never requires the View's absolute screen position, so it works correctly
+  // inside Replit's iframe proxy without measureInWindow.
+  const dragStartRef = useRef<{
+    pageX: number; pageY: number; nodeRx: number; nodeRy: number;
+  } | null>(null);
 
   // ── PanResponder (created once) ──────────────────────────────────────────────
   const panResponder = useRef(
@@ -85,8 +79,12 @@ export function MesenteryEditorScreen({ onMenuPress }: Props) {
       onMoveShouldSetPanResponder:  () => true,
 
       onPanResponderGrant: (evt) => {
-        const { pageX, pageY } = evt.nativeEvent;
-        const { physX, physY } = pageToPhys(pageX, pageY);
+        // locationX/Y is relative to the canvas View — good for hit-testing
+        const lx = evt.nativeEvent.locationX;
+        const ly = evt.nativeEvent.locationY;
+        const { scale: sc, svgOffX: ox, svgOffY: oy } = layoutRef.current;
+        const physX = (lx - ox) / sc;
+        const physY = (ly - oy) / sc;
 
         let bestDist = HIT_THRESHOLD;
         let best: SelectedNode | null = null;
@@ -101,24 +99,35 @@ export function MesenteryEditorScreen({ onMenuPress }: Props) {
         });
 
         if (best) {
-          setSelected(best);
-          setDraft({ physX, physY } as any); // store touch-start phys pos as draft temporarily
-          // Snap draft to the node's actual position right away
           const node = (best as SelectedNode).type === 'large'
             ? largeNodesRef.current[(best as SelectedNode).idx]
             : smallNodesRef.current[(best as SelectedNode).idx];
+          // Record touch origin and node's original rest position for delta math
+          dragStartRef.current = {
+            pageX: evt.nativeEvent.pageX,
+            pageY: evt.nativeEvent.pageY,
+            nodeRx: node.rx,
+            nodeRy: node.ry,
+          };
+          setSelected(best);
           setDraft({ rx: node.rx, ry: node.ry });
+        } else {
+          dragStartRef.current = null;
         }
       },
 
       onPanResponderMove: (evt) => {
-        if (!selectedRef.current) return;
-        const { pageX, pageY } = evt.nativeEvent;
-        const { physX, physY } = pageToPhys(pageX, pageY);
-        setDraft({ rx: physX, ry: physY });
+        if (!selectedRef.current || !dragStartRef.current) return;
+        const { scale: sc } = layoutRef.current;
+        const dx = (evt.nativeEvent.pageX - dragStartRef.current.pageX) / sc;
+        const dy = (evt.nativeEvent.pageY - dragStartRef.current.pageY) / sc;
+        setDraft({
+          rx: dragStartRef.current.nodeRx + dx,
+          ry: dragStartRef.current.nodeRy + dy,
+        });
       },
 
-      onPanResponderRelease: () => {},
+      onPanResponderRelease: () => { dragStartRef.current = null; },
     })
   ).current;
 
@@ -155,11 +164,12 @@ export function MesenteryEditorScreen({ onMenuPress }: Props) {
     const finalLarge = [...largeNodesRef.current];
     const finalSmall = [...smallNodesRef.current];
     setSaveStatus('saving');
-    const p = physicsRef.current;
-    finalLarge.forEach((n, i) => { p.largeNodes[i].rx = n.rx; p.largeNodes[i].ry = n.ry; });
-    finalSmall.forEach((n, i) => { p.smallNodes[i].rx = n.rx; p.smallNodes[i].ry = n.ry; });
+    const config = { largeNodes: finalLarge, smallNodes: finalSmall };
+    // applyMesenteryConfig snaps x/y to rx/ry and clears velocity
+    // so the simulation immediately reflects the new rest positions
+    applyMesenteryConfig(physicsRef.current, config);
     try {
-      await saveMesenteryConfig({ largeNodes: finalLarge, smallNodes: finalSmall });
+      await saveMesenteryConfig(config);
       setSaveStatus('saved');
       setTimeout(() => setSaveStatus('idle'), 2500);
     } catch {

@@ -30,12 +30,25 @@ export async function saveMesenteryConfig(config: MesenteryConfig): Promise<void
 
 export function applyMesenteryConfig(state: PhysicsState, config: MesenteryConfig): void {
   for (let i = 0; i < state.largeNodes.length && i < config.largeNodes.length; i++) {
-    state.largeNodes[i].rx = config.largeNodes[i].rx;
-    state.largeNodes[i].ry = config.largeNodes[i].ry;
+    const rx = config.largeNodes[i].rx;
+    const ry = config.largeNodes[i].ry;
+    state.largeNodes[i].rx = rx;
+    state.largeNodes[i].ry = ry;
+    // Snap current position so effect is immediate in the simulation
+    state.largeNodes[i].x  = rx;
+    state.largeNodes[i].y  = ry;
+    state.largeNodes[i].vx = 0;
+    state.largeNodes[i].vy = 0;
   }
   for (let i = 0; i < state.smallNodes.length && i < config.smallNodes.length; i++) {
-    state.smallNodes[i].rx = config.smallNodes[i].rx;
-    state.smallNodes[i].ry = config.smallNodes[i].ry;
+    const rx = config.smallNodes[i].rx;
+    const ry = config.smallNodes[i].ry;
+    state.smallNodes[i].rx = rx;
+    state.smallNodes[i].ry = ry;
+    state.smallNodes[i].x  = rx;
+    state.smallNodes[i].y  = ry;
+    state.smallNodes[i].vx = 0;
+    state.smallNodes[i].vy = 0;
   }
 }
 
