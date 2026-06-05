@@ -1753,6 +1753,20 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
 
   const resetPhysics = useCallback(() => {
     const fresh = createInitialPhysicsState();
+    // Preserve mesentery rest positions (rx/ry) — reset should NOT move nodes back
+    const cur = physicsRef.current;
+    for (let i = 0; i < fresh.largeNodes.length && i < cur.largeNodes.length; i++) {
+      fresh.largeNodes[i].rx = cur.largeNodes[i].rx;
+      fresh.largeNodes[i].ry = cur.largeNodes[i].ry;
+      fresh.largeNodes[i].x  = cur.largeNodes[i].rx;
+      fresh.largeNodes[i].y  = cur.largeNodes[i].ry;
+    }
+    for (let i = 0; i < fresh.smallNodes.length && i < cur.smallNodes.length; i++) {
+      fresh.smallNodes[i].rx = cur.smallNodes[i].rx;
+      fresh.smallNodes[i].ry = cur.smallNodes[i].ry;
+      fresh.smallNodes[i].x  = cur.smallNodes[i].rx;
+      fresh.smallNodes[i].y  = cur.smallNodes[i].ry;
+    }
     physicsRef.current = fresh;
     comaStateRef.current = 'none';
     drugRef.current = {

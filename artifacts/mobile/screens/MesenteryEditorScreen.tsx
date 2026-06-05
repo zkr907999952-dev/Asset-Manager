@@ -1,4 +1,4 @@
-import React, { useState, useRef, useCallback, useMemo } from 'react';
+import React, { useState, useRef, useCallback, useMemo, useEffect } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet, Platform, PanResponder,
 } from 'react-native';
@@ -7,13 +7,16 @@ import Svg, { Circle, Line, Ellipse, Rect, Text as SvgText, Polyline } from 'rea
 import { useGame } from '@/contexts/GameContext';
 import {
   CANVAS_W, CANVAS_H, CAVITY_CX, CAVITY_CY, CAVITY_RX, CAVITY_RY,
-  N_SMALL, N_LARGE,
+  N_SMALL, N_LARGE, SMALL_RADIUS, LARGE_RADIUS,
 } from '../constants/gameConfig';
 import { largeNodeMesentery } from '../engine/physics';
-import { saveMesenteryConfig, applyMesenteryConfig } from '../engine/mesenteryConfig';
+import {
+  saveMesenteryConfig, applyMesenteryConfig, getDefaultMesenteryConfig,
+  loadPreset, savePreset, loadActivePresetIdx, saveActivePresetIdx,
+  PRESET_COUNT,
+} from '../engine/mesenteryConfig';
 
-const SMALL_DEAD_ZONE = 5.0;
-const HIT_THRESHOLD   = 20;   // physics units
+const HIT_THRESHOLD = 20;
 
 interface NodePos      { rx: number; ry: number }
 interface SelectedNode { type: 'large' | 'small'; idx: number }
@@ -25,20 +28,25 @@ export function MesenteryEditorScreen({ onMenuPress }: Props) {
   const topPad    = Platform.OS === 'web' ? 67 : insets.top;
   const bottomPad = Platform.OS === 'web' ? 34 : insets.bottom;
 
-  // ── Canvas layout ─────────────────────────────────────────────────────────────
+  // ── Canvas layout ──────────────────────────────────────────────────────────
   const [canvasSize, setCanvasSize] = useState({ w: 1, h: 1 });
   const scale   = Math.min(canvasSize.w / CANVAS_W, canvasSize.h / CANVAS_H);
   const svgW    = CANVAS_W * scale;
   const svgH    = CANVAS_H * scale;
   const svgOffX = (canvasSize.w - svgW) / 2;
   const svgOffY = (canvasSize.h - svgH) / 2;
-
   const layoutRef = useRef({ scale: 1 });
   layoutRef.current.scale = scale;
 
-  // ── Working node state ────────────────────────────────────────────────────────
-  // workingLarge/Small = live edit positions (what's shown on screen).
-  // snapLarge/Small    = last confirmed snapshot (cancel reverts here).
+  // ── Preset state ───────────────────────────────────────────────────────────
+  const [activePreset, setActivePreset] = useState(0);
+  const [switching,    setSwitching]    = useState(false);
+
+  useEffect(() => {
+    loadActivePresetIdx().then(setActivePreset);
+  }, []);
+
+  // ── Working node state ─────────────────────────────────────────────────────
   const initLarge = () => physicsRef.current.largeNodes.map(n => ({ rx: n.rx, ry: n.ry }));
   const initSmall = () => physicsRef.current.smallNodes.map(n => ({ rx: n.rx, ry: n.ry }));
 
@@ -49,12 +57,10 @@ export function MesenteryEditorScreen({ onMenuPress }: Props) {
   workingLargeRef.current = workingLarge;
   workingSmallRef.current = workingSmall;
 
-  // Snapshot for cancel
   const snapLargeRef = useRef<NodePos[]>(initLarge());
   const snapSmallRef = useRef<NodePos[]>(initSmall());
 
-  // ── Selection / drag ──────────────────────────────────────────────────────────
-  // draft overrides the selected node's display position during (and after) a drag
+  // ── Selection / drag ───────────────────────────────────────────────────────
   const [selected, setSelected] = useState<SelectedNode | null>(null);
   const [draft,    setDraft]    = useState<NodePos | null>(null);
   const selectedRef = useRef<SelectedNode | null>(null);
@@ -62,37 +68,31 @@ export function MesenteryEditorScreen({ onMenuPress }: Props) {
   const draftRef = useRef<NodePos | null>(null);
   draftRef.current = draft;
 
-  // ── Status ────────────────────────────────────────────────────────────────────
+  // ── Status ─────────────────────────────────────────────────────────────────
   const [confirmFlash, setConfirmFlash] = useState(false);
-  const [saveStatus, setSaveStatus]     = useState<'idle' | 'saving' | 'saved'>('idle');
+  const [saveStatus,   setSaveStatus]   = useState<'idle' | 'saving' | 'saved'>('idle');
 
-  // ── Drag tracking ─────────────────────────────────────────────────────────────
   const dragStartRef = useRef<{
     pageX: number; pageY: number; nodeRx: number; nodeRy: number;
   } | null>(null);
 
-  // ── Helper: commit draft → working (ref + state) ──────────────────────────────
-  // Called via a ref so PanResponder always sees the latest version.
+  // ── Commit draft → working (called via ref to avoid stale closures) ────────
   const commitDraftFnRef = useRef<(sel: SelectedNode, d: NodePos) => void>(() => {});
   commitDraftFnRef.current = (sel: SelectedNode, d: NodePos) => {
     if (sel.type === 'large') {
       const next = workingLargeRef.current.map((n, i) =>
-        i === sel.idx ? { rx: d.rx, ry: d.ry } : n
-      );
+        i === sel.idx ? { rx: d.rx, ry: d.ry } : n);
       workingLargeRef.current = next;
       setWorkingLarge(next);
     } else {
       const next = workingSmallRef.current.map((n, i) =>
-        i === sel.idx ? { rx: d.rx, ry: d.ry } : n
-      );
+        i === sel.idx ? { rx: d.rx, ry: d.ry } : n);
       workingSmallRef.current = next;
       setWorkingSmall(next);
     }
   };
 
-  // ── PanResponder ──────────────────────────────────────────────────────────────
-  // Placed on an overlay View positioned exactly over the SVG area,
-  // so locationX/Y are already in SVG-pixel space → physX = lx / scale.
+  // ── PanResponder (on overlay View = SVG-pixel coords) ─────────────────────
   const panResponder = useRef(
     PanResponder.create({
       onStartShouldSetPanResponder: () => true,
@@ -103,14 +103,12 @@ export function MesenteryEditorScreen({ onMenuPress }: Props) {
         const physX = evt.nativeEvent.locationX / sc;
         const physY = evt.nativeEvent.locationY / sc;
 
-        // Finalize any in-progress drag onto working nodes
+        // Commit current draft to working before switching
         const curSel   = selectedRef.current;
         const curDraft = draftRef.current;
-        if (curSel && curDraft) {
-          commitDraftFnRef.current(curSel, curDraft);
-        }
+        if (curSel && curDraft) commitDraftFnRef.current(curSel, curDraft);
 
-        // Hit-test against updated working nodes
+        // Hit-test
         let bestDist = HIT_THRESHOLD;
         let best: SelectedNode | null = null;
         workingLargeRef.current.forEach((n, idx) => {
@@ -128,15 +126,12 @@ export function MesenteryEditorScreen({ onMenuPress }: Props) {
             ? workingLargeRef.current[b.idx]
             : workingSmallRef.current[b.idx];
           dragStartRef.current = {
-            pageX:  evt.nativeEvent.pageX,
-            pageY:  evt.nativeEvent.pageY,
-            nodeRx: node.rx,
-            nodeRy: node.ry,
+            pageX: evt.nativeEvent.pageX, pageY: evt.nativeEvent.pageY,
+            nodeRx: node.rx, nodeRy: node.ry,
           };
           setSelected(best);
           setDraft({ rx: node.rx, ry: node.ry });
         }
-        // Tap on empty space: keep current selection
       },
 
       onPanResponderMove: (evt) => {
@@ -150,35 +145,26 @@ export function MesenteryEditorScreen({ onMenuPress }: Props) {
       },
 
       onPanResponderRelease: () => {
-        // Commit released position to working so the node stays put
         const curSel   = selectedRef.current;
         const curDraft = draftRef.current;
-        if (curSel && curDraft) {
-          commitDraftFnRef.current(curSel, curDraft);
-          // Keep draft at current position (shows coordinates in header)
-        }
+        if (curSel && curDraft) commitDraftFnRef.current(curSel, curDraft);
         dragStartRef.current = null;
       },
     })
   ).current;
 
-  // ── Confirm ───────────────────────────────────────────────────────────────────
-  // Snapshot current working state as the cancel recovery point.
+  // ── Confirm (snapshot) ─────────────────────────────────────────────────────
   const handleConfirm = useCallback(() => {
-    // Commit any live draft first
-    const curSel   = selectedRef.current;
+    const curSel = selectedRef.current;
     const curDraft = draftRef.current;
-    if (curSel && curDraft) {
-      commitDraftFnRef.current(curSel, curDraft);
-    }
+    if (curSel && curDraft) commitDraftFnRef.current(curSel, curDraft);
     snapLargeRef.current = workingLargeRef.current.map(n => ({ ...n }));
     snapSmallRef.current = workingSmallRef.current.map(n => ({ ...n }));
     setConfirmFlash(true);
     setTimeout(() => setConfirmFlash(false), 900);
   }, []);
 
-  // ── Cancel ────────────────────────────────────────────────────────────────────
-  // Revert working state to last snapshot.
+  // ── Cancel (revert to snapshot) ────────────────────────────────────────────
   const handleCancel = useCallback(() => {
     const revL = snapLargeRef.current.map(n => ({ ...n }));
     const revS = snapSmallRef.current.map(n => ({ ...n }));
@@ -191,16 +177,11 @@ export function MesenteryEditorScreen({ onMenuPress }: Props) {
     dragStartRef.current = null;
   }, []);
 
-  // ── Save ──────────────────────────────────────────────────────────────────────
-  // Write current working state (draft applied) to file + physics.
+  // ── Save (write to preset file + apply physics) ────────────────────────────
   const handleSave = useCallback(async () => {
-    // Commit live draft
-    const curSel   = selectedRef.current;
+    const curSel = selectedRef.current;
     const curDraft = draftRef.current;
-    if (curSel && curDraft) {
-      commitDraftFnRef.current(curSel, curDraft);
-    }
-    // Also update snapshot so cancel now starts from saved state
+    if (curSel && curDraft) commitDraftFnRef.current(curSel, curDraft);
     snapLargeRef.current = workingLargeRef.current.map(n => ({ ...n }));
     snapSmallRef.current = workingSmallRef.current.map(n => ({ ...n }));
 
@@ -211,67 +192,116 @@ export function MesenteryEditorScreen({ onMenuPress }: Props) {
     };
     applyMesenteryConfig(physicsRef.current, config);
     try {
-      await saveMesenteryConfig(config);
+      await savePreset(activePreset, config);
       setSaveStatus('saved');
       setTimeout(() => setSaveStatus('idle'), 2500);
     } catch {
       setSaveStatus('idle');
     }
-  }, [physicsRef]);
+  }, [activePreset, physicsRef]);
 
-  // ── Display helpers ───────────────────────────────────────────────────────────
-  // The displayed position for a node: draft if it's the currently selected node, else working.
+  // ── Switch preset ──────────────────────────────────────────────────────────
+  const handleSwitchPreset = useCallback(async (newIdx: number) => {
+    if (newIdx === activePreset || switching) return;
+    setSwitching(true);
+    try {
+      // Auto-save current working state to old preset
+      const curSel = selectedRef.current;
+      const curDraft = draftRef.current;
+      if (curSel && curDraft) commitDraftFnRef.current(curSel, curDraft);
+      await savePreset(activePreset, {
+        largeNodes: workingLargeRef.current,
+        smallNodes: workingSmallRef.current,
+      });
+
+      // Load new preset
+      const loaded = await loadPreset(newIdx);
+      const cfg    = loaded ?? getDefaultMesenteryConfig();
+      const newL   = cfg.largeNodes.map(n => ({ rx: n.rx, ry: n.ry }));
+      const newS   = cfg.smallNodes.map(n => ({ rx: n.rx, ry: n.ry }));
+
+      workingLargeRef.current = newL;
+      workingSmallRef.current = newS;
+      setWorkingLarge(newL);
+      setWorkingSmall(newS);
+      snapLargeRef.current = newL.map(n => ({ ...n }));
+      snapSmallRef.current = newS.map(n => ({ ...n }));
+      setSelected(null);
+      setDraft(null);
+      dragStartRef.current = null;
+
+      // Apply to physics so exiting editor reflects new preset
+      applyMesenteryConfig(physicsRef.current, cfg);
+
+      setActivePreset(newIdx);
+      await saveActivePresetIdx(newIdx);
+    } finally {
+      setSwitching(false);
+    }
+  }, [activePreset, switching, physicsRef]);
+
+  // ── Display node positions (draft overrides selected node) ─────────────────
   const dispLarge = useMemo<NodePos[]>(() =>
     workingLarge.map((n, i) =>
       selected?.type === 'large' && selected.idx === i && draft
-        ? { rx: draft.rx, ry: draft.ry }
-        : n
-    ),
+        ? { rx: draft.rx, ry: draft.ry } : n),
     [workingLarge, selected, draft]
   );
   const dispSmall = useMemo<NodePos[]>(() =>
     workingSmall.map((n, i) =>
       selected?.type === 'small' && selected.idx === i && draft
-        ? { rx: draft.rx, ry: draft.ry }
-        : n
-    ),
+        ? { rx: draft.rx, ry: draft.ry } : n),
     [workingSmall, selected, draft]
   );
 
+  // ── SVG rendering ──────────────────────────────────────────────────────────
   const buildPolyPoints = (nodes: NodePos[]) =>
     nodes.map(n => `${n.rx.toFixed(1)},${n.ry.toFixed(1)}`).join(' ');
 
   const renderNodes = (
     nodes: NodePos[],
     type: 'large' | 'small',
+    physRadius: number,
     deadZoneFn: (i: number) => number
   ) =>
     nodes.map((n, idx) => {
-      const isSel = selected?.type === type && selected.idx === idx;
-      const color = isSel ? '#ffffff' : (type === 'large' ? '#ffaa33' : '#33ccff');
-      const arm   = isSel ? 10 : 6;
-      const dotR  = isSel ? 4.5 : 2.5;
-      const sw    = isSel ? 1.8 : 0.8;
-      const op    = isSel ? 1 : 0.75;
-      const dz    = deadZoneFn(idx);
+      const isSel  = selected?.type === type && selected.idx === idx;
+      const color  = isSel ? '#ffffff' : (type === 'large' ? '#ffaa33' : '#33ccff');
+      const arm    = isSel ? 10 : 6;
+      const dotR   = isSel ? 4.5 : 2.5;
+      const sw     = isSel ? 1.8 : 0.8;
+      const op     = isSel ? 1   : 0.75;
+      const dz     = deadZoneFn(idx);
 
       return (
         <React.Fragment key={`${type}-${idx}`}>
-          {dz > 0.5 && (
+          {/* Collision volume wireframe */}
+          <Circle
+            cx={n.rx} cy={n.ry} r={physRadius}
+            fill="none"
+            stroke={isSel ? color : (type === 'large' ? '#ffaa33' : '#33ccff')}
+            strokeWidth={0.6 / scale}
+            strokeOpacity={isSel ? 0.55 : 0.22}
+          />
+          {/* Free-zone dead-zone circle (dashed) */}
+          {dz > physRadius + 0.5 && (
             <Circle cx={n.rx} cy={n.ry} r={dz}
               fill="none" stroke={color}
-              strokeWidth={isSel ? 1.2 / scale : 0.5 / scale}
-              strokeOpacity={isSel ? 0.65 : 0.28}
-              strokeDasharray={isSel ? undefined : `${3 / scale},${3 / scale}`}
+              strokeWidth={isSel ? 1.0 / scale : 0.5 / scale}
+              strokeOpacity={isSel ? 0.50 : 0.20}
+              strokeDasharray={`${3 / scale},${3 / scale}`}
             />
           )}
+          {/* Crosshair */}
           <Line x1={n.rx - arm / scale} y1={n.ry} x2={n.rx + arm / scale} y2={n.ry}
             stroke={color} strokeWidth={sw / scale} strokeOpacity={op} />
           <Line x1={n.rx} y1={n.ry - arm / scale} x2={n.rx} y2={n.ry + arm / scale}
             stroke={color} strokeWidth={sw / scale} strokeOpacity={op} />
+          {/* Centre dot */}
           <Circle cx={n.rx} cy={n.ry} r={dotR / scale} fill={color} fillOpacity={op} />
+          {/* Index label when selected */}
           {isSel && (
-            <SvgText x={n.rx + 6 / scale} y={n.ry - 6 / scale}
+            <SvgText x={n.rx + (physRadius + 3) / scale} y={n.ry - 3 / scale}
               fontSize={8 / scale} fill="#ffffff">
               [{idx}]
             </SvgText>
@@ -280,7 +310,7 @@ export function MesenteryEditorScreen({ onMenuPress }: Props) {
       );
     });
 
-  // ── Header info ───────────────────────────────────────────────────────────────
+  // Header info
   const selNode  = selected
     ? (selected.type === 'large' ? dispLarge[selected.idx] : dispSmall[selected.idx])
     : null;
@@ -312,6 +342,30 @@ export function MesenteryEditorScreen({ onMenuPress }: Props) {
         </View>
       </View>
 
+      {/* ── Preset bar ── */}
+      <View style={styles.presetBar}>
+        <Text style={styles.presetBarLabel}>预设：</Text>
+        {Array.from({ length: PRESET_COUNT }, (_, i) => {
+          const isActive = activePreset === i;
+          return (
+            <TouchableOpacity
+              key={i}
+              style={[styles.presetBtn, isActive && styles.presetBtnActive]}
+              onPress={() => handleSwitchPreset(i)}
+              disabled={switching}
+            >
+              {isActive && <View style={styles.presetActiveDot} />}
+              <Text style={[styles.presetBtnText, isActive && styles.presetBtnTextActive]}>
+                预设{i + 1}
+              </Text>
+            </TouchableOpacity>
+          );
+        })}
+        {switching && (
+          <Text style={styles.switchingText}>切换中…</Text>
+        )}
+      </View>
+
       {/* ── Canvas area ── */}
       <View
         style={styles.canvasArea}
@@ -320,7 +374,7 @@ export function MesenteryEditorScreen({ onMenuPress }: Props) {
           h: e.nativeEvent.layout.height,
         })}
       >
-        {/* SVG — rendered in physics viewBox coordinate space */}
+        {/* SVG — physics viewBox coordinate space */}
         <Svg
           width={svgW} height={svgH}
           style={{ position: 'absolute', left: svgOffX, top: svgOffY }}
@@ -334,49 +388,49 @@ export function MesenteryEditorScreen({ onMenuPress }: Props) {
             fill="none" stroke="#3a1818" strokeWidth={1.5 / scale}
             strokeDasharray={`${6 / scale},${5 / scale}`}
           />
-          {/* Calibration cross at cavity center */}
+          {/* Calibration cross at cavity centre */}
           <Line x1={CAVITY_CX - 8 / scale} y1={CAVITY_CY} x2={CAVITY_CX + 8 / scale} y2={CAVITY_CY}
             stroke="#442222" strokeWidth={0.8 / scale} />
           <Line x1={CAVITY_CX} y1={CAVITY_CY - 8 / scale} x2={CAVITY_CX} y2={CAVITY_CY + 8 / scale}
             stroke="#442222" strokeWidth={0.8 / scale} />
 
-          {/* Guide polylines */}
-          <Polyline points={buildPolyPoints(dispSmall)}
-            fill="none" stroke="#33ccff" strokeWidth={1 / scale}
-            strokeOpacity={0.25} strokeDasharray={`${4 / scale},${4 / scale}`} />
-          <Polyline points={buildPolyPoints(dispLarge)}
-            fill="none" stroke="#ffaa33" strokeWidth={1 / scale}
-            strokeOpacity={0.25} strokeDasharray={`${4 / scale},${4 / scale}`} />
+          {/* Connection lines — SOLID */}
+          <Polyline
+            points={buildPolyPoints(dispSmall)}
+            fill="none" stroke="#33ccff" strokeWidth={0.8 / scale}
+            strokeOpacity={0.35}
+          />
+          <Polyline
+            points={buildPolyPoints(dispLarge)}
+            fill="none" stroke="#ffaa33" strokeWidth={0.8 / scale}
+            strokeOpacity={0.35}
+          />
 
-          {/* Nodes */}
-          {renderNodes(dispSmall, 'small', () => SMALL_DEAD_ZONE)}
-          {renderNodes(dispLarge, 'large', i => largeNodeMesentery(i).deadZone)}
+          {/* Nodes with collision wireframe circles */}
+          {renderNodes(dispSmall, 'small', SMALL_RADIUS, () => 0)}
+          {renderNodes(dispLarge, 'large', LARGE_RADIUS, i => largeNodeMesentery(i).deadZone)}
 
           {/* Legend */}
-          <Rect x={0} y={0} width={90 / scale} height={40 / scale}
-            fill="rgba(10,4,4,0.78)" rx={4 / scale} />
+          <Rect x={0} y={0} width={96 / scale} height={46 / scale}
+            fill="rgba(10,4,4,0.82)" rx={4 / scale} />
           <Circle cx={8 / scale}  cy={10 / scale} r={3 / scale} fill="#ffaa33" />
           <SvgText x={15 / scale} y={14 / scale} fill="#ffaa33"
-            fontSize={8 / scale} opacity={0.85}>大肠 ({N_LARGE}节点)</SvgText>
+            fontSize={8 / scale} opacity={0.85}>大肠 r={LARGE_RADIUS}</SvgText>
           <Circle cx={8 / scale}  cy={23 / scale} r={3 / scale} fill="#33ccff" />
           <SvgText x={15 / scale} y={27 / scale} fill="#33ccff"
-            fontSize={8 / scale} opacity={0.85}>小肠 ({N_SMALL}节点)</SvgText>
-          <SvgText x={4 / scale}  y={37 / scale} fill="#666666"
-            fontSize={7 / scale} opacity={0.7}>虚圈=自由范围  虚线=走向</SvgText>
+            fontSize={8 / scale} opacity={0.85}>小肠 r={SMALL_RADIUS}</SvgText>
+          <SvgText x={4 / scale}  y={38 / scale} fill="#665555"
+            fontSize={7 / scale} opacity={0.8}>实圆=碰撞体积</SvgText>
+          <SvgText x={4 / scale}  y={45 / scale} fill="#665555"
+            fontSize={7 / scale} opacity={0.8}>虚圆=自由范围</SvgText>
         </Svg>
 
-        {/*
-          Touch-capture overlay — positioned exactly over the SVG.
-          locationX/Y from events on this View are in SVG-pixel space:
-            physX = locationX / scale  (no svgOffX subtraction needed)
-        */}
+        {/* Touch overlay — exactly covers the SVG area, locationX/Y = SVG-pixel space */}
         <View
           style={{
             position: 'absolute',
-            left: svgOffX,
-            top: svgOffY,
-            width: svgW,
-            height: svgH,
+            left: svgOffX, top: svgOffY,
+            width: svgW,   height: svgH,
           }}
           {...panResponder.panHandlers}
         />
@@ -384,23 +438,17 @@ export function MesenteryEditorScreen({ onMenuPress }: Props) {
 
       {/* ── Bottom bar ── */}
       <View style={[styles.bottomBar, { paddingBottom: bottomPad + 4 }]}>
-        {/* State legend */}
         <View style={styles.legendRow}>
           <View style={styles.legendDot} />
-          <Text style={styles.legendText}>拖拽节点后点击其他节点可直接切换</Text>
+          <Text style={styles.legendText}>拖拽节点；点击其他节点直接切换</Text>
         </View>
         <View style={styles.btnRow}>
-          {/* Confirm: snapshot current state as cancel target */}
           <TouchableOpacity style={[styles.btn, styles.btnConfirm]} onPress={handleConfirm}>
             <Text style={styles.btnText}>记录</Text>
           </TouchableOpacity>
-
-          {/* Cancel: revert to last snapshot */}
           <TouchableOpacity style={[styles.btn, styles.btnCancel]} onPress={handleCancel}>
             <Text style={styles.btnText}>还原</Text>
           </TouchableOpacity>
-
-          {/* Save: write to file + apply to physics */}
           <TouchableOpacity
             style={[
               styles.btn, styles.btnSave,
@@ -422,6 +470,7 @@ export function MesenteryEditorScreen({ onMenuPress }: Props) {
 
 const styles = StyleSheet.create({
   container:   { flex: 1, backgroundColor: '#0a0404' },
+
   header: {
     flexDirection: 'row', alignItems: 'center',
     paddingHorizontal: 10, paddingBottom: 8,
@@ -439,7 +488,48 @@ const styles = StyleSheet.create({
   },
   selInfo:    { fontSize: 11, fontFamily: 'Inter_400Regular', color: '#cccccc', textAlign: 'right' },
   hintLabel:  { fontSize: 10, fontFamily: 'Inter_400Regular', color: '#555555' },
+
+  // ── Preset bar ──
+  presetBar: {
+    flexDirection: 'row', alignItems: 'center',
+    paddingHorizontal: 10, paddingVertical: 7,
+    backgroundColor: '#110606',
+    borderBottomWidth: 1, borderBottomColor: '#2a1515',
+    gap: 6,
+  },
+  presetBarLabel: {
+    fontSize: 11, fontFamily: 'Inter_400Regular', color: '#554444',
+  },
+  presetBtn: {
+    flexDirection: 'row', alignItems: 'center',
+    paddingHorizontal: 14, paddingVertical: 6,
+    borderRadius: 20, backgroundColor: '#1e0c0c',
+    borderWidth: 1, borderColor: '#3a1515',
+    gap: 4,
+  },
+  presetBtnActive: {
+    backgroundColor: '#3a1a08',
+    borderColor: '#cc7733',
+    shadowColor: '#cc7733',
+    shadowOpacity: 0.4,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 0 },
+  },
+  presetActiveDot: {
+    width: 6, height: 6, borderRadius: 3, backgroundColor: '#cc7733',
+  },
+  presetBtnText: {
+    fontSize: 12, fontFamily: 'Inter_500Medium', color: '#665544',
+  },
+  presetBtnTextActive: {
+    color: '#ffaa44', fontFamily: 'Inter_600SemiBold',
+  },
+  switchingText: {
+    fontSize: 11, fontFamily: 'Inter_400Regular', color: '#554444', marginLeft: 4,
+  },
+
   canvasArea: { flex: 1, position: 'relative', overflow: 'hidden' },
+
   bottomBar: {
     borderTopWidth: 1, borderTopColor: '#2a1515',
     backgroundColor: '#140808', paddingTop: 8, paddingHorizontal: 10,
@@ -447,9 +537,7 @@ const styles = StyleSheet.create({
   legendRow: {
     flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 6,
   },
-  legendDot: {
-    width: 5, height: 5, borderRadius: 3, backgroundColor: '#444444',
-  },
+  legendDot: { width: 5, height: 5, borderRadius: 3, backgroundColor: '#444444' },
   legendText: { fontSize: 10, fontFamily: 'Inter_400Regular', color: '#555555' },
   btnRow:     { flexDirection: 'row', gap: 8 },
   btn: {
