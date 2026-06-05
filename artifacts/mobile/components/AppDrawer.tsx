@@ -137,7 +137,7 @@ export function AppDrawer({ open, onClose }: Props) {
         <View style={[styles.divider, { backgroundColor: colors.border, marginTop: 'auto' }]} />
         <View style={styles.drawerFooter}>
           <Text style={[styles.footerText, { color: colors.mutedForeground }]}>
-            {APP_VERSION} 腹腔仿真引擎
+            版本号：v0.10.beta
           </Text>
         </View>
       </Animated.View>
