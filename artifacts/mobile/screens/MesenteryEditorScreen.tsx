@@ -24,7 +24,7 @@ interface Props        { onMenuPress: () => void }
 
 export function MesenteryEditorScreen({ onMenuPress }: Props) {
   const insets = useSafeAreaInsets();
-  const { physicsRef, setScreen } = useGame();
+  const { physicsRef, setScreen, state, setShowBackground } = useGame();
   const topPad    = Platform.OS === 'web' ? 67 : insets.top;
   const bottomPad = Platform.OS === 'web' ? 34 : insets.bottom;
 
@@ -177,6 +177,24 @@ export function MesenteryEditorScreen({ onMenuPress }: Props) {
     dragStartRef.current = null;
   }, []);
 
+  // ── Reset current preset to defaults ──────────────────────────────────────
+  const handleResetCurrentPreset = useCallback(async () => {
+    const defaults = getDefaultMesenteryConfig();
+    const newL = defaults.largeNodes.map(n => ({ rx: n.rx, ry: n.ry }));
+    const newS = defaults.smallNodes.map(n => ({ rx: n.rx, ry: n.ry }));
+    workingLargeRef.current = newL;
+    workingSmallRef.current = newS;
+    setWorkingLarge(newL);
+    setWorkingSmall(newS);
+    snapLargeRef.current = newL.map(n => ({ ...n }));
+    snapSmallRef.current = newS.map(n => ({ ...n }));
+    setSelected(null);
+    setDraft(null);
+    dragStartRef.current = null;
+    applyMesenteryConfig(physicsRef.current, defaults);
+    await savePreset(activePreset, defaults);
+  }, [activePreset, physicsRef]);
+
   // ── Save (write to preset file + apply physics) ────────────────────────────
   const handleSave = useCallback(async () => {
     const curSel = selectedRef.current;
@@ -327,18 +345,24 @@ export function MesenteryEditorScreen({ onMenuPress }: Props) {
         </TouchableOpacity>
         <Text style={styles.title}>肠系膜编辑</Text>
         <View style={styles.headerRight}>
-          {saveStatus === 'saved' && (
-            <Text style={styles.statusChip}>已保存 ✓</Text>
-          )}
-          {confirmFlash && (
-            <Text style={[styles.statusChip, { backgroundColor: 'rgba(30,80,30,0.8)', color: '#88ddaa' }]}>
-              已记录 ✓
-            </Text>
-          )}
+          {/* Static label — never moves */}
           {selLabel
             ? <Text style={styles.selInfo} numberOfLines={1}>{selLabel}</Text>
             : <Text style={styles.hintLabel}>点击节点选择并拖动</Text>
           }
+          {/* Chips float absolutely over header so they never affect layout */}
+          {saveStatus === 'saved' && (
+            <View style={styles.chipOverlay}>
+              <Text style={styles.statusChip}>已保存 ✓</Text>
+            </View>
+          )}
+          {confirmFlash && (
+            <View style={styles.chipOverlay}>
+              <Text style={[styles.statusChip, { backgroundColor: 'rgba(30,80,30,0.8)', color: '#88ddaa' }]}>
+                已记录 ✓
+              </Text>
+            </View>
+          )}
         </View>
       </View>
 
@@ -364,6 +388,17 @@ export function MesenteryEditorScreen({ onMenuPress }: Props) {
         {switching && (
           <Text style={styles.switchingText}>切换中…</Text>
         )}
+        {/* Spacer pushes bg toggle to right */}
+        <View style={{ flex: 1 }} />
+        {/* Background toggle */}
+        <TouchableOpacity
+          style={[styles.bgToggleBtn, state.showBackground && styles.bgToggleBtnOn]}
+          onPress={() => setShowBackground(!state.showBackground)}
+        >
+          <Text style={[styles.bgToggleText, state.showBackground && styles.bgToggleTextOn]}>
+            {state.showBackground ? '背景 ●' : '背景 ○'}
+          </Text>
+        </TouchableOpacity>
       </View>
 
       {/* ── Canvas area ── */}
@@ -449,6 +484,9 @@ export function MesenteryEditorScreen({ onMenuPress }: Props) {
           <TouchableOpacity style={[styles.btn, styles.btnCancel]} onPress={handleCancel}>
             <Text style={styles.btnText}>还原</Text>
           </TouchableOpacity>
+          <TouchableOpacity style={[styles.btn, styles.btnReset]} onPress={handleResetCurrentPreset}>
+            <Text style={styles.btnText}>重置</Text>
+          </TouchableOpacity>
           <TouchableOpacity
             style={[
               styles.btn, styles.btnSave,
@@ -480,14 +518,18 @@ const styles = StyleSheet.create({
   backBtn:     { padding: 4 },
   backBtnText: { color: '#ffaa33', fontSize: 13, fontFamily: 'Inter_400Regular' },
   title:       { fontSize: 13, fontFamily: 'Inter_600SemiBold', color: '#ffffff' },
-  headerRight: { flex: 1, alignItems: 'flex-end', gap: 2 },
-  statusChip: {
-    fontSize: 10, fontFamily: 'Inter_600SemiBold', color: '#44cc88',
-    backgroundColor: 'rgba(20,60,30,0.7)',
-    paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4,
-  },
+  headerRight: { flex: 1, alignItems: 'flex-end', justifyContent: 'center' },
   selInfo:    { fontSize: 11, fontFamily: 'Inter_400Regular', color: '#cccccc', textAlign: 'right' },
   hintLabel:  { fontSize: 10, fontFamily: 'Inter_400Regular', color: '#555555' },
+  chipOverlay: {
+    position: 'absolute', top: 0, right: 0, bottom: 0,
+    justifyContent: 'center', pointerEvents: 'none',
+  } as any,
+  statusChip: {
+    fontSize: 10, fontFamily: 'Inter_600SemiBold', color: '#44cc88',
+    backgroundColor: 'rgba(20,60,30,0.85)',
+    paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4,
+  },
 
   // ── Preset bar ──
   presetBar: {
@@ -527,6 +569,20 @@ const styles = StyleSheet.create({
   switchingText: {
     fontSize: 11, fontFamily: 'Inter_400Regular', color: '#554444', marginLeft: 4,
   },
+  bgToggleBtn: {
+    paddingHorizontal: 10, paddingVertical: 5,
+    borderRadius: 14, backgroundColor: '#1e0c0c',
+    borderWidth: 1, borderColor: '#3a1515',
+  },
+  bgToggleBtnOn: {
+    backgroundColor: '#1a2a3a', borderColor: '#4488aa',
+  },
+  bgToggleText: {
+    fontSize: 11, fontFamily: 'Inter_500Medium', color: '#554444',
+  },
+  bgToggleTextOn: {
+    color: '#66bbdd',
+  },
 
   canvasArea: { flex: 1, position: 'relative', overflow: 'hidden' },
 
@@ -546,6 +602,7 @@ const styles = StyleSheet.create({
   },
   btnConfirm: { backgroundColor: '#1a3a2a' },
   btnCancel:  { backgroundColor: '#3a2a1a' },
+  btnReset:   { backgroundColor: '#2a1a1a' },
   btnSave:    { backgroundColor: '#1a2a4a' },
   btnText:    { color: '#ffffff', fontSize: 13, fontFamily: 'Inter_600SemiBold' },
 });

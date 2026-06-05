@@ -136,6 +136,7 @@ export interface GameUIState {
   toolStates: Record<string, ToolInstanceState>;
   pressureDiffusionRate: number;
   viewMode: 'external' | 'internal';
+  showBackground: boolean;
   currentScreen: ScreenName;
   currentDialogue: string | null;
   peristalsisSpeed: number;
@@ -229,6 +230,7 @@ interface GameContextType {
   renderVersionRef: React.MutableRefObject<number>;
   setScreen: (screen: ScreenName) => void;
   setViewMode: (mode: 'external' | 'internal') => void;
+  setShowBackground: (v: boolean) => void;
   setActiveTool: (tool: ToolType | null) => void;
   toggleToolEnabled: (tool: ToolType) => void;
   setToolActive: (active: boolean) => void;
@@ -409,7 +411,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     activeTool: null, enabledTools: [], toolActive: false, toolParam1: 50, toolParam2: 50,
     toolStates: physicsRef.current.toolStates,
     pressureDiffusionRate: physicsRef.current.pressureDiffusionRate,
-    viewMode: 'internal', currentScreen: 'simulation',
+    viewMode: 'internal', showBackground: true, currentScreen: 'simulation',
     currentDialogue: null, peristalsisSpeed: 1.5,
     peristalsisWaveAmplitude: PERISTALSIS_WAVE_AMPLITUDE_DEFAULT,
     peristalsisWaveSpeed: PERISTALSIS_WAVE_SPEED_DEFAULT,
@@ -1243,6 +1245,10 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
 
   const setViewMode = useCallback((mode: 'external' | 'internal') => {
     setState(prev => ({ ...prev, viewMode: mode }));
+  }, []);
+
+  const setShowBackground = useCallback((v: boolean) => {
+    setState(prev => ({ ...prev, showBackground: v }));
   }, []);
 
   const setActiveTool = useCallback((tool: ToolType | null) => {
@@ -2549,7 +2555,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
   return (
     <GameContext.Provider value={{
       state, physicsRef, renderSnapshotRef, renderVersionRef,
-      setScreen, setViewMode, setActiveTool, toggleToolEnabled, setToolActive,
+      setScreen, setViewMode, setShowBackground, setActiveTool, toggleToolEnabled, setToolActive,
       setToolParam1, setToolParam2, setToolState, setPeriSpeed,
       setPeriWaveAmplitude, setPeriWaveSpeed,
       setBreathAmplitude, setExpansionScale, setPressureDiffusionRate,

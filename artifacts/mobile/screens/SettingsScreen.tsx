@@ -12,6 +12,8 @@ import {
   getDefaultMesenteryConfig,
   saveMesenteryConfig,
   applyMesenteryConfig,
+  savePreset,
+  PRESET_COUNT,
 } from '../engine/mesenteryConfig';
 
 interface Props {
@@ -104,7 +106,9 @@ export function SettingsScreen({ onMenuPress }: Props) {
     const defaults = getDefaultMesenteryConfig();
     applyMesenteryConfig(physicsRef.current, defaults);
     try {
-      await saveMesenteryConfig(defaults);
+      await Promise.all(
+        Array.from({ length: PRESET_COUNT }, (_, i) => savePreset(i, defaults))
+      );
       setResetStatus('done');
       setTimeout(() => setResetStatus('idle'), 2500);
     } catch {

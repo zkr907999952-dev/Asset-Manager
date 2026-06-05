@@ -1339,24 +1339,27 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
         {/* ===== BACKGROUND LAYER ===== */}
         {isInternal ? (
           <G>
-            {/* Same character image as external view — no dark overlay so brightness matches */}
-            <SvgImage
-              href={BELLY_EXTERNAL_IMG}
-              x={-80} y={breathImgOffsetY}
-              width={500} height={breathImgH}
-              preserveAspectRatio="xMidYMid meet"
-            />
+            {state.showBackground && (
+              <SvgImage
+                href={BELLY_EXTERNAL_IMG}
+                x={-80} y={breathImgOffsetY}
+                width={500} height={breathImgH}
+                preserveAspectRatio="xMidYMid meet"
+              />
+            )}
           </G>
         ) : (
           <G>
-            {/* External view belly image. x=-80 centers 500px img on 340px canvas.
-                y=-189 places navel at CAVITY_CY=248: 0.609*715-189=248. */}
-            <SvgImage
-              href={BELLY_EXTERNAL_IMG}
-              x={-80} y={breathImgOffsetY}
-              width={500} height={breathImgH}
-              preserveAspectRatio="xMidYMid meet"
-            />
+            {state.showBackground && (
+              /* External view belly image. x=-80 centers 500px img on 340px canvas.
+                 y=-189 places navel at CAVITY_CY=248: 0.609*715-189=248. */
+              <SvgImage
+                href={BELLY_EXTERNAL_IMG}
+                x={-80} y={breathImgOffsetY}
+                width={500} height={breathImgH}
+                preserveAspectRatio="xMidYMid meet"
+              />
+            )}
             {avgPressure > 15 && (
               <Ellipse cx={CANVAS_W / 2} cy={navelYBreath}
                 rx={CANVAS_W * 0.32 * (1 + avgPressure * 0.003) * bulge * breathOverlayScale}
