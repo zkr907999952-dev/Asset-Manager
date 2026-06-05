@@ -1350,9 +1350,9 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
             {state.showBackground === 2 && (
               <SvgImage
                 href={INTESTINES_REF}
-                x={0} y={0}
-                width={CANVAS_W} height={CANVAS_H}
-                preserveAspectRatio="xMidYMid meet"
+                x={CAVITY_CX - CANVAS_W * 0.9} y={CAVITY_CY - CANVAS_W * 1.32}
+                width={CANVAS_W * 1.8} height={CANVAS_W * 2.4}
+                preserveAspectRatio="xMidYMid meet" opacity={0.50}
               />
             )}
           </G>
@@ -1371,9 +1371,9 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
             {state.showBackground === 2 && (
               <SvgImage
                 href={INTESTINES_REF}
-                x={0} y={0}
-                width={CANVAS_W} height={CANVAS_H}
-                preserveAspectRatio="xMidYMid meet"
+                x={CAVITY_CX - CANVAS_W * 0.9} y={CAVITY_CY - CANVAS_W * 1.32}
+                width={CANVAS_W * 1.8} height={CANVAS_W * 2.4}
+                preserveAspectRatio="xMidYMid meet" opacity={0.50}
               />
             )}
             {avgPressure > 15 && (
