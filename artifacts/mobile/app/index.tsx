@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { View, StyleSheet } from 'react-native';
 import { useGame } from '@/contexts/GameContext';
 import { AppDrawer } from '@/components/AppDrawer';
+import { MainMenuScreen } from '@/screens/MainMenuScreen';
 import { CharacterScreen } from '@/screens/CharacterScreen';
 import { SimulationScreen } from '@/screens/SimulationScreen';
 import { ConsoleScreen } from '@/screens/ConsoleScreen';
@@ -15,9 +16,12 @@ export default function App() {
   const { state } = useGame();
   const colors = useColors();
 
+  const isMainMenu = state.currentScreen === 'mainMenu';
+
   const renderScreen = () => {
     const props = { onMenuPress: () => setDrawerOpen(true) };
     switch (state.currentScreen) {
+      case 'mainMenu': return <MainMenuScreen />;
       case 'character': return <CharacterScreen {...props} />;
       case 'console': return <ConsoleScreen {...props} />;
       case 'settings': return <SettingsScreen {...props} />;
@@ -30,7 +34,9 @@ export default function App() {
   return (
     <View style={[styles.root, { backgroundColor: colors.background }]}>
       {renderScreen()}
-      <AppDrawer open={drawerOpen} onClose={() => setDrawerOpen(false)} />
+      {!isMainMenu && (
+        <AppDrawer open={drawerOpen} onClose={() => setDrawerOpen(false)} />
+      )}
     </View>
   );
 }

@@ -93,6 +93,21 @@ export function AppDrawer({ open, onClose }: Props) {
 
         <View style={[styles.divider, { backgroundColor: colors.border }]} />
 
+        {/* Return to main menu */}
+        <TouchableOpacity
+          style={[styles.menuItem, styles.mainMenuBtn]}
+          onPress={() => handleSelect('mainMenu')}
+          activeOpacity={0.7}
+        >
+          <View style={[styles.menuIndicator, { backgroundColor: 'transparent' }]} />
+          <View style={styles.menuText}>
+            <Text style={[styles.menuLabel, { color: '#c8a84a' }]}>返回主菜单</Text>
+            <Text style={[styles.menuSubtitle, { color: colors.mutedForeground }]}>回到游戏主界面</Text>
+          </View>
+        </TouchableOpacity>
+
+        <View style={[styles.divider, { backgroundColor: colors.border }]} />
+
         {SCREENS.map(s => {
           const active = state.currentScreen === s.id;
           return (
@@ -187,6 +202,11 @@ const styles = StyleSheet.create({
     height: 32,
     borderRadius: 2,
     marginRight: 12,
+  },
+  mainMenuBtn: {
+    borderWidth: 1,
+    borderColor: 'rgba(200,168,74,0.2)',
+    borderRadius: 8,
   },
   menuText: { flex: 1 },
   menuLabel: {

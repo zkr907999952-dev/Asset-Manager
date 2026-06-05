@@ -91,7 +91,7 @@ function getReachableRange(segIdx: number, intestine: 'small' | 'large', p: { sm
   return { leftLimit, rightLimit, canCrossToLarge, canCrossToSmall };
 }
 
-export type ScreenName = 'character' | 'simulation' | 'console' | 'settings' | 'help' | 'mesenteryEditor';
+export type ScreenName = 'mainMenu' | 'character' | 'simulation' | 'console' | 'settings' | 'help' | 'mesenteryEditor';
 
 export interface RenderSegment {
   health: number; sensitivity: number; pain: number; pressure: number;
@@ -411,7 +411,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     activeTool: null, enabledTools: [], toolActive: false, toolParam1: 50, toolParam2: 50,
     toolStates: physicsRef.current.toolStates,
     pressureDiffusionRate: physicsRef.current.pressureDiffusionRate,
-    viewMode: 'internal', showBackground: 1, currentScreen: 'simulation',
+    viewMode: 'internal', showBackground: 1, currentScreen: 'mainMenu',
     currentDialogue: null, peristalsisSpeed: 1.5,
     peristalsisWaveAmplitude: PERISTALSIS_WAVE_AMPLITUDE_DEFAULT,
     peristalsisWaveSpeed: PERISTALSIS_WAVE_SPEED_DEFAULT,
