@@ -5,6 +5,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useGame } from '@/contexts/GameContext';
+import { APP_VERSION } from '@/constants/version';
 
 const COVER_IMG = require('@/assets/images/main_menu_cover.png');
 
@@ -42,7 +43,7 @@ function DevInfoModal({ visible, onClose }: DevInfoModalProps) {
         <View style={styles.modalBox}>
           <Text style={styles.modalTitle}>开发者信息</Text>
           <Text style={styles.modalDesc}>
-            {'玉腹模拟器\n腹腔物理仿真引擎 v1.0\n\n独立开发作品\n保留所有权利'}
+            {`玉腹模拟器\n腹腔物理仿真引擎 ${APP_VERSION}\n\n独立开发作品\n保留所有权利`}
           </Text>
           <TouchableOpacity style={styles.modalBtn} onPress={onClose}>
             <Text style={styles.modalBtnText}>关闭</Text>
@@ -131,7 +132,7 @@ export function MainMenuScreen() {
 
       {/* Bottom bar: version + dev info — floats above scroll */}
       <View style={[styles.bottomBar, { bottom: bottomPad + 12 }]}>
-        <Text style={styles.versionText}>v0.10.beta</Text>
+        <Text style={styles.versionText}>{APP_VERSION}</Text>
         <TouchableOpacity onPress={() => setDevInfoOpen(true)} activeOpacity={0.7}>
           <Text style={styles.devBtnText}>开发者信息</Text>
         </TouchableOpacity>

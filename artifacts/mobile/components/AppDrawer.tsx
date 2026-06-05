@@ -7,6 +7,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
 import { useColors } from '@/hooks/useColors';
 import { useGame, type ScreenName } from '@/contexts/GameContext';
+import { APP_VERSION } from '@/constants/version';
 
 const DRAWER_WIDTH = 220;
 
@@ -136,7 +137,7 @@ export function AppDrawer({ open, onClose }: Props) {
         <View style={[styles.divider, { backgroundColor: colors.border, marginTop: 'auto' }]} />
         <View style={styles.drawerFooter}>
           <Text style={[styles.footerText, { color: colors.mutedForeground }]}>
-            v1.0 腹腔仿真引擎
+            {APP_VERSION} 腹腔仿真引擎
           </Text>
         </View>
       </Animated.View>
