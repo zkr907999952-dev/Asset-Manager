@@ -353,8 +353,6 @@ export function MesenteryEditorScreen({ onMenuPress }: Props) {
         style={{ position: 'absolute', left: svgOffX, top: svgOffY }}
         viewBox={`0 0 ${CANVAS_W} ${CANVAS_H}`}
       >
-        <Rect x={0} y={0} width={CANVAS_W} height={CANVAS_H} fill="#0a0404" />
-
         {/* Background — editorBg 1: character, 2: perspective (local only) */}
         {editorBg === 1 && (
           <SvgImage
@@ -513,8 +511,7 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: 'row', alignItems: 'center',
     paddingHorizontal: 10, paddingBottom: 8,
-    borderBottomWidth: 1, borderBottomColor: '#2a1515',
-    backgroundColor: 'rgba(10,4,4,0.45)', gap: 6,
+    gap: 6,
   },
   backBtn:     { padding: 4 },
   backBtnText: { color: '#ffaa33', fontSize: 13, fontFamily: 'Inter_400Regular' },
@@ -536,8 +533,6 @@ const styles = StyleSheet.create({
   presetBar: {
     flexDirection: 'row', alignItems: 'center',
     paddingHorizontal: 10, paddingVertical: 7,
-    backgroundColor: 'rgba(8,3,3,0.45)',
-    borderBottomWidth: 1, borderBottomColor: '#2a1515',
     gap: 6,
   },
   presetBarLabel: {
@@ -590,15 +585,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingTop: 6,
     justifyContent: 'center',
-    backgroundColor: 'rgba(8,3,3,0.45)',
   },
 
   canvasArea: { flex: 1, position: 'relative', overflow: 'hidden', backgroundColor: '#0a0404' },
 
   bottomBar: {
     position: 'absolute', bottom: 0, left: 0, right: 0,
-    borderTopWidth: 1, borderTopColor: '#2a1515',
-    backgroundColor: 'rgba(10,4,4,0.6)', paddingTop: 8, paddingHorizontal: 10,
+    paddingTop: 8, paddingHorizontal: 10,
   },
   legendRow: {
     flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 6,
