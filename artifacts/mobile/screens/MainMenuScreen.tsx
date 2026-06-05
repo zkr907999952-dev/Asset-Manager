@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet, Platform,
-  ImageBackground, Animated, Modal, Pressable,
+  ImageBackground, Animated, Modal, Pressable, ScrollView,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useGame } from '@/contexts/GameContext';
@@ -64,12 +64,10 @@ export function MainMenuScreen() {
   const btnOpacity = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
-    Animated.sequence([
-      Animated.parallel([
-        Animated.timing(titleOpacity, { toValue: 1, duration: 800, useNativeDriver: true }),
-        Animated.timing(titleY, { toValue: 0, duration: 800, useNativeDriver: true }),
-      ]),
-      Animated.timing(btnOpacity, { toValue: 1, duration: 600, useNativeDriver: true }),
+    Animated.parallel([
+      Animated.timing(titleOpacity, { toValue: 1, duration: 500, useNativeDriver: true }),
+      Animated.timing(titleY,      { toValue: 0, duration: 500, useNativeDriver: true }),
+      Animated.timing(btnOpacity,  { toValue: 1, duration: 500, useNativeDriver: true }),
     ]).start();
   }, []);
 
@@ -77,11 +75,12 @@ export function MainMenuScreen() {
   const topPad    = Platform.OS === 'web' ? 67 : insets.top;
 
   const BUTTONS: { label: string; sub: string; action: () => void }[] = [
-    { label: '继续游戏', sub: '读取上次存档', action: () => setWipLabel('继续游戏') },
-    { label: '开始',     sub: '从头开始冒险', action: () => setWipLabel('开始') },
-    { label: '故事模式', sub: '剧情引导体验', action: () => setWipLabel('故事模式') },
+    { label: '继续游戏', sub: '读取上次存档',   action: () => setWipLabel('继续游戏') },
+    { label: '开始',     sub: '从头开始冒险',   action: () => setWipLabel('开始') },
+    { label: '故事模式', sub: '剧情引导体验',   action: () => setWipLabel('故事模式') },
     { label: '沙盒模式', sub: '自由腹腔物理探索', action: () => setScreen('simulation') },
-    { label: '存档',     sub: '管理游戏存档', action: () => setWipLabel('存档') },
+    { label: '存档',     sub: '管理游戏存档',   action: () => setWipLabel('存档') },
+    { label: '帮助',     sub: '游戏系统手册',   action: () => setScreen('help') },
     { label: '设置',     sub: '游戏选项与调整', action: () => setScreen('settings') },
   ];
 
@@ -94,7 +93,12 @@ export function MainMenuScreen() {
       {/* Dark gradient overlay */}
       <View style={styles.overlay} />
 
-      <View style={[styles.container, { paddingTop: topPad, paddingBottom: bottomPad }]}>
+      <ScrollView
+        style={{ flex: 1 }}
+        contentContainerStyle={[styles.container, { paddingTop: topPad, paddingBottom: bottomPad + 56 }]}
+        showsVerticalScrollIndicator={false}
+        bounces={false}
+      >
         {/* Title */}
         <Animated.View style={[styles.titleBlock, { opacity: titleOpacity, transform: [{ translateY: titleY }] }]}>
           <Text style={styles.titleCn}>玉腹模拟器</Text>
@@ -123,13 +127,12 @@ export function MainMenuScreen() {
             </TouchableOpacity>
           ))}
         </Animated.View>
+      </ScrollView>
 
-        {/* Developer info button */}
-        <TouchableOpacity
-          style={[styles.devBtn, { bottom: bottomPad + 12 }]}
-          onPress={() => setDevInfoOpen(true)}
-          activeOpacity={0.7}
-        >
+      {/* Bottom bar: version + dev info — floats above scroll */}
+      <View style={[styles.bottomBar, { bottom: bottomPad + 12 }]}>
+        <Text style={styles.versionText}>v0.10.beta</Text>
+        <TouchableOpacity onPress={() => setDevInfoOpen(true)} activeOpacity={0.7}>
           <Text style={styles.devBtnText}>开发者信息</Text>
         </TouchableOpacity>
       </View>
@@ -182,26 +185,28 @@ const styles = StyleSheet.create({
   },
 
   menuBlock: {
-    width: '72%',
+    width: '68%',
     alignItems: 'stretch',
-    gap: 10,
+    gap: 7,
   },
   menuBtn: {
-    paddingVertical: 13,
-    paddingHorizontal: 24,
+    paddingVertical: 9,
+    paddingHorizontal: 20,
     backgroundColor: 'rgba(20,10,30,0.72)',
-    borderRadius: 8,
+    borderRadius: 7,
     borderWidth: 1,
-    borderColor: 'rgba(180,130,60,0.25)',
+    borderColor: 'rgba(180,130,60,0.22)',
     alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
   },
   menuBtnHighlight: {
-    backgroundColor: 'rgba(80,30,10,0.82)',
+    backgroundColor: 'rgba(80,30,10,0.85)',
     borderColor: 'rgba(255,160,50,0.55)',
     borderWidth: 1.5,
   },
   menuBtnLabel: {
-    fontSize: 16,
+    fontSize: 15,
     fontFamily: 'Inter_600SemiBold',
     color: '#e8d4a8',
     letterSpacing: 2,
@@ -212,14 +217,22 @@ const styles = StyleSheet.create({
   menuBtnSub: {
     fontSize: 10,
     fontFamily: 'Inter_400Regular',
-    color: 'rgba(180,150,90,0.55)',
-    marginTop: 2,
-    letterSpacing: 1,
+    color: 'rgba(180,150,90,0.50)',
+    letterSpacing: 0.5,
   },
 
-  devBtn: {
+  bottomBar: {
     position: 'absolute',
-    right: 18,
+    right: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  versionText: {
+    fontSize: 10,
+    fontFamily: 'Inter_400Regular',
+    color: 'rgba(140,110,60,0.45)',
+    letterSpacing: 1,
   },
   devBtnText: {
     fontSize: 10,
