@@ -62,11 +62,15 @@ interface SegmentMapProps {
   segs: RenderSegment[];
   label: string;
   accentColor: string;
+  containerWidth: number;
 }
 
-function SegmentMap({ segs, label, accentColor }: SegmentMapProps) {
+function SegmentMap({ segs, label, accentColor, containerWidth }: SegmentMapProps) {
   const colors = useColors();
-  const COLS = 16;
+  const CELL = 14;
+  const GAP = 2;
+  const ROW_NUM_W = 36;
+  const COLS = Math.max(6, Math.floor((containerWidth - ROW_NUM_W) / (CELL + GAP)));
   const rows: RenderSegment[][] = [];
   for (let i = 0; i < segs.length; i += COLS) {
     rows.push(segs.slice(i, i + COLS));
@@ -230,6 +234,7 @@ export function AttributePanel() {
         segs={state.renderSmallSegs}
         label={`小肠  ${state.renderSmallSegs.length} 段`}
         accentColor="#88ddaa"
+        containerWidth={panelWidth}
       />
 
       <View style={{ height: 10 }} />
@@ -238,6 +243,7 @@ export function AttributePanel() {
         segs={state.renderLargeSegs}
         label={`大肠  ${state.renderLargeSegs.length} 段`}
         accentColor="#ddaa55"
+        containerWidth={panelWidth}
       />
 
       <View style={{ height: 16 }} />
