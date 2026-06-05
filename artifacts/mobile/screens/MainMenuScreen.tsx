@@ -70,20 +70,19 @@ function MenuButton({
 }) {
   const [hovered, setHovered] = useState(false);
   const opacity = useRef(new Animated.Value(0)).current;
-  const translateX = useRef(new Animated.Value(-10)).current;
+  const translateX = useRef(new Animated.Value(10)).current;
 
   useEffect(() => {
     Animated.parallel([
-      Animated.timing(opacity,     { toValue: 1, duration: 400, delay, useNativeDriver: false }),
-      Animated.timing(translateX,  { toValue: 0, duration: 400, delay, useNativeDriver: false }),
+      Animated.timing(opacity,    { toValue: 1, duration: 400, delay, useNativeDriver: false }),
+      Animated.timing(translateX, { toValue: 0, duration: 400, delay, useNativeDriver: false }),
     ]).start();
   }, []);
 
-  const activeColor  = highlight ? '#ff6eb4' : (hovered ? '#ffffff' : 'rgba(255,200,220,0.75)');
-  const activeFontSize = hovered ? 17 : 15;
+  const isActive = hovered || highlight;
 
   return (
-    <Animated.View style={{ opacity, transform: [{ translateX }] }}>
+    <Animated.View style={[styles.menuBtnWrap, { opacity, transform: [{ translateX }] }]}>
       <TouchableOpacity
         onPress={onPress}
         activeOpacity={0.8}
@@ -95,15 +94,15 @@ function MenuButton({
       >
         <Text style={[
           styles.menuBtnLabel,
-          { color: activeColor, fontSize: activeFontSize },
           highlight && styles.menuBtnHighlight,
           hovered && styles.menuBtnHovered,
         ]}>
           {label}
         </Text>
-        {(hovered || highlight) && (
-          <View style={[styles.btnUnderline, highlight && styles.btnUnderlineHighlight]} />
-        )}
+        <View style={[
+          styles.btnUnderline,
+          isActive && styles.btnUnderlineActive,
+        ]} />
       </TouchableOpacity>
     </Animated.View>
   );
@@ -239,41 +238,48 @@ const styles = StyleSheet.create({
 
   /* Buttons */
   menuBlock: {
-    alignItems: 'flex-start',
-    gap: 2,
+    alignItems: 'flex-end',
+  },
+  menuBtnWrap: {
+    alignItems: 'flex-end',
   },
   menuBtn: {
-    paddingVertical: 7,
-    paddingRight: 20,
-    alignItems: 'flex-start',
+    paddingVertical: 8,
+    paddingLeft: 12,
+    alignItems: 'flex-end',
+    minWidth: 90,
   },
   menuBtnLabel: {
     fontFamily: 'Inter_600SemiBold',
     fontSize: 15,
     letterSpacing: 4,
-    color: 'rgba(255,200,220,0.75)',
+    color: 'rgba(255,210,230,0.88)',
+    textAlign: 'right',
+    textShadowColor: 'rgba(0,0,0,0.9)',
+    textShadowOffset: { width: 0, height: 0 },
+    textShadowRadius: 6,
   },
   menuBtnHighlight: {
-    color: '#ff6eb4',
-    textShadowColor: 'rgba(255,80,180,0.6)',
+    color: '#ff8ec8',
+    textShadowColor: 'rgba(0,0,0,0.9)',
     textShadowOffset: { width: 0, height: 0 },
-    textShadowRadius: 10,
+    textShadowRadius: 8,
   },
   menuBtnHovered: {
     color: '#ffffff',
-    textShadowColor: 'rgba(255,180,220,0.8)',
+    textShadowColor: 'rgba(0,0,0,0.95)',
     textShadowOffset: { width: 0, height: 0 },
-    textShadowRadius: 12,
+    textShadowRadius: 8,
   },
   btnUnderline: {
     height: 1,
-    width: 28,
-    backgroundColor: 'rgba(255,180,220,0.55)',
-    marginTop: 2,
+    width: 0,
+    backgroundColor: 'transparent',
+    marginTop: 1,
   },
-  btnUnderlineHighlight: {
-    backgroundColor: 'rgba(255,100,180,0.8)',
-    width: 36,
+  btnUnderlineActive: {
+    width: 32,
+    backgroundColor: 'rgba(255,140,200,0.75)',
   },
 
   /* Bottom bar */
