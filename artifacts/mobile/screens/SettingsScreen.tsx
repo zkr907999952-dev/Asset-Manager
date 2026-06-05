@@ -8,6 +8,7 @@ import { useColors } from '@/hooks/useColors';
 import { useGame } from '@/contexts/GameContext';
 import { GameSlider } from '@/components/GameSlider';
 import { N_SMALL, N_LARGE } from '@/constants/gameConfig';
+import { APP_VERSION } from '@/constants/version';
 import {
   getDefaultMesenteryConfig,
   saveMesenteryConfig,
@@ -449,7 +450,7 @@ export function SettingsScreen({ onMenuPress }: Props) {
         <View style={[styles.aboutCard, { borderColor: colors.border }]}>
           <Text style={[styles.aboutTitle, { color: colors.primary }]}>玉腹模拟器</Text>
           <Text style={[styles.aboutText, { color: colors.mutedForeground }]}>
-            v1.1 · 腹腔物理仿真引擎
+            {APP_VERSION} · 腹腔物理仿真引擎
           </Text>
         </View>
       </ScrollView>
