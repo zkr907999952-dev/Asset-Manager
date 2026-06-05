@@ -14,8 +14,9 @@ function WipModal({ visible, label, onClose }: { visible: boolean; label: string
     <Modal transparent animationType="fade" visible={visible} onRequestClose={onClose}>
       <Pressable style={styles.modalOverlay} onPress={onClose}>
         <View style={styles.modalBox}>
-          <Text style={styles.modalTitle}>正在开发中</Text>
-          <Text style={styles.modalDesc}>「{label}」功能尚未开放，敬请期待。</Text>
+          <Text style={styles.modalTitle} numberOfLines={1}>正在开发中</Text>
+          <Text style={styles.modalLabel} numberOfLines={1}>「{label}」</Text>
+          <Text style={styles.modalDesc} numberOfLines={2}>功能尚未开放，敬请期待。</Text>
           <TouchableOpacity style={styles.modalBtn} onPress={onClose}>
             <Text style={styles.modalBtnText}>确定</Text>
           </TouchableOpacity>
@@ -167,14 +168,14 @@ export function MainMenuScreen() {
 
         {/* ── Spacer ── */}
         <View style={{ flex: 1 }} />
+      </View>
 
-        {/* ── Bottom bar ── */}
-        <View style={styles.bottomBar}>
-          <Text style={styles.versionText}>{APP_VERSION}</Text>
-          <TouchableOpacity onPress={() => setDevInfoOpen(true)} activeOpacity={0.7}>
-            <Text style={styles.devBtnText}>© 独立开发作品</Text>
-          </TouchableOpacity>
-        </View>
+      {/* ── Bottom bar — absolutely positioned full-width ── */}
+      <View style={[styles.bottomBar, { bottom: bottomPad + 8 }]}>
+        <Text style={styles.versionText}>{APP_VERSION}</Text>
+        <TouchableOpacity onPress={() => setDevInfoOpen(true)} activeOpacity={0.7}>
+          <Text style={styles.devBtnText}>© 独立开发作品</Text>
+        </TouchableOpacity>
       </View>
 
       <WipModal
@@ -284,12 +285,12 @@ const styles = StyleSheet.create({
 
   /* Bottom bar */
   bottomBar: {
-    width: '100%',
+    position: 'absolute',
+    left: 20,
+    right: 20,
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingRight: 20,
-    paddingBottom: 8,
   },
   versionText: {
     fontSize: 10,
@@ -327,12 +328,20 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     letterSpacing: 3,
   },
+  modalLabel: {
+    fontSize: 15,
+    fontFamily: 'Inter_600SemiBold',
+    color: 'rgba(255,180,220,0.9)',
+    textAlign: 'center',
+    marginBottom: 6,
+    letterSpacing: 2,
+  },
   modalDesc: {
     fontSize: 13,
     fontFamily: 'Inter_400Regular',
-    color: 'rgba(255,200,230,0.78)',
+    color: 'rgba(255,200,230,0.70)',
     textAlign: 'center',
-    lineHeight: 21,
+    lineHeight: 20,
     marginBottom: 22,
   },
   modalBtn: {
