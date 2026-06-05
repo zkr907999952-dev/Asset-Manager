@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet, Platform,
-  ImageBackground, Animated, Modal, Pressable, ScrollView,
+  ImageBackground, Animated, Modal, Pressable,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useGame } from '@/contexts/GameContext';
@@ -9,18 +9,12 @@ import { APP_VERSION } from '@/constants/version';
 
 const COVER_IMG = require('@/assets/images/main_menu_cover.png');
 
-interface WipModalProps {
-  visible: boolean;
-  label: string;
-  onClose: () => void;
-}
-
-function WipModal({ visible, label, onClose }: WipModalProps) {
+function WipModal({ visible, label, onClose }: { visible: boolean; label: string; onClose: () => void }) {
   return (
     <Modal transparent animationType="fade" visible={visible} onRequestClose={onClose}>
       <Pressable style={styles.modalOverlay} onPress={onClose}>
         <View style={styles.modalBox}>
-          <Text style={styles.modalTitle}>🚧 正在开发中</Text>
+          <Text style={styles.modalTitle}>正在开发中</Text>
           <Text style={styles.modalDesc}>「{label}」功能尚未开放，敬请期待。</Text>
           <TouchableOpacity style={styles.modalBtn} onPress={onClose}>
             <Text style={styles.modalBtnText}>确定</Text>
@@ -31,12 +25,7 @@ function WipModal({ visible, label, onClose }: WipModalProps) {
   );
 }
 
-interface DevInfoModalProps {
-  visible: boolean;
-  onClose: () => void;
-}
-
-function DevInfoModal({ visible, onClose }: DevInfoModalProps) {
+function DevInfoModal({ visible, onClose }: { visible: boolean; onClose: () => void }) {
   return (
     <Modal transparent animationType="fade" visible={visible} onRequestClose={onClose}>
       <Pressable style={styles.modalOverlay} onPress={onClose}>
@@ -54,6 +43,16 @@ function DevInfoModal({ visible, onClose }: DevInfoModalProps) {
   );
 }
 
+const BUTTONS: { label: string; action: (ctx: { setScreen: (s: string) => void; setWip: (l: string) => void }) => void; highlight?: boolean }[] = [
+  { label: '继续游戏', action: ({ setWip }) => setWip('继续游戏') },
+  { label: '开始',     action: ({ setWip }) => setWip('开始') },
+  { label: '故事模式', action: ({ setWip }) => setWip('故事模式') },
+  { label: '沙盒模式', action: ({ setScreen }) => setScreen('simulation'), highlight: true },
+  { label: '存档',     action: ({ setWip }) => setWip('存档') },
+  { label: '帮助',     action: ({ setScreen }) => setScreen('help') },
+  { label: '设置',     action: ({ setScreen }) => setScreen('settings') },
+];
+
 export function MainMenuScreen() {
   const insets = useSafeAreaInsets();
   const { setScreen } = useGame();
@@ -61,81 +60,69 @@ export function MainMenuScreen() {
   const [devInfoOpen, setDevInfoOpen] = useState(false);
 
   const titleOpacity = useRef(new Animated.Value(0)).current;
-  const titleY = useRef(new Animated.Value(-20)).current;
-  const btnOpacity = useRef(new Animated.Value(0)).current;
+  const titleY       = useRef(new Animated.Value(-16)).current;
+  const btnOpacity   = useRef(new Animated.Value(0)).current;
+  const lineScale    = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     Animated.parallel([
-      Animated.timing(titleOpacity, { toValue: 1, duration: 500, useNativeDriver: true }),
-      Animated.timing(titleY,      { toValue: 0, duration: 500, useNativeDriver: true }),
-      Animated.timing(btnOpacity,  { toValue: 1, duration: 500, useNativeDriver: true }),
+      Animated.timing(titleOpacity, { toValue: 1, duration: 700, useNativeDriver: false }),
+      Animated.timing(titleY,       { toValue: 0, duration: 700, useNativeDriver: false }),
+      Animated.timing(lineScale,    { toValue: 1, duration: 700, useNativeDriver: false }),
+      Animated.timing(btnOpacity,   { toValue: 1, duration: 900, useNativeDriver: false }),
     ]).start();
   }, []);
 
   const bottomPad = Platform.OS === 'web' ? 34 : insets.bottom;
   const topPad    = Platform.OS === 'web' ? 67 : insets.top;
 
-  const BUTTONS: { label: string; sub: string; action: () => void }[] = [
-    { label: '继续游戏', sub: '读取上次存档',   action: () => setWipLabel('继续游戏') },
-    { label: '开始',     sub: '从头开始冒险',   action: () => setWipLabel('开始') },
-    { label: '故事模式', sub: '剧情引导体验',   action: () => setWipLabel('故事模式') },
-    { label: '沙盒模式', sub: '自由腹腔物理探索', action: () => setScreen('simulation') },
-    { label: '存档',     sub: '管理游戏存档',   action: () => setWipLabel('存档') },
-    { label: '帮助',     sub: '游戏系统手册',   action: () => setScreen('help') },
-    { label: '设置',     sub: '游戏选项与调整', action: () => setScreen('settings') },
-  ];
+  const ctx = { setScreen, setWip: (l: string) => setWipLabel(l) };
 
   return (
-    <ImageBackground
-      source={COVER_IMG}
-      style={styles.bg}
-      resizeMode="cover"
-    >
-      {/* Dark gradient overlay */}
+    <ImageBackground source={COVER_IMG} style={styles.bg} resizeMode="cover">
       <View style={styles.overlay} />
 
-      <ScrollView
-        style={{ flex: 1 }}
-        contentContainerStyle={[styles.container, { paddingTop: topPad, paddingBottom: bottomPad + 56 }]}
-        showsVerticalScrollIndicator={false}
-        bounces={false}
-      >
-        {/* Title */}
+      <View style={[styles.root, { paddingTop: topPad, paddingBottom: bottomPad }]}>
+
+        {/* ── Title ── */}
         <Animated.View style={[styles.titleBlock, { opacity: titleOpacity, transform: [{ translateY: titleY }] }]}>
+          <Text style={styles.titleKana}>ぎょくふく</Text>
           <Text style={styles.titleCn}>玉腹模拟器</Text>
+          <Animated.View style={[styles.titleLine, { transform: [{ scaleX: lineScale }] }]} />
           <Text style={styles.titleSub}>腹腔物理仿真系统</Text>
         </Animated.View>
 
-        {/* Menu buttons */}
+        {/* ── Spacer ── */}
+        <View style={{ flex: 1 }} />
+
+        {/* ── Buttons ── */}
         <Animated.View style={[styles.menuBlock, { opacity: btnOpacity }]}>
           {BUTTONS.map((btn, i) => (
             <TouchableOpacity
               key={i}
-              style={[
-                styles.menuBtn,
-                btn.label === '沙盒模式' && styles.menuBtnHighlight,
-              ]}
-              onPress={btn.action}
-              activeOpacity={0.75}
+              style={[styles.menuBtn, btn.highlight && styles.menuBtnHighlight]}
+              onPress={() => btn.action(ctx)}
+              activeOpacity={0.7}
             >
-              <Text style={[
-                styles.menuBtnLabel,
-                btn.label === '沙盒模式' && styles.menuBtnLabelHighlight,
-              ]}>
+              {btn.highlight && <View style={styles.btnAccentLeft} />}
+              <Text style={[styles.menuBtnLabel, btn.highlight && styles.menuBtnLabelHighlight]}>
                 {btn.label}
               </Text>
-              <Text style={styles.menuBtnSub}>{btn.sub}</Text>
+              {btn.highlight && <View style={styles.btnAccentRight} />}
             </TouchableOpacity>
           ))}
         </Animated.View>
-      </ScrollView>
 
-      {/* Bottom bar: version + dev info — floats above scroll */}
-      <View style={[styles.bottomBar, { bottom: bottomPad + 12 }]}>
-        <Text style={styles.versionText}>{APP_VERSION}</Text>
-        <TouchableOpacity onPress={() => setDevInfoOpen(true)} activeOpacity={0.7}>
-          <Text style={styles.devBtnText}>开发者信息</Text>
-        </TouchableOpacity>
+        {/* ── Spacer ── */}
+        <View style={{ flex: 1 }} />
+
+        {/* ── Bottom bar ── */}
+        <View style={styles.bottomBar}>
+          <Text style={styles.versionText}>{APP_VERSION}</Text>
+          <TouchableOpacity onPress={() => setDevInfoOpen(true)} activeOpacity={0.7}>
+            <Text style={styles.devBtnText}>© 独立开发作品</Text>
+          </TouchableOpacity>
+        </View>
       </View>
 
       <WipModal
@@ -143,10 +130,7 @@ export function MainMenuScreen() {
         label={wipLabel ?? ''}
         onClose={() => setWipLabel(null)}
       />
-      <DevInfoModal
-        visible={devInfoOpen}
-        onClose={() => setDevInfoOpen(false)}
-      />
+      <DevInfoModal visible={devInfoOpen} onClose={() => setDevInfoOpen(false)} />
     </ImageBackground>
   );
 }
@@ -154,134 +138,165 @@ export function MainMenuScreen() {
 const styles = StyleSheet.create({
   bg: {
     flex: 1,
-    backgroundColor: '#06020a',
+    backgroundColor: '#05010c',
   },
   overlay: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(4,2,12,0.55)',
+    backgroundColor: 'rgba(3,1,10,0.62)',
   },
-  container: {
-    flexGrow: 1,
+  root: {
+    flex: 1,
     alignItems: 'center',
-    justifyContent: 'center',
   },
 
+  /* Title */
   titleBlock: {
     alignItems: 'center',
-    marginBottom: 44,
+    marginTop: 32,
+  },
+  titleKana: {
+    fontSize: 11,
+    color: 'rgba(200,168,90,0.38)',
+    letterSpacing: 10,
+    marginBottom: 6,
+    fontFamily: 'Inter_400Regular',
   },
   titleCn: {
-    fontSize: 38,
+    fontSize: 40,
     fontFamily: 'Inter_700Bold',
-    color: '#f2dfa0',
-    letterSpacing: 8,
-    textShadow: '0px 0px 24px rgba(210,150,20,0.8)',
+    color: '#f0d888',
+    letterSpacing: 10,
+    textShadowColor: 'rgba(220,160,20,0.75)',
+    textShadowOffset: { width: 0, height: 0 },
+    textShadowRadius: 22,
+  },
+  titleLine: {
+    width: 180,
+    height: 1,
+    backgroundColor: 'rgba(200,160,50,0.35)',
+    marginTop: 14,
+    marginBottom: 10,
   },
   titleSub: {
-    fontSize: 11,
-    fontFamily: 'Inter_400Regular',
-    color: 'rgba(200,168,90,0.55)',
-    letterSpacing: 5,
-    marginTop: 8,
-  },
-
-  menuBlock: {
-    width: '60%',
-    alignItems: 'stretch',
-    gap: 10,
-  },
-  menuBtn: {
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    backgroundColor: 'rgba(12,6,22,0.68)',
-    borderRadius: 6,
-    borderWidth: 1,
-    borderColor: 'rgba(180,130,60,0.20)',
-    alignItems: 'center',
-  },
-  menuBtnHighlight: {
-    backgroundColor: 'rgba(70,25,5,0.88)',
-    borderColor: 'rgba(255,165,40,0.60)',
-    borderWidth: 1.5,
-  },
-  menuBtnLabel: {
-    fontSize: 16,
-    fontFamily: 'Inter_600SemiBold',
-    color: '#ead8a8',
-    letterSpacing: 4,
-  },
-  menuBtnLabelHighlight: {
-    color: '#ffd060',
-  },
-  menuBtnSub: {
     fontSize: 10,
     fontFamily: 'Inter_400Regular',
-    color: 'rgba(180,150,90,0.45)',
-    letterSpacing: 1,
-    marginTop: 3,
+    color: 'rgba(200,168,90,0.42)',
+    letterSpacing: 6,
   },
 
-  bottomBar: {
-    position: 'absolute',
-    right: 16,
+  /* Buttons */
+  menuBlock: {
+    width: '62%',
+    alignItems: 'stretch',
+    gap: 8,
+  },
+  menuBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
+    justifyContent: 'center',
+    paddingVertical: 13,
+    paddingHorizontal: 20,
+    backgroundColor: 'rgba(5,2,14,0.78)',
+    borderRadius: 3,
+    borderWidth: 1,
+    borderColor: 'rgba(180,140,60,0.42)',
+  },
+  menuBtnHighlight: {
+    backgroundColor: 'rgba(55,18,4,0.88)',
+    borderColor: 'rgba(240,160,30,0.82)',
+    borderWidth: 1,
+  },
+  menuBtnLabel: {
+    fontSize: 15,
+    fontFamily: 'Inter_600SemiBold',
+    color: '#dcc888',
+    letterSpacing: 5,
+    textAlign: 'center',
+  },
+  menuBtnLabelHighlight: {
+    color: '#ffd45a',
+    textShadowColor: 'rgba(255,180,0,0.5)',
+    textShadowOffset: { width: 0, height: 0 },
+    textShadowRadius: 8,
+  },
+  btnAccentLeft: {
+    width: 14,
+    height: 1,
+    backgroundColor: 'rgba(240,160,30,0.6)',
+    marginRight: 10,
+  },
+  btnAccentRight: {
+    width: 14,
+    height: 1,
+    backgroundColor: 'rgba(240,160,30,0.6)',
+    marginLeft: 10,
+  },
+
+  /* Bottom bar */
+  bottomBar: {
+    width: '100%',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingBottom: 8,
   },
   versionText: {
     fontSize: 10,
     fontFamily: 'Inter_400Regular',
-    color: 'rgba(140,110,60,0.45)',
+    color: 'rgba(150,120,60,0.45)',
     letterSpacing: 1,
   },
   devBtnText: {
     fontSize: 10,
     fontFamily: 'Inter_400Regular',
-    color: 'rgba(160,130,80,0.5)',
+    color: 'rgba(160,130,75,0.5)',
     letterSpacing: 1,
   },
 
+  /* Modals */
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.65)',
+    backgroundColor: 'rgba(0,0,0,0.68)',
     justifyContent: 'center',
     alignItems: 'center',
   },
   modalBox: {
-    backgroundColor: '#1a0e2a',
-    borderRadius: 12,
+    backgroundColor: '#140a22',
+    borderRadius: 8,
     padding: 28,
     width: 260,
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: 'rgba(180,130,60,0.35)',
+    borderColor: 'rgba(180,130,60,0.32)',
   },
   modalTitle: {
-    fontSize: 16,
+    fontSize: 15,
     fontFamily: 'Inter_600SemiBold',
-    color: '#f0d090',
-    marginBottom: 10,
+    color: '#f0d080',
+    marginBottom: 12,
+    letterSpacing: 3,
   },
   modalDesc: {
     fontSize: 13,
     fontFamily: 'Inter_400Regular',
-    color: 'rgba(220,190,140,0.8)',
+    color: 'rgba(220,190,140,0.78)',
     textAlign: 'center',
-    lineHeight: 20,
-    marginBottom: 20,
+    lineHeight: 21,
+    marginBottom: 22,
   },
   modalBtn: {
-    backgroundColor: 'rgba(120,60,10,0.8)',
-    paddingHorizontal: 28,
+    backgroundColor: 'rgba(100,45,8,0.85)',
+    paddingHorizontal: 30,
     paddingVertical: 9,
-    borderRadius: 6,
+    borderRadius: 4,
     borderWidth: 1,
-    borderColor: 'rgba(200,130,40,0.4)',
+    borderColor: 'rgba(200,130,35,0.38)',
   },
   modalBtnText: {
     fontSize: 13,
     fontFamily: 'Inter_600SemiBold',
-    color: '#ffcc66',
-    letterSpacing: 1,
+    color: '#ffcc55',
+    letterSpacing: 2,
   },
 });
