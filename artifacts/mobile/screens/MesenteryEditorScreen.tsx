@@ -348,11 +348,6 @@ export function MesenteryEditorScreen({ onMenuPress }: Props) {
         </TouchableOpacity>
         <Text style={styles.title}>肠系膜编辑</Text>
         <View style={styles.headerRight}>
-          {/* Static label — never moves */}
-          {selLabel
-            ? <Text style={styles.selInfo} numberOfLines={1}>{selLabel}</Text>
-            : <Text style={styles.hintLabel}>点击节点选择并拖动</Text>
-          }
           {/* Chips float absolutely over header so they never affect layout */}
           {saveStatus === 'saved' && (
             <View style={styles.chipOverlay}>
@@ -402,6 +397,14 @@ export function MesenteryEditorScreen({ onMenuPress }: Props) {
             {editorBg === 0 ? '背景 ○' : editorBg === 1 ? '角色 ●' : '透视 ●'}
           </Text>
         </TouchableOpacity>
+      </View>
+
+      {/* ── Coordinate info bar (below preset bar) ── */}
+      <View style={styles.coordBar}>
+        {selLabel
+          ? <Text style={styles.selInfo} numberOfLines={1}>{selLabel}</Text>
+          : <Text style={styles.hintLabel}>点击节点选择并拖动</Text>
+        }
       </View>
 
       {/* ── Canvas area ── */}
@@ -466,19 +469,6 @@ export function MesenteryEditorScreen({ onMenuPress }: Props) {
           {renderNodes(dispSmall, 'small', SMALL_RADIUS, () => 0)}
           {renderNodes(dispLarge, 'large', LARGE_RADIUS, i => largeNodeMesentery(i).deadZone)}
 
-          {/* Legend */}
-          <Rect x={0} y={0} width={96 / scale} height={46 / scale}
-            fill="rgba(10,4,4,0.82)" rx={4 / scale} />
-          <Circle cx={8 / scale}  cy={10 / scale} r={3 / scale} fill="#ffaa33" />
-          <SvgText x={15 / scale} y={14 / scale} fill="#ffaa33"
-            fontSize={8 / scale} opacity={0.85}>大肠 r={LARGE_RADIUS}</SvgText>
-          <Circle cx={8 / scale}  cy={23 / scale} r={3 / scale} fill="#33ccff" />
-          <SvgText x={15 / scale} y={27 / scale} fill="#33ccff"
-            fontSize={8 / scale} opacity={0.85}>小肠 r={SMALL_RADIUS}</SvgText>
-          <SvgText x={4 / scale}  y={38 / scale} fill="#665555"
-            fontSize={7 / scale} opacity={0.8}>实圆=碰撞体积</SvgText>
-          <SvgText x={4 / scale}  y={45 / scale} fill="#665555"
-            fontSize={7 / scale} opacity={0.8}>虚圆=自由范围</SvgText>
         </Svg>
 
         {/* Touch overlay — exactly covers the SVG area, locationX/Y = SVG-pixel space */}
@@ -494,10 +484,6 @@ export function MesenteryEditorScreen({ onMenuPress }: Props) {
 
       {/* ── Bottom bar ── */}
       <View style={[styles.bottomBar, { paddingBottom: bottomPad + 4 }]}>
-        <View style={styles.legendRow}>
-          <View style={styles.legendDot} />
-          <Text style={styles.legendText}>拖拽节点；点击其他节点直接切换</Text>
-        </View>
         <View style={styles.btnRow}>
           <TouchableOpacity style={[styles.btn, styles.btnConfirm]} onPress={handleConfirm}>
             <Text style={styles.btnText}>记录</Text>
@@ -603,6 +589,12 @@ const styles = StyleSheet.create({
   },
   bgToggleTextOn: {
     color: '#66bbdd',
+  },
+
+  coordBar: {
+    paddingHorizontal: 12, paddingVertical: 5,
+    backgroundColor: '#0d0505',
+    borderBottomWidth: 1, borderBottomColor: '#1e1010',
   },
 
   canvasArea: { flex: 1, position: 'relative', overflow: 'hidden' },
