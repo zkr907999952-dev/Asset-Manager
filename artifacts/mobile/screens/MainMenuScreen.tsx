@@ -140,15 +140,15 @@ export function MainMenuScreen() {
       />
 
 
+      {/* ── Title block — absolutely positioned top-left to avoid character ── */}
+      <Animated.View style={[styles.titleBlock, { top: topPad + 24, opacity: titleOpacity, transform: [{ translateY: titleY }] }]}>
+        <Text style={styles.titleCn}>玉腹模拟器</Text>
+        <View style={styles.titleLine} />
+        <Text style={styles.titleSub}>恋肠模拟器</Text>
+      </Animated.View>
+
       {/* Main layout */}
       <View style={[styles.root, { paddingTop: topPad, paddingBottom: bottomPad }]}>
-
-        {/* ── Title (top-left) ── */}
-        <Animated.View style={[styles.titleBlock, { opacity: titleOpacity, transform: [{ translateY: titleY }] }]}>
-          <Text style={styles.titleCn}>玉腹模拟器</Text>
-          <View style={styles.titleLine} />
-          <Text style={styles.titleSub}>地表最强恋肠模拟器</Text>
-        </Animated.View>
 
         {/* ── Spacer ── */}
         <View style={{ flex: 1 }} />
@@ -211,8 +211,9 @@ const styles = StyleSheet.create({
 
   /* Title */
   titleBlock: {
-    alignItems: 'flex-end',
-    marginTop: 24,
+    position: 'absolute',
+    left: 24,
+    alignItems: 'flex-start',
   },
   titleCn: {
     fontSize: 34,
@@ -222,7 +223,7 @@ const styles = StyleSheet.create({
     textShadow: '0px 0px 6px rgba(255,180,220,1), 0px 0px 18px rgba(255,80,180,0.85), 0px 0px 40px rgba(220,30,140,0.55), 0px 2px 8px rgba(0,0,0,0.95)',
   } as any,
   titleLine: {
-    width: 140,
+    width: 120,
     height: 1,
     backgroundColor: 'rgba(255,150,200,0.5)',
     marginTop: 10,
