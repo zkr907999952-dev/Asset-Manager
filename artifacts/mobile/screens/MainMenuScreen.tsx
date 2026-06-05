@@ -43,7 +43,11 @@ function DevInfoModal({ visible, onClose }: { visible: boolean; onClose: () => v
   );
 }
 
-const BUTTONS: { label: string; action: (ctx: { setScreen: (s: string) => void; setWip: (l: string) => void }) => void; highlight?: boolean }[] = [
+const BUTTONS: {
+  label: string;
+  action: (ctx: { setScreen: (s: string) => void; setWip: (l: string) => void }) => void;
+  highlight?: boolean;
+}[] = [
   { label: '继续游戏', action: ({ setWip }) => setWip('继续游戏') },
   { label: '开始',     action: ({ setWip }) => setWip('开始') },
   { label: '故事模式', action: ({ setWip }) => setWip('故事模式') },
@@ -53,6 +57,58 @@ const BUTTONS: { label: string; action: (ctx: { setScreen: (s: string) => void; 
   { label: '设置',     action: ({ setScreen }) => setScreen('settings') },
 ];
 
+function MenuButton({
+  label,
+  highlight,
+  onPress,
+  delay,
+}: {
+  label: string;
+  highlight?: boolean;
+  onPress: () => void;
+  delay: number;
+}) {
+  const [hovered, setHovered] = useState(false);
+  const opacity = useRef(new Animated.Value(0)).current;
+  const translateX = useRef(new Animated.Value(-10)).current;
+
+  useEffect(() => {
+    Animated.parallel([
+      Animated.timing(opacity,     { toValue: 1, duration: 400, delay, useNativeDriver: false }),
+      Animated.timing(translateX,  { toValue: 0, duration: 400, delay, useNativeDriver: false }),
+    ]).start();
+  }, []);
+
+  const activeColor  = highlight ? '#ff6eb4' : (hovered ? '#ffffff' : 'rgba(255,200,220,0.75)');
+  const activeFontSize = hovered ? 17 : 15;
+
+  return (
+    <Animated.View style={{ opacity, transform: [{ translateX }] }}>
+      <TouchableOpacity
+        onPress={onPress}
+        activeOpacity={0.8}
+        {...(Platform.OS === 'web' ? {
+          onMouseEnter: () => setHovered(true),
+          onMouseLeave: () => setHovered(false),
+        } : {})}
+        style={styles.menuBtn}
+      >
+        <Text style={[
+          styles.menuBtnLabel,
+          { color: activeColor, fontSize: activeFontSize },
+          highlight && styles.menuBtnHighlight,
+          hovered && styles.menuBtnHovered,
+        ]}>
+          {label}
+        </Text>
+        {(hovered || highlight) && (
+          <View style={[styles.btnUnderline, highlight && styles.btnUnderlineHighlight]} />
+        )}
+      </TouchableOpacity>
+    </Animated.View>
+  );
+}
+
 export function MainMenuScreen() {
   const insets = useSafeAreaInsets();
   const { setScreen } = useGame();
@@ -60,16 +116,12 @@ export function MainMenuScreen() {
   const [devInfoOpen, setDevInfoOpen] = useState(false);
 
   const titleOpacity = useRef(new Animated.Value(0)).current;
-  const titleY       = useRef(new Animated.Value(-16)).current;
-  const btnOpacity   = useRef(new Animated.Value(0)).current;
-  const lineScale    = useRef(new Animated.Value(0)).current;
+  const titleY       = useRef(new Animated.Value(-12)).current;
 
   useEffect(() => {
     Animated.parallel([
-      Animated.timing(titleOpacity, { toValue: 1, duration: 700, useNativeDriver: false }),
-      Animated.timing(titleY,       { toValue: 0, duration: 700, useNativeDriver: false }),
-      Animated.timing(lineScale,    { toValue: 1, duration: 700, useNativeDriver: false }),
-      Animated.timing(btnOpacity,   { toValue: 1, duration: 900, useNativeDriver: false }),
+      Animated.timing(titleOpacity, { toValue: 1, duration: 600, useNativeDriver: false }),
+      Animated.timing(titleY,       { toValue: 0, duration: 600, useNativeDriver: false }),
     ]).start();
   }, []);
 
@@ -80,39 +132,41 @@ export function MainMenuScreen() {
 
   return (
     <View style={styles.bg}>
-      <Image source={COVER_IMG} style={styles.bgImage} resizeMode="cover" />
-      <View style={styles.overlay} />
+      {/* Background image — slightly zoomed to make character larger */}
+      <Image
+        source={COVER_IMG}
+        style={styles.bgImage}
+        resizeMode="cover"
+      />
 
+      {/* Subtle left-side readability fade only */}
+      <View style={styles.leftFade} />
+
+      {/* Main layout */}
       <View style={[styles.root, { paddingTop: topPad, paddingBottom: bottomPad }]}>
 
-        {/* ── Title ── */}
+        {/* ── Title (top-left) ── */}
         <Animated.View style={[styles.titleBlock, { opacity: titleOpacity, transform: [{ translateY: titleY }] }]}>
-          <Text style={styles.titleKana}>ぎょくふく</Text>
           <Text style={styles.titleCn}>玉腹模拟器</Text>
-          <Animated.View style={[styles.titleLine, { transform: [{ scaleX: lineScale }] }]} />
+          <View style={styles.titleLine} />
           <Text style={styles.titleSub}>腹腔物理仿真系统</Text>
         </Animated.View>
 
         {/* ── Spacer ── */}
         <View style={{ flex: 1 }} />
 
-        {/* ── Buttons ── */}
-        <Animated.View style={[styles.menuBlock, { opacity: btnOpacity }]}>
+        {/* ── Buttons (left-aligned, pure text) ── */}
+        <View style={styles.menuBlock}>
           {BUTTONS.map((btn, i) => (
-            <TouchableOpacity
+            <MenuButton
               key={i}
-              style={[styles.menuBtn, btn.highlight && styles.menuBtnHighlight]}
+              label={btn.label}
+              highlight={btn.highlight}
               onPress={() => btn.action(ctx)}
-              activeOpacity={0.7}
-            >
-              {btn.highlight && <View style={styles.btnAccentLeft} />}
-              <Text style={[styles.menuBtnLabel, btn.highlight && styles.menuBtnLabelHighlight]}>
-                {btn.label}
-              </Text>
-              {btn.highlight && <View style={styles.btnAccentRight} />}
-            </TouchableOpacity>
+              delay={i * 60}
+            />
           ))}
-        </Animated.View>
+        </View>
 
         {/* ── Spacer ── */}
         <View style={{ flex: 1 }} />
@@ -139,103 +193,97 @@ export function MainMenuScreen() {
 const styles = StyleSheet.create({
   bg: {
     flex: 1,
-    backgroundColor: '#05010c',
+    backgroundColor: '#1a0018',
   },
   bgImage: {
-    ...StyleSheet.absoluteFillObject,
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
     width: '100%',
     height: '100%',
+    transform: [{ scale: 1.08 }],
   },
-  overlay: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(2,1,8,0.72)',
+  leftFade: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    bottom: 0,
+    width: '55%',
+    backgroundColor: 'rgba(10,2,18,0.45)',
   },
   root: {
     flex: 1,
-    alignItems: 'center',
+    alignItems: 'flex-start',
+    paddingLeft: 28,
   },
 
   /* Title */
   titleBlock: {
-    alignItems: 'center',
-    marginTop: 32,
-  },
-  titleKana: {
-    fontSize: 11,
-    color: 'rgba(200,168,90,0.38)',
-    letterSpacing: 10,
-    marginBottom: 6,
-    fontFamily: 'Inter_400Regular',
+    alignItems: 'flex-start',
+    marginTop: 24,
   },
   titleCn: {
-    fontSize: 40,
+    fontSize: 34,
     fontFamily: 'Inter_700Bold',
-    color: '#f0d888',
-    letterSpacing: 10,
-    textShadowColor: 'rgba(220,160,20,0.75)',
+    color: '#ffb8d8',
+    letterSpacing: 8,
+    textShadowColor: 'rgba(255,100,180,0.7)',
     textShadowOffset: { width: 0, height: 0 },
-    textShadowRadius: 22,
+    textShadowRadius: 18,
   },
   titleLine: {
-    width: 180,
+    width: 140,
     height: 1,
-    backgroundColor: 'rgba(200,160,50,0.35)',
-    marginTop: 14,
-    marginBottom: 10,
+    backgroundColor: 'rgba(255,150,200,0.4)',
+    marginTop: 10,
+    marginBottom: 7,
   },
   titleSub: {
     fontSize: 10,
     fontFamily: 'Inter_400Regular',
-    color: 'rgba(200,168,90,0.42)',
-    letterSpacing: 6,
+    color: 'rgba(255,180,220,0.5)',
+    letterSpacing: 5,
   },
 
   /* Buttons */
   menuBlock: {
-    width: '62%',
-    alignItems: 'stretch',
-    gap: 8,
+    alignItems: 'flex-start',
+    gap: 2,
   },
   menuBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 13,
-    paddingHorizontal: 20,
-    backgroundColor: 'rgba(4,2,12,0.92)',
-    borderRadius: 3,
-    borderWidth: 1,
-    borderColor: 'rgba(180,140,60,0.55)',
-  },
-  menuBtnHighlight: {
-    backgroundColor: 'rgba(40,14,2,0.95)',
-    borderColor: 'rgba(240,160,30,0.90)',
-    borderWidth: 1.5,
+    paddingVertical: 7,
+    paddingRight: 20,
+    alignItems: 'flex-start',
   },
   menuBtnLabel: {
-    fontSize: 15,
     fontFamily: 'Inter_600SemiBold',
-    color: '#e8d49a',
-    letterSpacing: 5,
-    textAlign: 'center',
+    fontSize: 15,
+    letterSpacing: 4,
+    color: 'rgba(255,200,220,0.75)',
   },
-  menuBtnLabelHighlight: {
-    color: '#ffd45a',
-    textShadowColor: 'rgba(255,180,0,0.5)',
+  menuBtnHighlight: {
+    color: '#ff6eb4',
+    textShadowColor: 'rgba(255,80,180,0.6)',
     textShadowOffset: { width: 0, height: 0 },
-    textShadowRadius: 8,
+    textShadowRadius: 10,
   },
-  btnAccentLeft: {
-    width: 14,
-    height: 1,
-    backgroundColor: 'rgba(240,160,30,0.6)',
-    marginRight: 10,
+  menuBtnHovered: {
+    color: '#ffffff',
+    textShadowColor: 'rgba(255,180,220,0.8)',
+    textShadowOffset: { width: 0, height: 0 },
+    textShadowRadius: 12,
   },
-  btnAccentRight: {
-    width: 14,
+  btnUnderline: {
     height: 1,
-    backgroundColor: 'rgba(240,160,30,0.6)',
-    marginLeft: 10,
+    width: 28,
+    backgroundColor: 'rgba(255,180,220,0.55)',
+    marginTop: 2,
+  },
+  btnUnderlineHighlight: {
+    backgroundColor: 'rgba(255,100,180,0.8)',
+    width: 36,
   },
 
   /* Bottom bar */
@@ -244,19 +292,19 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 20,
+    paddingRight: 20,
     paddingBottom: 8,
   },
   versionText: {
     fontSize: 10,
     fontFamily: 'Inter_400Regular',
-    color: 'rgba(150,120,60,0.45)',
+    color: 'rgba(255,180,210,0.38)',
     letterSpacing: 1,
   },
   devBtnText: {
     fontSize: 10,
     fontFamily: 'Inter_400Regular',
-    color: 'rgba(160,130,75,0.5)',
+    color: 'rgba(255,180,210,0.42)',
     letterSpacing: 1,
   },
 
@@ -268,41 +316,41 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   modalBox: {
-    backgroundColor: '#140a22',
+    backgroundColor: '#1e0828',
     borderRadius: 8,
     padding: 28,
     width: 260,
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: 'rgba(180,130,60,0.32)',
+    borderColor: 'rgba(255,120,180,0.30)',
   },
   modalTitle: {
     fontSize: 15,
     fontFamily: 'Inter_600SemiBold',
-    color: '#f0d080',
+    color: '#ffb8d8',
     marginBottom: 12,
     letterSpacing: 3,
   },
   modalDesc: {
     fontSize: 13,
     fontFamily: 'Inter_400Regular',
-    color: 'rgba(220,190,140,0.78)',
+    color: 'rgba(255,200,230,0.78)',
     textAlign: 'center',
     lineHeight: 21,
     marginBottom: 22,
   },
   modalBtn: {
-    backgroundColor: 'rgba(100,45,8,0.85)',
+    backgroundColor: 'rgba(180,30,100,0.7)',
     paddingHorizontal: 30,
     paddingVertical: 9,
     borderRadius: 4,
     borderWidth: 1,
-    borderColor: 'rgba(200,130,35,0.38)',
+    borderColor: 'rgba(255,120,180,0.40)',
   },
   modalBtnText: {
     fontSize: 13,
     fontFamily: 'Inter_600SemiBold',
-    color: '#ffcc55',
+    color: '#ffcce8',
     letterSpacing: 2,
   },
 });
