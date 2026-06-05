@@ -1339,7 +1339,7 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
         {/* ===== BACKGROUND LAYER ===== */}
         {isInternal ? (
           <G>
-            {state.showBackground && (
+            {state.showBackground === 1 && (
               <SvgImage
                 href={BELLY_EXTERNAL_IMG}
                 x={-80} y={breathImgOffsetY}
@@ -1347,16 +1347,32 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
                 preserveAspectRatio="xMidYMid meet"
               />
             )}
+            {state.showBackground === 2 && (
+              <SvgImage
+                href={INTESTINES_REF}
+                x={0} y={0}
+                width={CANVAS_W} height={CANVAS_H}
+                preserveAspectRatio="xMidYMid meet"
+              />
+            )}
           </G>
         ) : (
           <G>
-            {state.showBackground && (
+            {state.showBackground === 1 && (
               /* External view belly image. x=-80 centers 500px img on 340px canvas.
                  y=-189 places navel at CAVITY_CY=248: 0.609*715-189=248. */
               <SvgImage
                 href={BELLY_EXTERNAL_IMG}
                 x={-80} y={breathImgOffsetY}
                 width={500} height={breathImgH}
+                preserveAspectRatio="xMidYMid meet"
+              />
+            )}
+            {state.showBackground === 2 && (
+              <SvgImage
+                href={INTESTINES_REF}
+                x={0} y={0}
+                width={CANVAS_W} height={CANVAS_H}
                 preserveAspectRatio="xMidYMid meet"
               />
             )}

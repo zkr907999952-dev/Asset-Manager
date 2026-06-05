@@ -18,6 +18,7 @@ import {
 
 const HIT_THRESHOLD = 20;
 const BELLY_EXTERNAL_IMG = require('@/assets/images/belly_external.png');
+const INTESTINES_REF     = require('@/assets/images/intestines.png');
 
 interface NodePos      { rx: number; ry: number }
 interface SelectedNode { type: 'large' | 'small'; idx: number }
@@ -391,13 +392,13 @@ export function MesenteryEditorScreen({ onMenuPress }: Props) {
         )}
         {/* Spacer pushes bg toggle to right */}
         <View style={{ flex: 1 }} />
-        {/* Background toggle */}
+        {/* Background toggle — cycles 0→1→2→0 */}
         <TouchableOpacity
-          style={[styles.bgToggleBtn, state.showBackground && styles.bgToggleBtnOn]}
-          onPress={() => setShowBackground(!state.showBackground)}
+          style={[styles.bgToggleBtn, state.showBackground > 0 && styles.bgToggleBtnOn]}
+          onPress={() => setShowBackground(((state.showBackground + 1) % 3) as 0 | 1 | 2)}
         >
-          <Text style={[styles.bgToggleText, state.showBackground && styles.bgToggleTextOn]}>
-            {state.showBackground ? '背景 ●' : '背景 ○'}
+          <Text style={[styles.bgToggleText, state.showBackground > 0 && styles.bgToggleTextOn]}>
+            {state.showBackground === 0 ? '背景 ○' : state.showBackground === 1 ? '角色 ●' : '透视 ●'}
           </Text>
         </TouchableOpacity>
       </View>
@@ -418,12 +419,20 @@ export function MesenteryEditorScreen({ onMenuPress }: Props) {
         >
           <Rect x={0} y={0} width={CANVAS_W} height={CANVAS_H} fill="#0a0404" />
 
-          {/* Background belly image */}
-          {state.showBackground && (
+          {/* Background — state 1: character, state 2: perspective */}
+          {state.showBackground === 1 && (
             <SvgImage
               href={BELLY_EXTERNAL_IMG}
               x={-80} y={-170}
               width={500} height={715}
+              preserveAspectRatio="xMidYMid meet"
+            />
+          )}
+          {state.showBackground === 2 && (
+            <SvgImage
+              href={INTESTINES_REF}
+              x={0} y={0}
+              width={CANVAS_W} height={CANVAS_H}
               preserveAspectRatio="xMidYMid meet"
             />
           )}
