@@ -595,9 +595,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingTop: 6,
     justifyContent: 'center',
+    backgroundColor: '#0a0404',
   },
 
-  canvasArea: { flex: 1, position: 'relative', overflow: 'hidden' },
+  canvasArea: { flex: 1, position: 'relative', overflow: 'hidden', backgroundColor: '#0a0404' },
 
   bottomBar: {
     borderTopWidth: 1, borderTopColor: '#2a1515',
