@@ -159,7 +159,7 @@ export function SimulationScreen({ onMenuPress }: Props) {
     };
   }, [state.physicsFps]);
 
-  const topPad = Platform.OS === 'web' ? 67 : insets.top;
+  const topPad = Platform.OS === 'web' ? 16 : insets.top;
   const bottomPad = Platform.OS === 'web' ? 0 : insets.bottom;
 
   return (

@@ -873,7 +873,7 @@ export function HelpScreen({ onMenuPress }: Props) {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const [selectedId, setSelectedId] = useState<string>(HELP_DATA[0].id);
-  const topPad = Platform.OS === 'web' ? 67 : insets.top;
+  const topPad = Platform.OS === 'web' ? 16 : insets.top;
   const bottomPad = Platform.OS === 'web' ? 34 : insets.bottom;
 
   const selectedEntry = HELP_DATA.find(e => e.id === selectedId) ?? HELP_DATA[0];

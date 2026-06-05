@@ -55,8 +55,8 @@ export function ConsoleScreen({ onMenuPress }: Props) {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const { state, setPeriSpeed, physicsRef, syncFromPhysics, setToolState, resetPhysics, resetPositions } = useGame();
-  const topPad = Platform.OS === 'web' ? 67 : insets.top;
-  const bottomPad = Platform.OS === 'web' ? 34 : insets.bottom;
+  const topPad = Platform.OS === 'web' ? 16 : insets.top;
+  const bottomPad = Platform.OS === 'web' ? 16 : insets.bottom;
 
   const ts = state.toolStates;
 

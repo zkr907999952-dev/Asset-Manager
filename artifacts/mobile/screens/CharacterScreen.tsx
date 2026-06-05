@@ -17,7 +17,7 @@ export function CharacterScreen({ onMenuPress }: Props) {
   const insets = useSafeAreaInsets();
   const { width, height } = useWindowDimensions();
   const { state } = useGame();
-  const topPad = Platform.OS === 'web' ? 67 : insets.top;
+  const topPad = Platform.OS === 'web' ? 16 : insets.top;
 
   const charWidth = Math.min(width * 0.44, 180);
   const charHeight = height - topPad - 60;

@@ -94,8 +94,8 @@ export function SettingsScreen({ onMenuPress }: Props) {
     setTouchOffsetY,
     physicsRef,
   } = useGame();
-  const topPad = Platform.OS === 'web' ? 67 : insets.top;
-  const bottomPad = Platform.OS === 'web' ? 34 : insets.bottom;
+  const topPad = Platform.OS === 'web' ? 16 : insets.top;
+  const bottomPad = Platform.OS === 'web' ? 16 : insets.bottom;
   const [resetStatus, setResetStatus] = useState<'idle' | 'confirm' | 'saving' | 'done'>('idle');
 
   const handleResetMesentery = useCallback(() => {

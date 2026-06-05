@@ -28,8 +28,8 @@ export function MesenteryEditorScreen({ onMenuPress }: Props) {
   const insets = useSafeAreaInsets();
   const { physicsRef, setScreen, state } = useGame();
   const [editorBg, setEditorBg] = useState<0 | 1 | 2>(state.showBackground);
-  const topPad    = Platform.OS === 'web' ? 67 : insets.top;
-  const bottomPad = Platform.OS === 'web' ? 34 : insets.bottom;
+  const topPad    = Platform.OS === 'web' ? 16 : insets.top;
+  const bottomPad = Platform.OS === 'web' ? 16 : insets.bottom;
 
   // ── Canvas layout ──────────────────────────────────────────────────────────
   const [canvasSize, setCanvasSize] = useState({ w: 1, h: 1 });
