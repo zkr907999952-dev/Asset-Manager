@@ -33,7 +33,8 @@ export function MesenteryEditorScreen({ onMenuPress }: Props) {
 
   // ── Canvas layout ──────────────────────────────────────────────────────────
   const [canvasSize, setCanvasSize] = useState({ w: 1, h: 1 });
-  const scale   = Math.min(canvasSize.w / CANVAS_W, canvasSize.h / CANVAS_H);
+  // Use Math.max (cover) so the SVG always fills the full container — no letterbox strips
+  const scale   = Math.max(canvasSize.w / CANVAS_W, canvasSize.h / CANVAS_H);
   const svgW    = CANVAS_W * scale;
   const svgH    = CANVAS_H * scale;
   const svgOffX = (canvasSize.w - svgW) / 2;
@@ -502,7 +503,7 @@ export function MesenteryEditorScreen({ onMenuPress }: Props) {
 }
 
 const styles = StyleSheet.create({
-  container:   { flex: 1, backgroundColor: '#0a0404' },
+  container:   { flex: 1, backgroundColor: '#0a0404', overflow: 'hidden' },
 
   topOverlay: {
     position: 'absolute', top: 0, left: 0, right: 0,
