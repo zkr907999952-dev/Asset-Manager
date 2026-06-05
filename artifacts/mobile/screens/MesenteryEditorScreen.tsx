@@ -340,148 +340,139 @@ export function MesenteryEditorScreen({ onMenuPress }: Props) {
     : null;
 
   return (
-    <View style={styles.container}>
-      {/* ── Header ── */}
-      <View style={[styles.header, { paddingTop: topPad }]}>
-        <TouchableOpacity style={styles.backBtn} onPress={() => setScreen('settings')}>
-          <Text style={styles.backBtnText}>← 返回</Text>
-        </TouchableOpacity>
-        <Text style={styles.title}>肠系膜编辑</Text>
-        <View style={styles.headerRight}>
-          {/* Chips float absolutely over header so they never affect layout */}
-          {saveStatus === 'saved' && (
-            <View style={styles.chipOverlay}>
-              <Text style={styles.statusChip}>已保存 ✓</Text>
-            </View>
-          )}
-          {confirmFlash && (
-            <View style={styles.chipOverlay}>
-              <Text style={[styles.statusChip, { backgroundColor: 'rgba(30,80,30,0.8)', color: '#88ddaa' }]}>
-                已记录 ✓
-              </Text>
-            </View>
-          )}
+    <View
+      style={styles.container}
+      onLayout={e => setCanvasSize({
+        w: e.nativeEvent.layout.width,
+        h: e.nativeEvent.layout.height,
+      })}
+    >
+      {/* ── Canvas — full-screen behind everything ── */}
+      <Svg
+        width={svgW} height={svgH}
+        style={{ position: 'absolute', left: svgOffX, top: svgOffY }}
+        viewBox={`0 0 ${CANVAS_W} ${CANVAS_H}`}
+      >
+        <Rect x={0} y={0} width={CANVAS_W} height={CANVAS_H} fill="#0a0404" />
+
+        {/* Background — editorBg 1: character, 2: perspective (local only) */}
+        {editorBg === 1 && (
+          <SvgImage
+            href={BELLY_EXTERNAL_IMG}
+            x={-80} y={-172}
+            width={500} height={722}
+            preserveAspectRatio="xMidYMid meet"
+          />
+        )}
+        {editorBg === 2 && (
+          <SvgImage
+            href={INTESTINES_REF}
+            x={CAVITY_CX - CANVAS_W * 0.9} y={CAVITY_CY - CANVAS_W * 1.32}
+            width={CANVAS_W * 1.8} height={CANVAS_W * 2.4}
+            preserveAspectRatio="xMidYMid meet" opacity={0.50}
+          />
+        )}
+
+        {/* Cavity reference ellipse */}
+        <Ellipse
+          cx={CAVITY_CX} cy={CAVITY_CY} rx={CAVITY_RX} ry={CAVITY_RY}
+          fill="none" stroke="#3a1818" strokeWidth={1.5 / scale}
+          strokeDasharray={`${6 / scale},${5 / scale}`}
+        />
+        {/* Calibration cross at cavity centre */}
+        <Line x1={CAVITY_CX - 8 / scale} y1={CAVITY_CY} x2={CAVITY_CX + 8 / scale} y2={CAVITY_CY}
+          stroke="#442222" strokeWidth={0.8 / scale} />
+        <Line x1={CAVITY_CX} y1={CAVITY_CY - 8 / scale} x2={CAVITY_CX} y2={CAVITY_CY + 8 / scale}
+          stroke="#442222" strokeWidth={0.8 / scale} />
+
+        {/* Connection lines — SOLID */}
+        <Polyline
+          points={buildPolyPoints(dispSmall)}
+          fill="none" stroke="#33ccff" strokeWidth={0.8 / scale}
+          strokeOpacity={0.35}
+        />
+        <Polyline
+          points={buildPolyPoints(dispLarge)}
+          fill="none" stroke="#ffaa33" strokeWidth={0.8 / scale}
+          strokeOpacity={0.35}
+        />
+
+        {/* Nodes with collision wireframe circles */}
+        {renderNodes(dispSmall, 'small', SMALL_RADIUS, () => 0)}
+        {renderNodes(dispLarge, 'large', LARGE_RADIUS, i => largeNodeMesentery(i).deadZone)}
+      </Svg>
+
+      {/* Touch overlay — exactly covers the SVG area */}
+      <View
+        style={{
+          position: 'absolute',
+          left: svgOffX, top: svgOffY,
+          width: svgW, height: svgH,
+        }}
+        {...panResponder.panHandlers}
+      />
+
+      {/* ── Top UI overlay ── */}
+      <View style={styles.topOverlay}>
+        <View style={[styles.header, { paddingTop: topPad }]}>
+          <TouchableOpacity style={styles.backBtn} onPress={() => setScreen('settings')}>
+            <Text style={styles.backBtnText}>← 返回</Text>
+          </TouchableOpacity>
+          <Text style={styles.title}>肠系膜编辑</Text>
+          <View style={styles.headerRight}>
+            {saveStatus === 'saved' && (
+              <View style={styles.chipOverlay}>
+                <Text style={styles.statusChip}>已保存 ✓</Text>
+              </View>
+            )}
+            {confirmFlash && (
+              <View style={styles.chipOverlay}>
+                <Text style={[styles.statusChip, { backgroundColor: 'rgba(30,80,30,0.8)', color: '#88ddaa' }]}>
+                  已记录 ✓
+                </Text>
+              </View>
+            )}
+          </View>
+        </View>
+
+        <View style={styles.presetBar}>
+          <Text style={styles.presetBarLabel}>预设：</Text>
+          {Array.from({ length: PRESET_COUNT }, (_, i) => {
+            const isActive = activePreset === i;
+            return (
+              <TouchableOpacity
+                key={i}
+                style={[styles.presetBtn, isActive && styles.presetBtnActive]}
+                onPress={() => handleSwitchPreset(i)}
+                disabled={switching}
+              >
+                {isActive && <View style={styles.presetActiveDot} />}
+                <Text style={[styles.presetBtnText, isActive && styles.presetBtnTextActive]}>
+                  预设{i + 1}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+          {switching && <Text style={styles.switchingText}>切换中…</Text>}
+          <View style={{ flex: 1 }} />
+          <TouchableOpacity
+            style={[styles.bgToggleBtn, editorBg > 0 && styles.bgToggleBtnOn]}
+            onPress={() => setEditorBg(((editorBg + 1) % 3) as 0 | 1 | 2)}
+          >
+            <Text style={[styles.bgToggleText, editorBg > 0 && styles.bgToggleTextOn]}>
+              {editorBg === 0 ? '背景 ○' : editorBg === 1 ? '角色 ●' : '透视 ●'}
+            </Text>
+          </TouchableOpacity>
+        </View>
+
+        <View style={styles.coordBar}>
+          {selLabel ? (
+            <Text style={styles.selInfo} numberOfLines={1}>{selLabel}</Text>
+          ) : null}
         </View>
       </View>
 
-      {/* ── Preset bar ── */}
-      <View style={styles.presetBar}>
-        <Text style={styles.presetBarLabel}>预设：</Text>
-        {Array.from({ length: PRESET_COUNT }, (_, i) => {
-          const isActive = activePreset === i;
-          return (
-            <TouchableOpacity
-              key={i}
-              style={[styles.presetBtn, isActive && styles.presetBtnActive]}
-              onPress={() => handleSwitchPreset(i)}
-              disabled={switching}
-            >
-              {isActive && <View style={styles.presetActiveDot} />}
-              <Text style={[styles.presetBtnText, isActive && styles.presetBtnTextActive]}>
-                预设{i + 1}
-              </Text>
-            </TouchableOpacity>
-          );
-        })}
-        {switching && (
-          <Text style={styles.switchingText}>切换中…</Text>
-        )}
-        {/* Spacer pushes bg toggle to right */}
-        <View style={{ flex: 1 }} />
-        {/* Background toggle — cycles 0→1→2→0 (editor-local, does not affect simulation) */}
-        <TouchableOpacity
-          style={[styles.bgToggleBtn, editorBg > 0 && styles.bgToggleBtnOn]}
-          onPress={() => setEditorBg(((editorBg + 1) % 3) as 0 | 1 | 2)}
-        >
-          <Text style={[styles.bgToggleText, editorBg > 0 && styles.bgToggleTextOn]}>
-            {editorBg === 0 ? '背景 ○' : editorBg === 1 ? '角色 ●' : '透视 ●'}
-          </Text>
-        </TouchableOpacity>
-      </View>
-
-      {/* ── Coordinate info bar (below preset bar) ── */}
-      <View style={styles.coordBar}>
-        {selLabel ? (
-          <Text style={styles.selInfo} numberOfLines={1}>{selLabel}</Text>
-        ) : null}
-      </View>
-
-      {/* ── Canvas area ── */}
-      <View
-        style={styles.canvasArea}
-        onLayout={e => setCanvasSize({
-          w: e.nativeEvent.layout.width,
-          h: e.nativeEvent.layout.height,
-        })}
-      >
-        {/* SVG — physics viewBox coordinate space */}
-        <Svg
-          width={svgW} height={svgH}
-          style={{ position: 'absolute', left: svgOffX, top: svgOffY }}
-          viewBox={`0 0 ${CANVAS_W} ${CANVAS_H}`}
-        >
-          <Rect x={0} y={0} width={CANVAS_W} height={CANVAS_H} fill="#0a0404" />
-
-          {/* Background — editorBg 1: character, 2: perspective (local only) */}
-          {editorBg === 1 && (
-            <SvgImage
-              href={BELLY_EXTERNAL_IMG}
-              x={-80} y={-172}
-              width={500} height={722}
-              preserveAspectRatio="xMidYMid meet"
-            />
-          )}
-          {editorBg === 2 && (
-            <SvgImage
-              href={INTESTINES_REF}
-              x={CAVITY_CX - CANVAS_W * 0.9} y={CAVITY_CY - CANVAS_W * 1.32}
-              width={CANVAS_W * 1.8} height={CANVAS_W * 2.4}
-              preserveAspectRatio="xMidYMid meet" opacity={0.50}
-            />
-          )}
-
-          {/* Cavity reference ellipse */}
-          <Ellipse
-            cx={CAVITY_CX} cy={CAVITY_CY} rx={CAVITY_RX} ry={CAVITY_RY}
-            fill="none" stroke="#3a1818" strokeWidth={1.5 / scale}
-            strokeDasharray={`${6 / scale},${5 / scale}`}
-          />
-          {/* Calibration cross at cavity centre */}
-          <Line x1={CAVITY_CX - 8 / scale} y1={CAVITY_CY} x2={CAVITY_CX + 8 / scale} y2={CAVITY_CY}
-            stroke="#442222" strokeWidth={0.8 / scale} />
-          <Line x1={CAVITY_CX} y1={CAVITY_CY - 8 / scale} x2={CAVITY_CX} y2={CAVITY_CY + 8 / scale}
-            stroke="#442222" strokeWidth={0.8 / scale} />
-
-          {/* Connection lines — SOLID */}
-          <Polyline
-            points={buildPolyPoints(dispSmall)}
-            fill="none" stroke="#33ccff" strokeWidth={0.8 / scale}
-            strokeOpacity={0.35}
-          />
-          <Polyline
-            points={buildPolyPoints(dispLarge)}
-            fill="none" stroke="#ffaa33" strokeWidth={0.8 / scale}
-            strokeOpacity={0.35}
-          />
-
-          {/* Nodes with collision wireframe circles */}
-          {renderNodes(dispSmall, 'small', SMALL_RADIUS, () => 0)}
-          {renderNodes(dispLarge, 'large', LARGE_RADIUS, i => largeNodeMesentery(i).deadZone)}
-
-        </Svg>
-
-        {/* Touch overlay — exactly covers the SVG area, locationX/Y = SVG-pixel space */}
-        <View
-          style={{
-            position: 'absolute',
-            left: svgOffX, top: svgOffY,
-            width: svgW,   height: svgH,
-          }}
-          {...panResponder.panHandlers}
-        />
-      </View>
-
-      {/* ── Bottom bar ── */}
+      {/* ── Bottom bar overlay ── */}
       <View style={[styles.bottomBar, { paddingBottom: bottomPad + 4 }]}>
         <View style={styles.btnRow}>
           <TouchableOpacity style={[styles.btn, styles.btnConfirm]} onPress={handleConfirm}>
@@ -515,11 +506,15 @@ export function MesenteryEditorScreen({ onMenuPress }: Props) {
 const styles = StyleSheet.create({
   container:   { flex: 1, backgroundColor: '#0a0404' },
 
+  topOverlay: {
+    position: 'absolute', top: 0, left: 0, right: 0,
+  },
+
   header: {
     flexDirection: 'row', alignItems: 'center',
     paddingHorizontal: 10, paddingBottom: 8,
     borderBottomWidth: 1, borderBottomColor: '#2a1515',
-    backgroundColor: '#140808', gap: 6,
+    backgroundColor: 'rgba(10,4,4,0.45)', gap: 6,
   },
   backBtn:     { padding: 4 },
   backBtnText: { color: '#ffaa33', fontSize: 13, fontFamily: 'Inter_400Regular' },
@@ -541,7 +536,7 @@ const styles = StyleSheet.create({
   presetBar: {
     flexDirection: 'row', alignItems: 'center',
     paddingHorizontal: 10, paddingVertical: 7,
-    backgroundColor: '#110606',
+    backgroundColor: 'rgba(8,3,3,0.45)',
     borderBottomWidth: 1, borderBottomColor: '#2a1515',
     gap: 6,
   },
@@ -595,14 +590,15 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingTop: 6,
     justifyContent: 'center',
-    backgroundColor: '#0a0404',
+    backgroundColor: 'rgba(8,3,3,0.45)',
   },
 
   canvasArea: { flex: 1, position: 'relative', overflow: 'hidden', backgroundColor: '#0a0404' },
 
   bottomBar: {
+    position: 'absolute', bottom: 0, left: 0, right: 0,
     borderTopWidth: 1, borderTopColor: '#2a1515',
-    backgroundColor: '#140808', paddingTop: 8, paddingHorizontal: 10,
+    backgroundColor: 'rgba(10,4,4,0.6)', paddingTop: 8, paddingHorizontal: 10,
   },
   legendRow: {
     flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 6,
