@@ -401,10 +401,9 @@ export function MesenteryEditorScreen({ onMenuPress }: Props) {
 
       {/* ── Coordinate info bar (below preset bar) ── */}
       <View style={styles.coordBar}>
-        {selLabel
-          ? <Text style={styles.selInfo} numberOfLines={1}>{selLabel}</Text>
-          : <Text style={styles.hintLabel}>点击节点选择并拖动</Text>
-        }
+        {selLabel ? (
+          <Text style={styles.selInfo} numberOfLines={1}>{selLabel}</Text>
+        ) : null}
       </View>
 
       {/* ── Canvas area ── */}
@@ -592,9 +591,10 @@ const styles = StyleSheet.create({
   },
 
   coordBar: {
-    paddingHorizontal: 12, paddingVertical: 5,
-    backgroundColor: '#0d0505',
-    borderBottomWidth: 1, borderBottomColor: '#1e1010',
+    height: 26,
+    paddingHorizontal: 12,
+    paddingTop: 6,
+    justifyContent: 'center',
   },
 
   canvasArea: { flex: 1, position: 'relative', overflow: 'hidden' },
