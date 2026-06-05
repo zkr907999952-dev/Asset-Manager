@@ -139,8 +139,6 @@ export function MainMenuScreen() {
         resizeMode="cover"
       />
 
-      {/* Subtle left-side readability fade only */}
-      <View style={styles.leftFade} />
 
       {/* Main layout */}
       <View style={[styles.root, { paddingTop: topPad, paddingBottom: bottomPad }]}>
@@ -205,23 +203,15 @@ const styles = StyleSheet.create({
     height: '100%',
     transform: [{ scale: 1.08 }],
   },
-  leftFade: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    bottom: 0,
-    width: '55%',
-    backgroundColor: 'rgba(10,2,18,0.45)',
-  },
   root: {
     flex: 1,
-    alignItems: 'flex-start',
-    paddingLeft: 28,
+    alignItems: 'flex-end',
+    paddingRight: 28,
   },
 
   /* Title */
   titleBlock: {
-    alignItems: 'flex-start',
+    alignItems: 'flex-end',
     marginTop: 24,
   },
   titleCn: {
