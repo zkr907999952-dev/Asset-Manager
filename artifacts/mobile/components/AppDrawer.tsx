@@ -84,7 +84,7 @@ export function AppDrawer({ open, onClose }: Props) {
           <View style={styles.drawerTitleRow}>
             <View style={{ flex: 1 }}>
               <Text style={[styles.appTitle, { color: colors.primary }]}>玉腹模拟器</Text>
-              <Text style={[styles.appSubtitle, { color: colors.mutedForeground }]}>物理仿真系统</Text>
+              <Text style={[styles.appSubtitle, { color: colors.mutedForeground }]}>地表最强恋肠模拟器</Text>
             </View>
             <TouchableOpacity onPress={onClose} style={styles.closeBtn} activeOpacity={0.7}>
               <Feather name="x" size={18} color={colors.mutedForeground} />

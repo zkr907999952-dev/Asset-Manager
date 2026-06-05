@@ -33,7 +33,7 @@ function DevInfoModal({ visible, onClose }: { visible: boolean; onClose: () => v
         <View style={styles.modalBox}>
           <Text style={styles.modalTitle}>开发者信息</Text>
           <Text style={styles.modalDesc}>
-            {`玉腹模拟器\n腹腔物理仿真引擎 ${APP_VERSION}\n\n独立开发作品\n保留所有权利`}
+            {`玉腹模拟器\n地表最强恋肠模拟器 ${APP_VERSION}\n\n独立开发作品\n保留所有权利`}
           </Text>
           <TouchableOpacity style={styles.modalBtn} onPress={onClose}>
             <Text style={styles.modalBtnText}>关闭</Text>
@@ -147,7 +147,7 @@ export function MainMenuScreen() {
         <Animated.View style={[styles.titleBlock, { opacity: titleOpacity, transform: [{ translateY: titleY }] }]}>
           <Text style={styles.titleCn}>玉腹模拟器</Text>
           <View style={styles.titleLine} />
-          <Text style={styles.titleSub}>腹腔物理仿真系统</Text>
+          <Text style={styles.titleSub}>地表最强恋肠模拟器</Text>
         </Animated.View>
 
         {/* ── Spacer ── */}

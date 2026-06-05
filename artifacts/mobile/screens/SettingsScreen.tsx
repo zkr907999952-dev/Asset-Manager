@@ -450,7 +450,7 @@ export function SettingsScreen({ onMenuPress }: Props) {
         <View style={[styles.aboutCard, { borderColor: colors.border }]}>
           <Text style={[styles.aboutTitle, { color: colors.primary }]}>玉腹模拟器</Text>
           <Text style={[styles.aboutText, { color: colors.mutedForeground }]}>
-            {APP_VERSION} · 腹腔物理仿真引擎
+            {APP_VERSION} · 地表最强恋肠模拟器
           </Text>
         </View>
       </ScrollView>
