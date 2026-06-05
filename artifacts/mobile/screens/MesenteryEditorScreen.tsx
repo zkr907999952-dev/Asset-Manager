@@ -33,12 +33,18 @@ export function MesenteryEditorScreen({ onMenuPress }: Props) {
 
   // ── Canvas layout ──────────────────────────────────────────────────────────
   const [canvasSize, setCanvasSize] = useState({ w: 1, h: 1 });
-  // Use Math.max (cover) so the SVG always fills the full container — no letterbox strips
-  const scale   = Math.max(canvasSize.w / CANVAS_W, canvasSize.h / CANVAS_H);
-  const svgW    = CANVAS_W * scale;
-  const svgH    = CANVAS_H * scale;
-  const svgOffX = (canvasSize.w - svgW) / 2;
-  const svgOffY = (canvasSize.h - svgH) / 2;
+  // Math.min = fit mode (correct scale); SVG element stretches to fill full container
+  const scale   = Math.min(canvasSize.w / CANVAS_W, canvasSize.h / CANVAS_H);
+  // SVG element fills the entire container; viewBox + preserveAspectRatio centers content
+  const svgW    = canvasSize.w;
+  const svgH    = canvasSize.h;
+  const svgOffX = 0;
+  const svgOffY = 0;
+  // Touch hit-area still matches the actual physics content region
+  const hitW    = CANVAS_W * scale;
+  const hitH    = CANVAS_H * scale;
+  const hitOffX = (canvasSize.w - hitW) / 2;
+  const hitOffY = (canvasSize.h - hitH) / 2;
   const layoutRef = useRef({ scale: 1 });
   layoutRef.current.scale = scale;
 
@@ -353,6 +359,7 @@ export function MesenteryEditorScreen({ onMenuPress }: Props) {
         width={svgW} height={svgH}
         style={{ position: 'absolute', left: svgOffX, top: svgOffY }}
         viewBox={`0 0 ${CANVAS_W} ${CANVAS_H}`}
+        preserveAspectRatio="xMidYMid meet"
       >
         {/* Background — editorBg 1: character, 2: perspective (local only) */}
         {editorBg === 1 && (
@@ -401,12 +408,12 @@ export function MesenteryEditorScreen({ onMenuPress }: Props) {
         {renderNodes(dispLarge, 'large', LARGE_RADIUS, i => largeNodeMesentery(i).deadZone)}
       </Svg>
 
-      {/* Touch overlay — exactly covers the SVG area */}
+      {/* Touch overlay — covers the physics content region */}
       <View
         style={{
           position: 'absolute',
-          left: svgOffX, top: svgOffY,
-          width: svgW, height: svgH,
+          left: hitOffX, top: hitOffY,
+          width: hitW, height: hitH,
         }}
         {...panResponder.panHandlers}
       />
