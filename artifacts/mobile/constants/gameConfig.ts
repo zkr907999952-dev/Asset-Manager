@@ -12,8 +12,8 @@ export const CAVITY_RY = 175;
 // Lower zone: ellipse covering navel + mid/lower abdomen
 export const BELLY_HIT_CX  = 170;  // horizontal center (= CAVITY_CX)
 export const BELLY_HIT_CY  = 248;  // vertical center   (= navel)
-export const BELLY_HIT_RX  = 118;  // horizontal radius
-export const BELLY_HIT_RY  = 92;   // vertical radius (navel → hips)
+export const BELLY_HIT_RX  = 138;  // horizontal radius (matches cavity)
+export const BELLY_HIT_RY  = 168;  // vertical radius — expanded to cover full cavity depth
 
 // Upper zone: rectangle covering epigastric / upper abdomen
 export const BELLY_UPPER_LEFT = 75;   // left x
