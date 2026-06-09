@@ -101,7 +101,8 @@ export type DialogueTrigger =
   | 'strike_bat_high'
   | 'strike_hammer_low'
   | 'strike_hammer_mid'
-  | 'strike_hammer_high';
+  | 'strike_hammer_high'
+  | 'dead_revive';
 
 export const DIALOGUES: Record<DialogueTrigger, string[]> = {
   idle: [
@@ -589,6 +590,12 @@ export const DIALOGUES: Record<DialogueTrigger, string[]> = {
     '啊啊啊啊……！！！大锤……全力……！！！不行了……！！',
     '不行不行……！！被大锤打了……！肠子……都震碎了……！！！',
     '呜啊啊啊……！！！大锤……太重了……！！里面……全乱了……！！！',
+  ],
+  dead_revive: [
+    '呜……又……回来了……谢谢……',
+    '嗯……心跳……又有了……好险……',
+    '啊……急救……把我……救回来了……',
+    '……活……过来了……感谢……',
   ],
 };
 

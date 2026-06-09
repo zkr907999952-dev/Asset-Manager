@@ -123,6 +123,7 @@ export interface ToolInstanceState {
 
 export interface GameUIState {
   hp: number;
+  isDead: boolean;
   pleasure: number;
   heartRate: number;
   navelPierced: boolean;
@@ -406,7 +407,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
   const enabledToolsRef = useRef<ToolType[]>([]);
 
   const [state, setState] = useState<GameUIState>({
-    hp: 100, pleasure: 0, heartRate: 72,
+    hp: 100, isDead: false, pleasure: 0, heartRate: 72,
     navelPierced: false, intestinalRuptures: 0, intestinalBreaks: 0,
     activeTool: null, enabledTools: [], toolActive: false, toolParam1: 50, toolParam2: 50,
     toolStates: physicsRef.current.toolStates,
@@ -582,10 +583,13 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     }
 
     const hp = Math.min(100, Math.max(0, 100 - totalPain * 0.7 - breaks * 5 + (p.hpBonus ?? 0) - (p.hpPenalty ?? 0)));
-    const pleasure = Math.min(100, snap.avgSensitivity * 0.6 + (snap.avgPressure > 40 ? (snap.avgPressure - 40) * 0.5 : 0));
+    const isDead = hp <= 0;
+    const pleasure = isDead ? 0 : Math.min(100, snap.avgSensitivity * 0.6 + (snap.avgPressure > 40 ? (snap.avgPressure - 40) * 0.5 : 0));
 
     let heartRate: number;
-    if (coma === 'tachycardia') {
+    if (isDead) {
+      heartRate = 0;
+    } else if (coma === 'tachycardia') {
       heartRate = 175 + Math.floor(Math.random() * 20);
     } else if (coma === 'bradycardia') {
       heartRate = 25 + Math.floor(Math.random() * 10);
@@ -595,10 +599,15 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     }
 
     // Advance breath phase in-place (replaces per-frame useBreathAnimation cost)
-    const bpmF = 14 + Math.max(0, heartRate - 72) * 0.115;
-    const periodMs = 60000 / bpmF;
-    snap._breathPhase = (snap._breathPhase + (2 * Math.PI * (1000 / 15)) / periodMs) % (2 * Math.PI);
-    snap.breathVal = Math.sin(snap._breathPhase);
+    // Breathing stops completely when dead
+    if (isDead) {
+      snap.breathVal = 0;
+    } else {
+      const bpmF = 14 + Math.max(0, heartRate - 72) * 0.115;
+      const periodMs = 60000 / bpmF;
+      snap._breathPhase = (snap._breathPhase + (2 * Math.PI * (1000 / 15)) / periodMs) % (2 * Math.PI);
+      snap.breathVal = Math.sin(snap._breathPhase);
+    }
 
     // === Increment render version ref (drives SimulationCanvas own RAF loop, zero React cost) ===
     renderVersionRef.current++;
@@ -612,7 +621,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     if (isSlowSync) {
       setState(prev => ({
         ...prev,
-        hp, pleasure, heartRate,
+        hp, isDead, pleasure, heartRate,
         intestinalRuptures: ruptures,
         intestinalBreaks: breaks,
         toolPos: p.toolPos ? { x: p.toolPos.x, y: p.toolPos.y } : null,
@@ -649,6 +658,14 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const triggerDialogue = useCallback((trigger: DialogueTrigger) => {
+    // Dead characters cannot speak (except the revive line which comes from performFirstAid)
+    const p = physicsRef.current;
+    const curHp = Math.min(100, Math.max(0, 100
+      - (p.smallSegs.reduce((a, s) => a + s.pain, 0) / p.smallSegs.length) * 0.7
+      - [...p.smallSegs, ...p.largeSegs].filter(s => s.broken).length * 5
+      + (p.hpBonus ?? 0) - (p.hpPenalty ?? 0)));
+    if (curHp <= 0 && trigger !== 'dead_revive') return;
+
     const isComa = comaStateRef.current !== 'none';
     const isComaDialogue =
       trigger === 'overdose_tachycardia' ||
@@ -1787,7 +1804,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     parasiteRef.current = [];
     setState(prev => ({
       ...prev,
-      hp: 100, pleasure: 0, heartRate: 72,
+      hp: 100, isDead: false, pleasure: 0, heartRate: 72,
       navelPierced: false, intestinalRuptures: 0, intestinalBreaks: 0,
       activeTool: null, enabledTools: [], toolActive: false, toolParam1: 50, toolParam2: 50,
       toolStates: fresh.toolStates,
@@ -1853,15 +1870,18 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     const totalPain = p.smallSegs.reduce((a, s) => a + s.pain, 0) / p.smallSegs.length;
     const breaks = [...p.smallSegs, ...p.largeSegs].filter(s => s.broken).length;
     const curHp = Math.min(100, Math.max(0, 100 - totalPain * 0.7 - breaks * 5 + (p.hpBonus ?? 0) - (p.hpPenalty ?? 0)));
-    if (curHp < 5) {
-      p.hpBonus = Math.min(100, (p.hpBonus ?? 0) + 25);
+    const wasDead = curHp <= 0;
+    if (curHp < 15) {
+      // Give enough bonus to reach at least ~15 HP
+      const needed = 15 - curHp;
+      p.hpBonus = Math.min(100, (p.hpBonus ?? 0) + Math.max(25, needed));
       setState(prev => ({ ...prev, hpBonus: p.hpBonus }));
     }
     if (comaStateRef.current !== 'none') {
       comaStateRef.current = 'none';
       setState(prev => ({ ...prev, comaState: 'none' }));
     }
-    triggerDialogueRef.current('surg_firstaid');
+    triggerDialogueRef.current(wasDead ? 'dead_revive' : 'surg_firstaid');
   }, []);
 
   const startTransfusion = useCallback(() => {

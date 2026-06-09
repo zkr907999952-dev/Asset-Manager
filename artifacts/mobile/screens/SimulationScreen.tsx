@@ -216,6 +216,7 @@ export function SimulationScreen({ onMenuPress }: Props) {
             <HeartRateMonitor
               heartRate={state.heartRate}
               comaState={state.comaState}
+              isDead={state.isDead}
               width={190}
               height={38}
               transparent
@@ -235,6 +236,14 @@ export function SimulationScreen({ onMenuPress }: Props) {
         </View>
 
         <ToolBar />
+
+        {/* Death overlay — shown when HP reaches 0 */}
+        {state.isDead && (
+          <View style={styles.deathOverlay} pointerEvents="none">
+            <Text style={styles.deathTitle}>心脏骤停</Text>
+            <Text style={styles.deathHint}>使用手术急救可以复活</Text>
+          </View>
+        )}
 
         <View style={[styles.bottomOverlay, { pointerEvents: 'box-none', paddingBottom: bottomPad }]}>
           <DialogueBox dialogue={state.currentDialogue} />
@@ -329,5 +338,29 @@ const styles = StyleSheet.create({
     fontSize: 9,
     fontFamily: 'Inter_400Regular',
     lineHeight: 12,
+  },
+  deathOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0,0,0,0.55)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 20,
+    gap: 8,
+  },
+  deathTitle: {
+    color: '#cc2222',
+    fontSize: 28,
+    fontFamily: 'Inter_700Bold',
+    letterSpacing: 4,
+  },
+  deathHint: {
+    color: 'rgba(255,255,255,0.45)',
+    fontSize: 11,
+    fontFamily: 'Inter_400Regular',
+    letterSpacing: 1,
   },
 });

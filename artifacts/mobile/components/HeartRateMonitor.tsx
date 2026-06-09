@@ -4,7 +4,8 @@ import Svg, { Polyline, Rect, Line } from 'react-native-svg';
 
 export type ComaState = 'none' | 'tachycardia' | 'bradycardia';
 
-function getECGColor(bpm: number, comaState: ComaState): string {
+function getECGColor(bpm: number, comaState: ComaState, isDead: boolean): string {
+  if (isDead) return '#555555';
   if (comaState === 'tachycardia') return '#ff2222';
   if (comaState === 'bradycardia') return '#4488ff';
   if (bpm < 50) return '#4488ff';
@@ -47,21 +48,29 @@ const TICK_MS = 40;
 interface Props {
   heartRate: number;
   comaState: ComaState;
+  isDead?: boolean;
   width: number;
   height: number;
   transparent?: boolean;
   showLabel?: boolean;
 }
 
-export function HeartRateMonitor({ heartRate, comaState, width, height, transparent = false, showLabel = true }: Props) {
+export function HeartRateMonitor({ heartRate, comaState, isDead = false, width, height, transparent = false, showLabel = true }: Props) {
   const bufRef = useRef<Float32Array>(new Float32Array(BUFFER_SIZE));
   const writeIdxRef = useRef(0);
   const phaseRef = useRef(0);
   const [tick, setTick] = useState(0);
 
-  const color = getECGColor(heartRate, comaState);
+  const color = getECGColor(heartRate, comaState, isDead);
 
   useEffect(() => {
+    if (isDead) {
+      // Flatline: fill buffer with zeros and stop updating
+      bufRef.current.fill(0);
+      writeIdxRef.current = 0;
+      setTick(t => t + 1);
+      return;
+    }
     const effectiveBpm = comaState === 'tachycardia' ? 185 : comaState === 'bradycardia' ? 30 : heartRate;
     const timer = setInterval(() => {
       const phasePerTick = (effectiveBpm / 60) * (TICK_MS / 1000);
@@ -72,7 +81,7 @@ export function HeartRateMonitor({ heartRate, comaState, width, height, transpar
       setTick(t => t + 1);
     }, TICK_MS);
     return () => clearInterval(timer);
-  }, [heartRate, comaState]);
+  }, [heartRate, comaState, isDead]);
 
   const graphH = showLabel ? height - 16 : height;
   const midY = graphH / 2;
@@ -90,7 +99,7 @@ export function HeartRateMonitor({ heartRate, comaState, width, height, transpar
     pointsStr += x.toFixed(1) + ',' + y.toFixed(1);
   }
 
-  const displayBpm = comaState === 'tachycardia' ? '---' : comaState === 'bradycardia' ? '---' : String(heartRate);
+  const displayBpm = isDead ? '0' : comaState === 'tachycardia' ? '---' : comaState === 'bradycardia' ? '---' : String(heartRate);
 
   return (
     <View style={[styles.container, { width, height }]}>
@@ -112,7 +121,10 @@ export function HeartRateMonitor({ heartRate, comaState, width, height, transpar
         <View style={styles.labelRow}>
           <Text style={[styles.bpmNum, { color }]}>{displayBpm}</Text>
           <Text style={[styles.bpmUnit, { color }]}>BPM</Text>
-          {comaState !== 'none' && (
+          {isDead && (
+            <Text style={[styles.comaTag, { color }]}>心脏停止</Text>
+          )}
+          {!isDead && comaState !== 'none' && (
             <Text style={[styles.comaTag, { color }]}>
               {comaState === 'tachycardia' ? '心跳过速' : '心跳过缓'}
             </Text>
