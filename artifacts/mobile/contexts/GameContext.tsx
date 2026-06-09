@@ -1871,12 +1871,16 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     const breaks = [...p.smallSegs, ...p.largeSegs].filter(s => s.broken).length;
     const curHp = Math.min(100, Math.max(0, 100 - totalPain * 0.7 - breaks * 5 + (p.hpBonus ?? 0) - (p.hpPenalty ?? 0)));
     const wasDead = curHp <= 0;
-    if (curHp < 15) {
-      // Give enough bonus to reach at least ~15 HP
-      const needed = 15 - curHp;
-      p.hpBonus = Math.min(100, (p.hpBonus ?? 0) + Math.max(25, needed));
-      setState(prev => ({ ...prev, hpBonus: p.hpBonus }));
+    if (wasDead) {
+      // Revive: clear all accumulated HP penalty and give a recovery bonus
+      p.hpPenalty = 0;
+      p.hpBonus = Math.min(100, (p.hpBonus ?? 0) + 30);
+    } else if (curHp < 30) {
+      // Low HP: reduce penalty significantly and boost bonus
+      p.hpPenalty = Math.max(0, (p.hpPenalty ?? 0) - 50);
+      p.hpBonus = Math.min(100, (p.hpBonus ?? 0) + 25);
     }
+    setState(prev => ({ ...prev, hpBonus: p.hpBonus ?? 0 }));
     if (comaStateRef.current !== 'none') {
       comaStateRef.current = 'none';
       setState(prev => ({ ...prev, comaState: 'none' }));

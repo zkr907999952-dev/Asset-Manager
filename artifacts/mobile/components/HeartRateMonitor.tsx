@@ -5,7 +5,7 @@ import Svg, { Polyline, Rect, Line } from 'react-native-svg';
 export type ComaState = 'none' | 'tachycardia' | 'bradycardia';
 
 function getECGColor(bpm: number, comaState: ComaState, isDead: boolean): string {
-  if (isDead) return '#555555';
+  if (isDead) return '#cc2222';
   if (comaState === 'tachycardia') return '#ff2222';
   if (comaState === 'bradycardia') return '#4488ff';
   if (bpm < 50) return '#4488ff';

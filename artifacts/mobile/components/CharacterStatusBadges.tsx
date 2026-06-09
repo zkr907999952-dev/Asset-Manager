@@ -28,8 +28,14 @@ function getBadges(
   breaks: number,
   heartRateModifier: number,
   avgPain: number,
+  isDead: boolean,
 ): BadgeInfo[] {
   const badges: BadgeInfo[] = [];
+
+  if (isDead) {
+    badges.push({ label: '心脏停止', color: '#fff', bg: '#880000', priority: -1 });
+    return badges;
+  }
 
   if (comaState === 'tachycardia') {
     badges.push({ label: '昏迷·心跳过速', color: '#fff', bg: '#cc0000', priority: 0 });
@@ -75,6 +81,7 @@ interface Props {
   comaState: ComaState;
   heartRate: number;
   hp: number;
+  isDead?: boolean;
   ruptures: number;
   breaks: number;
   heartRateModifier: number;
@@ -83,10 +90,10 @@ interface Props {
 }
 
 export function CharacterStatusBadges({
-  comaState, heartRate, hp, ruptures, breaks, heartRateModifier, avgPain, compact = false,
+  comaState, heartRate, hp, isDead = false, ruptures, breaks, heartRateModifier, avgPain, compact = false,
 }: Props) {
   const colors = useColors();
-  const badges = getBadges(comaState, heartRate, hp, ruptures, breaks, heartRateModifier, avgPain);
+  const badges = getBadges(comaState, heartRate, hp, ruptures, breaks, heartRateModifier, avgPain, isDead);
 
   if (compact) {
     return (
