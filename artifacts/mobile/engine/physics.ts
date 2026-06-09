@@ -257,8 +257,12 @@ export function stepPhysics(state: PhysicsState) {
   if (laxativeActive) state.laxativeFrames--;
   if (state.transfusionFrames > 0) {
     state.transfusionFrames--;
-    state.hpBonus  = Math.min(100, state.hpBonus + 0.05);
-    state.hpPenalty = Math.max(0, (state.hpPenalty ?? 0) - 0.15);
+    // Transfusion only works when alive (hp > 0)
+    const _rawHp = 100 + (state.hpBonus ?? 0) - (state.hpPenalty ?? 0);
+    if (_rawHp > 0) {
+      state.hpBonus   = Math.min(100, state.hpBonus + 0.05);
+      state.hpPenalty = Math.max(0, (state.hpPenalty ?? 0) - 0.15);
+    }
   }
 
   state.time += 1;
