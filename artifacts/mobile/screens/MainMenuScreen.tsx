@@ -33,7 +33,7 @@ function DevInfoModal({ visible, onClose }: { visible: boolean; onClose: () => v
         <View style={styles.modalBox}>
           <Text style={styles.modalTitle}>开发者信息</Text>
           <Text style={styles.modalDesc}>
-            {`玉腹模拟器\n地表最强恋肠模拟器 ${APP_VERSION}\n\n独立开发作品\n保留所有权利`}
+            {`玉腹模拟器\n地表最强恋肠模拟器 ${APP_VERSION}\n\n独立开发作品\n保留所有权利\n\nhttps://zkr907.itch.io`}
           </Text>
           <TouchableOpacity style={styles.modalBtn} onPress={onClose}>
             <Text style={styles.modalBtnText}>关闭</Text>
