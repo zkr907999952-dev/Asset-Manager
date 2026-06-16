@@ -12,8 +12,9 @@ import {
   PERISTALSIS_WAVE_AMPLITUDE_DEFAULT, PERISTALSIS_WAVE_SPEED_DEFAULT,
   MAX_RESECTION_SEGMENTS_DEFAULT, PHYSICS_FPS,
   BELLY_STRIKE_TOOL_LIST, LETHAL_WEAPON_LIST,
+  INTESTINE_HOOK_TOOL_LIST,
 } from '../constants/gameConfig';
-import type { ToolType, BellyStrikeToolId, LethalWeaponId } from '../constants/gameConfig';
+import type { ToolType, BellyStrikeToolId, LethalWeaponId, HookToolId } from '../constants/gameConfig';
 import { getRandomDialogue, type DialogueTrigger } from '../constants/dialogues';
 import { initDialoguesFromExcel } from '../constants/dialogueLoader';
 import type { ComaState } from '../components/HeartRateMonitor';
@@ -222,6 +223,12 @@ export interface GameUIState {
   // Lethal weapons
   selectedWeapon: LethalWeaponId | null;
   bulletHoles: { id: number; physX: number; physY: number; radius: number; weaponId: LethalWeaponId }[];
+  // === Intestine exposure hook tool (小肠露出) ===
+  hookTool: string | null;         // selected hook tool id
+  hookInserted: boolean;
+  hookGrabActive: boolean;
+  hookedSmallSegIdx: number;
+  exposedSmallIndices: number[];
 }
 
 interface GameContextType {
@@ -301,6 +308,12 @@ interface GameContextType {
   // Lethal weapons
   setSelectedWeapon: (weapon: LethalWeaponId | null) => void;
   applyGunshot: (physX: number, physY: number) => void;
+  // Hook tool (小肠露出)
+  setHookTool: (tool: HookToolId | null) => void;
+  insertHookViaNavel: () => void;
+  retractHook: () => void;
+  activateHookGrab: () => void;
+  clearExposedNodes: () => void;
 }
 
 const DEFAULT_TOOL_POS = { x: CAVITY_CX, y: CAVITY_CY - 40 };
@@ -486,6 +499,12 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     resectedLargeRanges: [],
     resectedCount: 0,
     renderVersion: 0,
+    // Hook tool
+    hookTool: null,
+    hookInserted: false,
+    hookGrabActive: false,
+    hookedSmallSegIdx: -1,
+    exposedSmallIndices: [],
   });
 
   const syncFromPhysics = useCallback(() => {
@@ -645,6 +664,11 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         peristalsisModifier: drug.peristalsisModifier,
         stimulantTimeLeft: stimTL,
         sedativeTimeLeft: sedTL,
+        // Hook tool sync
+        hookInserted: p.hookInserted,
+        hookGrabActive: p.hookGrabActive,
+        hookedSmallSegIdx: p.hookedSmallSegIdx,
+        exposedSmallIndices: p.exposedSmallIndices.length > 0 ? [...p.exposedSmallIndices] : [],
         renderSmallNodes: snap.smallNodes.map(n => ({ x: n.x, y: n.y })),
         renderLargeNodes: snap.largeNodes.map(n => ({ x: n.x, y: n.y })),
         renderSmallSegs: snap.smallSegs.map(s => ({ ...s })),
@@ -2576,6 +2600,72 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     triggerDialogue('pain_high');
   }, [triggerDialogue]);
 
+  // === Hook tool (小肠露出) ===
+  const hookToolRef = useRef<string | null>(null);
+
+  const setHookTool = useCallback((tool: HookToolId | null) => {
+    hookToolRef.current = tool;
+    physicsRef.current.hookToolType = tool;
+    setState(prev => ({ ...prev, hookTool: tool }));
+  }, []);
+
+  const insertHookViaNavel = useCallback(() => {
+    const p = physicsRef.current;
+    if (!p.navelPierced || !hookToolRef.current) return;
+    p.hookToolType = hookToolRef.current;
+    p.hookAnchor = { x: CAVITY_CX, y: CAVITY_CY };
+    p.hookPos = { x: CAVITY_CX, y: CAVITY_CY - 40 };
+    p.hookInserted = true;
+    p.hookGrabActive = false;
+    p.hookedSmallSegIdx = -1;
+    setState(prev => ({ ...prev, hookInserted: true }));
+  }, []);
+
+  const retractHook = useCallback(() => {
+    const p = physicsRef.current;
+    p.hookInserted = false;
+    p.hookGrabActive = false;
+    p.hookedSmallSegIdx = -1;
+    p.hookPos = null;
+    p.hookAnchor = null;
+    p.exposedSmallIndices = [];
+    p.exposurePendingTrigger = false;
+    setState(prev => ({ ...prev, hookInserted: false, hookGrabActive: false, hookedSmallSegIdx: -1, exposedSmallIndices: [] }));
+  }, []);
+
+  const activateHookGrab = useCallback(() => {
+    const p = physicsRef.current;
+    if (!p.hookInserted) return;
+    p.hookGrabActive = true;
+    setState(prev => ({ ...prev, hookGrabActive: true }));
+  }, []);
+
+  const clearExposedNodes = useCallback(() => {
+    const p = physicsRef.current;
+    p.exposedSmallIndices = [];
+    p.hookGrabActive = false;
+    p.hookedSmallSegIdx = -1;
+    p.exposurePendingTrigger = false;
+    setState(prev => ({ ...prev, exposedSmallIndices: [], hookGrabActive: false, hookedSmallSegIdx: -1 }));
+  }, []);
+
+  // Handle exposure pending trigger — switch to external view on first full exposure
+  const exposureTriggerHandledRef = useRef(false);
+  useEffect(() => {
+    const interval = setInterval(() => {
+      const p = physicsRef.current;
+      if (p.exposurePendingTrigger && !exposureTriggerHandledRef.current) {
+        exposureTriggerHandledRef.current = true;
+        p.exposurePendingTrigger = false;
+        setState(prev => ({ ...prev, viewMode: 'external' }));
+      }
+      if (!p.hookInserted) {
+        exposureTriggerHandledRef.current = false;
+      }
+    }, 200);
+    return () => clearInterval(interval);
+  }, []);
+
   return (
     <GameContext.Provider value={{
       state, physicsRef, renderSnapshotRef, renderVersionRef,
@@ -2602,6 +2692,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       setBellyStrikeTool, setBellyStrikeForce, setBellyStrikeRange,
       setBellyStrikeImpulseScale, setBellyStrikeToolPower, applyBellyStrike,
       setSelectedWeapon, applyGunshot,
+      setHookTool, insertHookViaNavel, retractHook, activateHookGrab, clearExposedNodes,
     }}>
       {children}
     </GameContext.Provider>

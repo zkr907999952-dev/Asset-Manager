@@ -120,6 +120,15 @@ export interface PhysicsState {
   // === Bullet hit counters (for .22 / 9mm progressive damage) ===
   bulletHitSmall: number[];  // length N_SMALL-1
   bulletHitLarge: number[];  // length N_LARGE-1
+  // === Intestine exposure hook tool (小肠露出) ===
+  hookToolType: string | null;
+  hookPos: { x: number; y: number } | null;
+  hookAnchor: { x: number; y: number } | null;
+  hookInserted: boolean;
+  hookGrabActive: boolean;
+  hookedSmallSegIdx: number;  // -1 = none
+  exposedSmallIndices: number[];  // sorted ascending: small node indices that are outside the body
+  exposurePendingTrigger: boolean; // flag set by physics when insideLen→0 with grab active
 }
 
 function clamp(v: number, min: number, max: number) {
@@ -300,10 +309,49 @@ export function stepPhysics(state: PhysicsState) {
   }
 
   // --- Verlet integration with per-node mesentery ---
+  // Pre-compute exposed index set once per frame (guard against uninitialised state)
+  if (!state.exposedSmallIndices) state.exposedSmallIndices = [];
+  if (state.hookInserted === undefined) state.hookInserted = false;
+  if (state.hookGrabActive === undefined) state.hookGrabActive = false;
+  if (state.hookedSmallSegIdx === undefined) state.hookedSmallSegIdx = -1;
+  if (state.exposurePendingTrigger === undefined) state.exposurePendingTrigger = false;
+
+  const exposedSet: Set<number> = state.exposedSmallIndices.length > 0
+    ? new Set(state.exposedSmallIndices)
+    : new Set<number>();
+  const minExpIdx = state.exposedSmallIndices.length > 0 ? state.exposedSmallIndices[0] : -1;
+  const maxExpIdx = state.exposedSmallIndices.length > 0 ? state.exposedSmallIndices[state.exposedSmallIndices.length - 1] : -1;
+
   const integrateSmallNodes = (nodes: PhysicsNode[], margin: number) => {
     for (let idx = 0; idx < nodes.length; idx++) {
       const n = nodes[idx];
       if (n.pinned) continue;
+
+      const isExposed = exposedSet.has(idx);
+      // Boundary anchor nodes: the two extreme ends of the exposed chain → held at navel
+      const isAnchor = isExposed && (idx === minExpIdx || idx === maxExpIdx);
+
+      if (isAnchor) {
+        // Strongly pull anchor toward navel; kill velocity to simulate tethering
+        n.x += (CAVITY_CX - n.x) * 0.32;
+        n.y += (CAVITY_CY - n.y) * 0.32;
+        n.px = n.x; n.py = n.y;
+        continue;
+      }
+
+      if (isExposed) {
+        // External node: gravity, no cavity constraint, no mesentery spring
+        const vx = (n.x - n.px) * 0.92;
+        const vy = (n.y - n.py) * 0.92;
+        n.px = n.x; n.py = n.y;
+        n.x += vx;
+        n.y += vy + 0.18; // gravity
+        // Hard bounds so they don't escape the canvas entirely
+        n.x = clamp(n.x, -60, CANVAS_W + 60);
+        n.y = clamp(n.y, CAVITY_CY - 20, CANVAS_H + 80);
+        continue;
+      }
+
       const vx = (n.x - n.px) * DAMPING;
       const vy = (n.y - n.py) * DAMPING;
       n.px = n.x; n.py = n.y;
@@ -313,9 +361,8 @@ export function stepPhysics(state: PhysicsState) {
       const smallMesDis = smallMesDisSet.has(idx);
       if (!smallMesDis) {
         const dx = n.rx - n.x, dy = n.ry - n.y;
-        // Squared-distance early reject avoids sqrt when inside dead zone (common case)
         const disp2 = dx * dx + dy * dy;
-        if (disp2 > 25.0) { // 5.0 * 5.0
+        if (disp2 > 25.0) {
           const disp = Math.sqrt(disp2);
           const factor = (disp - 5.0) / disp;
           n.x += dx * MESENTERY_STIFFNESS * relaxMultiplier * factor;
@@ -408,6 +455,7 @@ export function stepPhysics(state: PhysicsState) {
   const satisfyChain = (
     nodes: PhysicsNode[], segLen: number, breakBroken: boolean,
     segs: SegmentProps[], cavMargin: number,
+    noCavPushSet?: Set<number>,
   ) => {
     for (let iter = 0; iter < PHYSICS_ITERATIONS; iter++) {
       for (let i = 0; i < nodes.length - 1; i++) {
@@ -421,10 +469,10 @@ export function stepPhysics(state: PhysicsState) {
         if (!b.pinned) { b.x -= dx * diff; b.y -= dy * diff; }
       }
       // Use soft push in constraint loop — only on alternate iterations to halve sqrt cost.
-      // Physics stability is maintained since 3 of 5 iterations still push (iters 0, 2, 4).
       if (iter % 2 === 0) {
-        for (const n of nodes) {
-          if (!n.pinned) softCavityPush(n, cavMargin);
+        for (let ni = 0; ni < nodes.length; ni++) {
+          const n = nodes[ni];
+          if (!n.pinned && !(noCavPushSet && noCavPushSet.has(ni))) softCavityPush(n, cavMargin);
         }
       }
     }
@@ -442,7 +490,7 @@ export function stepPhysics(state: PhysicsState) {
       }
     }
   };
-  satisfyChain(state.smallNodes, SMALL_SEG_LENGTH, true, state.smallSegs, 8);
+  satisfyChain(state.smallNodes, SMALL_SEG_LENGTH, true, state.smallSegs, 8, exposedSet.size > 0 ? exposedSet : undefined);
   satisfyChain(state.largeNodes, LARGE_SEG_LENGTH, true, state.largeSegs, 2);
 
   // --- Reconnection springs for resected ranges ---
@@ -473,10 +521,10 @@ export function stepPhysics(state: PhysicsState) {
   applyResectionSprings(state.largeNodes, LARGE_SEG_LENGTH, state.resectedLargeRanges ?? []);
 
   // --- Separation constraint between small and large intestine (even frames) ---
-  // Fast-reject threshold: max possible minDist ≈ SMALL_RADIUS*2 + LARGE_RADIUS*2 ≈ 62px.
-  // Using 68px (generous) so no real collisions are skipped by the AABB pre-check.
+  // External small nodes are outside the body — skip cross-intestine collision for them.
   if (t % 2 === 0) {
     for (let si = 0; si < state.smallNodes.length; si++) {
+      if (exposedSet.has(si)) continue;
       const sn = state.smallNodes[si];
       const sSeg = state.smallSegs[Math.min(si, state.smallSegs.length - 1)];
       const sPeriScale = state.periScaleSmall[si] ?? 1;
@@ -1205,6 +1253,103 @@ export function stepPhysics(state: PhysicsState) {
         }
       }
     }
+
+  // === HOOK TOOL (小肠露出) physics ===
+  if (state.hookInserted && state.hookAnchor && state.hookPos) {
+    const HOOK_ROD_LEN = 90;
+    const a = state.hookAnchor;
+    const tp = state.hookPos;
+    const handleDist = dist(tp.x, tp.y, a.x, a.y);
+    const insideLen = Math.max(0, HOOK_ROD_LEN - handleDist);
+
+    if (insideLen < 0.5) {
+      // Rod withdrawn — clear everything
+      state.hookInserted = false;
+      state.hookGrabActive = false;
+      state.hookedSmallSegIdx = -1;
+      state.exposedSmallIndices = [];
+    } else {
+      // Compute hook head position (lever geometry)
+      let hdx = a.x - tp.x, hdy = a.y - tp.y;
+      const hmag = Math.sqrt(hdx * hdx + hdy * hdy) || 1;
+      hdx /= hmag; hdy /= hmag;
+      const headX = a.x + hdx * insideLen;
+      const headY = a.y + hdy * insideLen;
+
+      // Grab nearest small intestine node not already exposed
+      if (state.hookGrabActive && state.hookedSmallSegIdx < 0) {
+        const def = state.hookToolType;
+        const grabRange = def === '手指勾肠' ? 22
+          : def === '铁钩' ? 32
+          : def === '长柄夹' ? 42
+          : 55; // 手术机械臂
+        let bestIdx = -1, bestD = grabRange + 1;
+        for (let i = 1; i < state.smallNodes.length - 1; i++) {
+          if (exposedSet.has(i)) continue;
+          const d = dist(state.smallNodes[i].x, state.smallNodes[i].y, headX, headY);
+          if (d < bestD) { bestD = d; bestIdx = i; }
+        }
+        if (bestIdx >= 0) {
+          state.hookedSmallSegIdx = bestIdx;
+          // Mark immediate neighbors as exposed too (initial pull)
+          const newExp = new Set(state.exposedSmallIndices);
+          const lo = Math.max(1, bestIdx - 1);
+          const hi = Math.min(state.smallNodes.length - 2, bestIdx + 1);
+          for (let ii = lo; ii <= hi; ii++) newExp.add(ii);
+          state.exposedSmallIndices = Array.from(newExp).sort((a, b) => a - b);
+        }
+      }
+
+      // Pull hooked node toward hook head
+      if (state.hookGrabActive && state.hookedSmallSegIdx >= 0) {
+        const hookedNode = state.smallNodes[state.hookedSmallSegIdx];
+        if (hookedNode && !hookedNode.pinned) {
+          const pdx = headX - hookedNode.x, pdy = headY - hookedNode.y;
+          hookedNode.x += pdx * 0.18;
+          hookedNode.y += pdy * 0.18;
+        }
+        // Expand exposed set: if an adjacent internal node drifted far from anchor, expose it
+        const expandThreshold = 38;
+        const expArr = state.exposedSmallIndices;
+        if (expArr.length > 0) {
+          const lo2 = expArr[0];
+          const hi2 = expArr[expArr.length - 1];
+          const neighborLo = lo2 - 1;
+          const neighborHi = hi2 + 1;
+          if (neighborLo >= 1) {
+            const nLo = state.smallNodes[neighborLo];
+            if (nLo && dist(nLo.x, nLo.y, CAVITY_CX, CAVITY_CY) > expandThreshold) {
+              expArr.unshift(neighborLo);
+              expArr.sort((x, y) => x - y);
+            }
+          }
+          if (neighborHi <= state.smallNodes.length - 2) {
+            const nHi = state.smallNodes[neighborHi];
+            if (nHi && dist(nHi.x, nHi.y, CAVITY_CX, CAVITY_CY) > expandThreshold) {
+              expArr.push(neighborHi);
+              expArr.sort((x, y) => x - y);
+            }
+          }
+          // Check if insideLen near 0 — trigger view switch
+          if (insideLen < 5 && !state.exposurePendingTrigger) {
+            state.exposurePendingTrigger = true;
+          }
+        }
+      }
+    }
+  }
+
+  // Continuous pain/pleasure from exposed nodes
+  if (state.exposedSmallIndices.length > 0) {
+    const nExp = state.exposedSmallIndices.length;
+    for (const idx of state.exposedSmallIndices) {
+      const seg = state.smallSegs[Math.min(idx, state.smallSegs.length - 1)];
+      if (seg && !seg.broken) {
+        seg.pain = clamp(seg.pain + 0.008 * nExp * 0.5, 0, 100);
+        seg.sensitivity = clamp(seg.sensitivity + 0.004 * nExp * 0.5, 0, 100);
+      }
+    }
+  }
 
   // === SECONDARY TOOL PHYSICS: tools that persist independently ===
   const ENEMA_KEY = '灌肠器';

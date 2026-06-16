@@ -131,6 +131,30 @@ export function createDefaultToolStates(): Record<string, { active: boolean; par
   return result;
 }
 
+// === Intestine hook tools (小肠露出) ===
+export const INTESTINE_HOOK_TOOLS = {
+  FINGER:    '手指勾肠',
+  IRON_HOOK: '铁钩',
+  LONG_CLAMP:'长柄夹',
+  MECH_ARM:  '手术机械臂',
+} as const;
+
+export type HookToolId = typeof INTESTINE_HOOK_TOOLS[keyof typeof INTESTINE_HOOK_TOOLS];
+
+export interface HookToolDef {
+  id: HookToolId;
+  desc: string;
+  rodLength: number;   // lever rod total length (physics px)
+  grabRange: number;   // radius within which hook head can grab a small node
+}
+
+export const INTESTINE_HOOK_TOOL_LIST: HookToolDef[] = [
+  { id: '手指勾肠', desc: '近距离触达，抓握范围小', rodLength: 50, grabRange: 20 },
+  { id: '铁钩',    desc: '金属弯钩，范围适中',     rodLength: 72, grabRange: 32 },
+  { id: '长柄夹',  desc: '长柄器具，范围较大',     rodLength: 96, grabRange: 45 },
+  { id: '手术机械臂', desc: '精密机械臂，最大范围', rodLength: 125, grabRange: 60 },
+];
+
 export const LETHAL_WEAPONS = {
   PISTOL_22:    '.22手枪',
   PISTOL_9MM:   '9MM手枪',

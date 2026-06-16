@@ -227,5 +227,14 @@ export function createInitialPhysicsState(): PhysicsState {
     smallMesenteryDisabledSet: new Set<number>(),
     bulletHitSmall: new Array(N_SMALL - 1).fill(0),
     bulletHitLarge: new Array(N_LARGE - 1).fill(0),
+    // Hook tool (小肠露出)
+    hookToolType: null,
+    hookPos: null,
+    hookAnchor: null,
+    hookInserted: false,
+    hookGrabActive: false,
+    hookedSmallSegIdx: -1,
+    exposedSmallIndices: [],
+    exposurePendingTrigger: false,
   };
 }

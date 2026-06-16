@@ -8,6 +8,7 @@ import { CommandPanel } from './CommandPanel';
 import { SurgeryPanel } from './SurgeryPanel';
 import { BellyStrikePanel } from './BellyStrikePanel';
 import { LethalWeaponPanel } from './LethalWeaponPanel';
+import { IntestineExposurePanel } from './IntestineExposurePanel';
 
 const PANEL_WIDTH = 210;
 const TAB_WIDTH = 32;
@@ -15,7 +16,7 @@ const PANEL_MAX_HEIGHT = 400;
 const WRAPPER_HEIGHT = 510;
 const TAB_SPACING = 66;
 
-type TabId = 'tools' | 'commands' | 'surgery' | 'strike' | 'lethal';
+type TabId = 'tools' | 'commands' | 'surgery' | 'strike' | 'lethal' | 'expose';
 
 const TOOL_ICONS: Record<string, string> = {
   '金属棒':   'minus',
@@ -37,6 +38,7 @@ const TABS: { id: TabId; icon: string; label: string }[] = [
   { id: 'surgery', icon: 'scissors', label: '手术' },
   { id: 'strike', icon: 'target', label: '腹击' },
   { id: 'lethal', icon: 'crosshair', label: '武器' },
+  { id: 'expose', icon: 'external-link', label: '肠露出' },
 ];
 
 const PANEL_BG = 'rgba(34,9,26,0.88)';
@@ -117,7 +119,8 @@ export function ToolBar() {
   const surgeryX = useRef(new Animated.Value(PANEL_WIDTH + TAB_WIDTH)).current;
   const strikeX = useRef(new Animated.Value(PANEL_WIDTH + TAB_WIDTH)).current;
   const lethalX = useRef(new Animated.Value(PANEL_WIDTH + TAB_WIDTH)).current;
-  const animMap: Record<TabId, Animated.Value> = { tools: toolsX, commands: commandsX, surgery: surgeryX, strike: strikeX, lethal: lethalX };
+  const exposeX = useRef(new Animated.Value(PANEL_WIDTH + TAB_WIDTH)).current;
+  const animMap: Record<TabId, Animated.Value> = { tools: toolsX, commands: commandsX, surgery: surgeryX, strike: strikeX, lethal: lethalX, expose: exposeX };
 
   useEffect(() => {
     const target = PANEL_WIDTH + TAB_WIDTH;
@@ -191,18 +194,29 @@ export function ToolBar() {
         <LethalWeaponPanel />
       </Animated.View>
 
-      {/* 5 tab buttons — always interactive, evenly spaced */}
+      {/* Intestine exposure panel */}
+      <Animated.View
+        style={[styles.panel, { top: 0, transform: [{ translateX: exposeX }], backgroundColor: PANEL_BG, borderColor: '#88aaff66' },
+          Platform.OS === 'web' && { pointerEvents: openTab === 'expose' ? 'auto' : 'none' } as any,
+        ]}
+      >
+        <IntestineExposurePanel />
+      </Animated.View>
+
+      {/* 6 tab buttons — always interactive, evenly spaced */}
       {TABS.map((tab, i) => {
         const isOpen = openTab === tab.id;
         const hasDot = tab.id === 'tools' && (anyToolEnabled || anyToolRunning);
         const hasSel = tab.id === 'surgery' && inSelMode;
         const hasStrike = tab.id === 'strike' && !!state.bellyStrikeTool;
         const hasLethal = tab.id === 'lethal' && hasWeapon;
+        const hasExpose = tab.id === 'expose' && (!!state.hookTool || state.hookInserted || state.exposedSmallIndices.length > 0);
         const dotColor = tab.id === 'tools'
           ? (anyToolRunning ? colors.primary : `${colors.primary}88`)
           : hasSel ? '#e05050'
           : hasStrike ? '#ff8844'
           : hasLethal ? '#e84040'
+          : hasExpose ? '#88aaff'
           : colors.primary;
 
         return (
@@ -213,10 +227,10 @@ export function ToolBar() {
               {
                 top: i * TAB_SPACING,
                 backgroundColor: isOpen
-                  ? (tab.id === 'lethal' ? 'rgba(232,64,64,0.15)' : TAB_BG_OPEN)
+                  ? (tab.id === 'lethal' ? 'rgba(232,64,64,0.15)' : tab.id === 'expose' ? 'rgba(136,170,255,0.13)' : TAB_BG_OPEN)
                   : TAB_BG_CLOSED,
                 borderColor: isOpen
-                  ? (tab.id === 'strike' ? '#ff884488' : tab.id === 'lethal' ? '#e8404088' : `${colors.primary}cc`)
+                  ? (tab.id === 'strike' ? '#ff884488' : tab.id === 'lethal' ? '#e8404088' : tab.id === 'expose' ? '#88aaff88' : `${colors.primary}cc`)
                   : `${colors.border}99`,
               },
               Platform.OS === 'web' && { pointerEvents: 'auto' },
@@ -228,15 +242,15 @@ export function ToolBar() {
               name={isOpen ? 'chevron-right' : (tab.icon as any)}
               size={15}
               color={isOpen
-                ? (tab.id === 'strike' ? '#ff8844' : tab.id === 'lethal' ? '#e84040' : colors.primary)
+                ? (tab.id === 'strike' ? '#ff8844' : tab.id === 'lethal' ? '#e84040' : tab.id === 'expose' ? '#88aaff' : colors.primary)
                 : colors.mutedForeground}
             />
             <Text style={[styles.tabLabel, { color: isOpen
-              ? (tab.id === 'strike' ? '#ff8844' : tab.id === 'lethal' ? '#e84040' : colors.primary)
+              ? (tab.id === 'strike' ? '#ff8844' : tab.id === 'lethal' ? '#e84040' : tab.id === 'expose' ? '#88aaff' : colors.primary)
               : colors.mutedForeground }]}>
               {tab.label}
             </Text>
-            {(hasDot || hasSel || hasStrike || hasLethal) && (
+            {(hasDot || hasSel || hasStrike || hasLethal || hasExpose) && (
               <View style={[styles.tabDot, { backgroundColor: dotColor }]} />
             )}
           </TouchableOpacity>

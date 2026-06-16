@@ -248,6 +248,7 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
     setSiliconeTarget, setBeadsTarget, setEggTarget,
     toggleMesenteryNode, setResectionSelection,
     applyBellyStrike, applyGunshot,
+    insertHookViaNavel, retractHook, activateHookGrab, clearExposedNodes,
   } = useGame();
   const lastDialogueTime = useRef(0);
   const isDragging = useRef(false);
@@ -361,6 +362,10 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
     setResectionSelection,
     applyBellyStrike,
     applyGunshot,
+    insertHookViaNavel,
+    retractHook,
+    activateHookGrab,
+    clearExposedNodes,
   });
   hrRef.current.state = state;
   hrRef.current.toPhysicsCoords = toPhysicsCoords;
@@ -379,6 +384,10 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
   hrRef.current.setResectionSelection = setResectionSelection;
   hrRef.current.applyBellyStrike = applyBellyStrike;
   hrRef.current.applyGunshot = applyGunshot;
+  hrRef.current.insertHookViaNavel = insertHookViaNavel;
+  hrRef.current.retractHook = retractHook;
+  hrRef.current.activateHookGrab = activateHookGrab;
+  hrRef.current.clearExposedNodes = clearExposedNodes;
 
   const findNearestLargeNodeIdx = (pos: { x: number; y: number }) => {
     let best = -1, bestD = 9999;
@@ -496,6 +505,35 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
           ivn();
           physicsRef.current.toolPos = { x: NAVEL_X, y: NAVEL_Y_INTERNAL - 40 };
           return;
+        }
+        // Hook tool insertion through pierced navel
+        if (s.navelPierced && s.hookTool && !s.hookInserted) {
+          hrRef.current.insertHookViaNavel();
+          physicsRef.current.hookPos = { x: NAVEL_X, y: navelY - 60 };
+          td('pain_low');
+          return;
+        }
+        // Retract hook on navel tap when inserted
+        if (s.hookInserted && distToNavel < NAVEL_RADIUS * 0.8) {
+          hrRef.current.retractHook();
+          return;
+        }
+      }
+      // Activate hook grab when tapping near hook head
+      if (s.hookInserted && !s.hookGrabActive && s.hookTool) {
+        const hp = physicsRef.current;
+        if (hp.hookAnchor && hp.hookPos) {
+          const HOOK_ROD_LEN = 90;
+          const hdist = Math.hypot(hp.hookPos.x - hp.hookAnchor.x, hp.hookPos.y - hp.hookAnchor.y) || 1;
+          const insideLen = Math.max(0, HOOK_ROD_LEN - hdist);
+          const dx = (hp.hookAnchor.x - hp.hookPos.x) / hdist;
+          const dy = (hp.hookAnchor.y - hp.hookPos.y) / hdist;
+          const headX = hp.hookAnchor.x + dx * insideLen;
+          const headY = hp.hookAnchor.y + dy * insideLen;
+          if (Math.hypot(pos.x - headX, pos.y - headY) < 30) {
+            hrRef.current.activateHookGrab();
+            return;
+          }
         }
       }
 
@@ -868,6 +906,12 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
           }
         }
         physicsRef.current.toolPos = pos;
+        return;
+      }
+
+      // Hook tool drag — dragging moves the handle (hookPos) which steers the lever
+      if (physicsRef.current.hookInserted) {
+        physicsRef.current.hookPos = { x: pos.x, y: pos.y };
         return;
       }
 
@@ -2563,6 +2607,83 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
             )}
           </G>
         )}
+
+        {/* === HOOK TOOL (小肠露出) rendering === */}
+        {(() => {
+          const hp = physicsRef.current;
+          if (!hp.hookInserted || !hp.hookAnchor || !hp.hookPos) return null;
+          const anchor = hp.hookAnchor;
+          const handle = hp.hookPos;
+          const HOOK_ROD_LEN = 90;
+          const hdist = Math.hypot(handle.x - anchor.x, handle.y - anchor.y) || 1;
+          const insideLen = Math.max(0, HOOK_ROD_LEN - hdist);
+          if (insideLen < 0.5) return null;
+          const dx = (anchor.x - handle.x) / hdist;
+          const dy = (anchor.y - handle.y) / hdist;
+          const headX = anchor.x + dx * insideLen;
+          const headY = anchor.y + dy * insideLen;
+          const hookColor = hp.hookToolType === '手指勾肠' ? '#e8c098'
+            : hp.hookToolType === '铁钩' ? '#c8d0d8'
+            : hp.hookToolType === '长柄夹' ? '#909090'
+            : '#dde0e8';
+          return (
+            <G>
+              {/* External handle rod */}
+              <Line x1={handle.x} y1={handle.y} x2={anchor.x} y2={anchor.y}
+                stroke={hookColor} strokeWidth={3} strokeOpacity={0.75} strokeLinecap="round" />
+              {/* Internal lever inside cavity */}
+              <Line x1={anchor.x} y1={anchor.y} x2={headX} y2={headY}
+                stroke={hookColor} strokeWidth={3} strokeOpacity={0.85} strokeLinecap="round" />
+              {/* Anchor point at navel */}
+              <Circle cx={anchor.x} cy={anchor.y} r={4}
+                fill="rgba(255,200,120,0.7)" stroke={hookColor} strokeWidth={1} />
+              {/* Hook head */}
+              <Circle cx={headX} cy={headY} r={hp.hookGrabActive ? 7 : 5}
+                fill={hp.hookGrabActive ? 'rgba(255,140,80,0.8)' : `${hookColor}cc`}
+                stroke={hp.hookGrabActive ? '#ff8844' : hookColor}
+                strokeWidth={1.5} />
+              {hp.hookGrabActive && hp.hookedSmallSegIdx < 0 && (
+                <Circle cx={headX} cy={headY} r={12}
+                  fill="none" stroke="rgba(255,140,80,0.4)" strokeWidth={1.5} strokeDasharray="3 2" />
+              )}
+            </G>
+          );
+        })()}
+
+        {/* === EXPOSED SMALL INTESTINE segments (outside body) — rendered over cavity clip === */}
+        {(() => {
+          const expIdx = physicsRef.current.exposedSmallIndices;
+          if (expIdx.length === 0) return null;
+          const expSet = new Set(expIdx);
+          // Find contiguous runs of exposed segments and render them
+          const paths: string[] = [];
+          let run: { x: number; y: number }[] = [];
+          for (let i = 0; i < renderSmallNodes.length - 1; i++) {
+            if (expSet.has(i) && expSet.has(i + 1)) {
+              run.push(renderSmallNodes[i]);
+              if (i + 1 === renderSmallNodes.length - 1) run.push(renderSmallNodes[i + 1]);
+            } else {
+              if (run.length > 0) { run.push(renderSmallNodes[i]); paths.push(buildSmoothPath(run)); run = []; }
+            }
+          }
+          if (run.length > 0) paths.push(buildSmoothPath(run));
+          return (
+            <G>
+              {paths.map((d, pi) => (
+                <G key={`exp-${pi}`}>
+                  <Path d={d} stroke="rgba(255,120,120,0.55)" strokeWidth={21} fill="none" strokeLinecap="round" strokeLinejoin="round" />
+                  <Path d={d} stroke="#e86868" strokeWidth={17} fill="none" strokeLinecap="round" strokeLinejoin="round" />
+                  <Path d={d} stroke="rgba(255,200,180,0.22)" strokeWidth={8} fill="none" strokeLinecap="round" />
+                </G>
+              ))}
+              {expIdx.map(i => {
+                const n = renderSmallNodes[i];
+                if (!n) return null;
+                return <Circle key={`expn-${i}`} cx={n.x} cy={n.y} r={3} fill="rgba(255,100,100,0.6)" />;
+              })}
+            </G>
+          );
+        })()}
 
         {/* Electrodes + wires + controller */}
         {(snap.electrodes.length > 0 || activeTool === TOOLS.ELECTRIC || electricIndepActive) && (
