@@ -292,9 +292,8 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
   // Bullet holes (external view, persistent)
   const [bulletHoleAnims] = useState<Map<number, Animated.Value>>(() => new Map());
 
-  // Exposed intestine drag state
-  const exposedDragRef = useRef<number>(-1); // index of the exposed node being dragged (-1 = none)
-  const exposedExpandLastRef = useRef<number>(0); // timestamp of last expansion event
+  // Exposed intestine expand throttle (used when grab tool pulls exposed nodes far from navel)
+  const exposedExpandLastRef = useRef<number>(0);
 
   // Belly strike drag state
   const bellyStrikeDragRef = useRef<{
@@ -489,27 +488,6 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
         return;
       }
 
-      // Exposed intestine drag — touch near a non-anchor exposed node starts drag
-      if (!physicsRef.current.hookInserted) {
-        const expIdxArr = physicsRef.current.exposedSmallIndices;
-        if (expIdxArr.length > 2) {
-          const minExp = expIdxArr[0];
-          const maxExp = expIdxArr[expIdxArr.length - 1];
-          let bestExpNode = -1, bestExpDist = 40;
-          for (const i of expIdxArr) {
-            if (i === minExp || i === maxExp) continue; // anchors are not draggable
-            const n = physicsRef.current.smallNodes[i];
-            if (!n) continue;
-            const d = Math.hypot(pos.x - n.x, pos.y - n.y);
-            if (d < bestExpDist) { bestExpDist = d; bestExpNode = i; }
-          }
-          if (bestExpNode >= 0) {
-            exposedDragRef.current = bestExpNode;
-            return;
-          }
-        }
-      }
-
       const isInternal = s.viewMode === 'internal';
       const navelY = isInternal ? NAVEL_Y_INTERNAL : NAVEL_Y_EXTERNAL;
       const distToNavel = Math.hypot(pos.x - NAVEL_X, pos.y - navelY);
@@ -569,17 +547,33 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
         return;
       }
       if (s.activeTool === TOOLS.GRAB) {
-        let closest = -1, closestDist = 999, closestType: 'small' | 'large' = 'small';
-        const tryNodes = (nodes: { x: number; y: number }[], type: 'small' | 'large') => {
-          nodes.forEach((n, i) => {
-            const d = Math.hypot(n.x - pos.x, n.y - pos.y);
-            if (d < closestDist) { closestDist = d; closest = i; closestType = type; }
-          });
-        };
-        tryNodes(physicsRef.current.smallNodes, 'small');
-        tryNodes(physicsRef.current.largeNodes, 'large');
         const grabRange = 20 + s.toolParam1 * 0.25;
-        if (closestDist < grabRange) {
+        const isExternal = s.viewMode === 'external';
+        const expSet = new Set(physicsRef.current.exposedSmallIndices);
+        let closest = -1, closestDist = grabRange, closestType: 'small' | 'large' = 'small';
+
+        if (isExternal) {
+          // External view: only grab exposed small nodes (skip anchors for grab detection, include all for physics)
+          for (const i of physicsRef.current.exposedSmallIndices) {
+            const n = physicsRef.current.smallNodes[i];
+            if (!n) continue;
+            const d = Math.hypot(n.x - pos.x, n.y - pos.y);
+            if (d < closestDist) { closestDist = d; closest = i; closestType = 'small'; }
+          }
+        } else {
+          // Internal view: small nodes (skip exposed) + large nodes
+          physicsRef.current.smallNodes.forEach((n, i) => {
+            if (expSet.has(i)) return;
+            const d = Math.hypot(n.x - pos.x, n.y - pos.y);
+            if (d < closestDist) { closestDist = d; closest = i; closestType = 'small'; }
+          });
+          physicsRef.current.largeNodes.forEach((n, i) => {
+            const d = Math.hypot(n.x - pos.x, n.y - pos.y);
+            if (d < closestDist) { closestDist = d; closest = i; closestType = 'large'; }
+          });
+        }
+
+        if (closest >= 0) {
           physicsRef.current.grabbedNode = { type: closestType, idx: closest };
           td('grab');
         }
@@ -934,38 +928,26 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
         return;
       }
 
-      // Exposed intestine drag — move the grabbed node and optionally pull more out
-      if (exposedDragRef.current >= 0) {
-        const n = physicsRef.current.smallNodes[exposedDragRef.current];
-        if (n) {
-          const prevX = n.x, prevY = n.y;
-          n.x = pos.x;
-          n.y = pos.y;
-          n.px = prevX;
-          n.py = prevY;
-
-          // Throttled: pull more intestine out if dragged far enough from navel
+      // Grab tool on exposed intestine: pulling far from navel exposes more nodes
+      if (s.activeTool === TOOLS.GRAB && s.viewMode === 'external') {
+        const gn = physicsRef.current.grabbedNode;
+        if (gn && gn.type === 'small' && physicsRef.current.exposedSmallIndices.includes(gn.idx)) {
           const now = Date.now();
-          if (now - exposedExpandLastRef.current > 550) {
-            const expArr = physicsRef.current.exposedSmallIndices;
-            if (expArr.length > 0) {
-              const distFromNavel = Math.hypot(pos.x - NAVEL_X, pos.y - NAVEL_Y_INTERNAL);
-              if (distFromNavel > 85) {
-                exposedExpandLastRef.current = now;
-                const maxIdx = physicsRef.current.smallNodes.length - 2;
-                const minExp = expArr[0];
-                const maxExp = expArr[expArr.length - 1];
-                let changed = false;
-                if (minExp > 1) { expArr.unshift(minExp - 1); changed = true; }
-                if (maxExp < maxIdx) { expArr.push(maxExp + 1); changed = true; }
-                if (changed) {
-                  hrRef.current.triggerDialogue('expose_pulled');
-                }
-              }
+          if (now - exposedExpandLastRef.current > 500) {
+            const distFromNavel = Math.hypot(pos.x - NAVEL_X, pos.y - NAVEL_Y_INTERNAL);
+            if (distFromNavel > 80) {
+              const expArr = physicsRef.current.exposedSmallIndices;
+              exposedExpandLastRef.current = now;
+              const maxIdx = physicsRef.current.smallNodes.length - 2;
+              const minExp = expArr[0];
+              const maxExp = expArr[expArr.length - 1];
+              let changed = false;
+              if (minExp > 1) { expArr.unshift(minExp - 1); changed = true; }
+              if (maxExp < maxIdx) { expArr.push(maxExp + 1); changed = true; }
+              if (changed) hrRef.current.triggerDialogue('expose_pulled');
             }
           }
         }
-        return;
       }
 
       // Hook tool drag — dragging moves the handle (hookPos) which steers the lever
@@ -986,9 +968,6 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
     },
     onPanResponderRelease: () => {
       isDragging.current = false;
-
-      // Clear exposed intestine drag
-      exposedDragRef.current = -1;
 
       // Weapon fire on release: instant fire at aim point
       if (gunAimDragRef.current.active) {

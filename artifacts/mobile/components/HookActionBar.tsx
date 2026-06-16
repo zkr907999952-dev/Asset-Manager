@@ -72,14 +72,10 @@ export function HookActionBar() {
           </>
         )}
         {exposedSmallIndices.length > 0 && (
-          <TouchableOpacity
-            style={[styles.btn, { borderColor: '#e8404066', backgroundColor: 'rgba(232,64,64,0.1)' }]}
-            onPress={clearExposedNodes}
-            activeOpacity={0.75}
-          >
-            <Feather name="rotate-ccw" size={13} color="#e84040" />
-            <Text style={[styles.btnText, { color: '#e84040' }]}>还纳{exposedSmallIndices.length}节</Text>
-          </TouchableOpacity>
+          <View style={[styles.btn, { borderColor: '#ff994466', backgroundColor: 'rgba(255,153,68,0.1)' }]}>
+            <Feather name="alert-circle" size={13} color="#ff9944" />
+            <Text style={[styles.btnText, { color: '#ff9944' }]}>体外{exposedSmallIndices.length}节 — 抓握工具可拉扯</Text>
+          </View>
         )}
       </View>
     </View>

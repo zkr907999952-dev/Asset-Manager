@@ -709,17 +709,22 @@ export function stepPhysics(state: PhysicsState) {
       const { type, idx } = state.grabbedNode;
       const nodes = type === 'small' ? state.smallNodes : state.largeNodes;
       const segs = type === 'small' ? state.smallSegs : state.largeSegs;
+      const isExposedGrab = type === 'small' && exposedSet.has(idx);
       const n = nodes[idx];
       if (n) {
-        const cavMargin = type === 'small' ? 12 : 6;
         let tx = tp.x, ty = tp.y;
-        const tdx = tx - CAVITY_CX, tdy = ty - CAVITY_CY;
-        const tnx = tdx / (CAVITY_RX - cavMargin), tny = tdy / (CAVITY_RY - cavMargin);
-        const tr = Math.sqrt(tnx * tnx + tny * tny);
-        if (tr > 1) {
-          tx = CAVITY_CX + (tdx / tr) * (CAVITY_RX - cavMargin - 1);
-          ty = CAVITY_CY + (tdy / tr) * (CAVITY_RY - cavMargin - 1);
+        if (!isExposedGrab) {
+          // Internal grab: clamp target to cavity bounds
+          const cavMargin = type === 'small' ? 12 : 6;
+          const tdx = tx - CAVITY_CX, tdy = ty - CAVITY_CY;
+          const tnx = tdx / (CAVITY_RX - cavMargin), tny = tdy / (CAVITY_RY - cavMargin);
+          const tr = Math.sqrt(tnx * tnx + tny * tny);
+          if (tr > 1) {
+            tx = CAVITY_CX + (tdx / tr) * (CAVITY_RX - cavMargin - 1);
+            ty = CAVITY_CY + (tdy / tr) * (CAVITY_RY - cavMargin - 1);
+          }
         }
+        // External grab (exposed node): no cavity clamping — free drag outside body
         const dx = tx - n.x, dy = ty - n.y;
         const grabForce = 0.3 + state.toolParam2 * 0.005;
         n.x += dx * grabForce;

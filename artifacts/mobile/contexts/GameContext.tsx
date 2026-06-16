@@ -2666,10 +2666,26 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       if (p.exposurePendingTrigger && !exposureTriggerHandledRef.current) {
         exposureTriggerHandledRef.current = true;
         p.exposurePendingTrigger = false;
-        setState(prev => ({ ...prev, viewMode: 'external' }));
+        // Auto-retract hook tool (keep exposedSmallIndices intact)
+        p.hookInserted = false;
+        p.hookGrabActive = false;
+        p.hookedSmallSegIdx = -1;
+        p.hookedPendingIndices = [];
+        p.hookPos = null;
+        p.hookAnchor = null;
+        setState(prev => ({
+          ...prev,
+          viewMode: 'external',
+          hookTool: null,
+          hookInserted: false,
+          hookGrabActive: false,
+          hookedSmallSegIdx: -1,
+          hookedPendingIndices: [],
+          // exposedSmallIndices intentionally NOT cleared
+        }));
         triggerDialogue('expose_complete');
       }
-      if (!p.hookInserted) {
+      if (!p.exposedSmallIndices.length) {
         exposureTriggerHandledRef.current = false;
       }
     }, 200);

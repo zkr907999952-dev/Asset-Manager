@@ -65,6 +65,7 @@ export function SurgeryPanel() {
     enterMesenterySelection, executeMesenterySelection, cancelMesenterySelection,
     performParasiteSurgery,
     enterResectionSelection, cancelResectionSelection, performResectionSurgery,
+    clearExposedNodes,
   } = useGame();
 
   const inSelMode = state.mesenterySelectionMode;
@@ -85,6 +86,15 @@ export function SurgeryPanel() {
       <Text style={[styles.section, { color: colors.mutedForeground }]}>肠道修复</Text>
       <SurgButton icon="plus-circle" label="肠道修补手术" subLabel="清除所有穿孔，留下修补痕迹" onPress={repairIntestine} />
       <SurgButton icon="scissors" label="断肠缝合手术" subLabel="清除所有断裂，留下缝合痕迹" onPress={sutureIntestine} />
+      <SurgButton
+        icon="corner-left-down"
+        label="小肠还纳手术"
+        subLabel={state.exposedSmallIndices?.length > 0
+          ? `将体外 ${state.exposedSmallIndices.length} 节小肠还纳回腹腔`
+          : '无肠管露出体外'}
+        onPress={clearExposedNodes}
+        variant={state.exposedSmallIndices?.length > 0 ? 'normal' : 'disabled'}
+      />
       <SurgButton icon="circle" label="肚脐贯通手术" subLabel="永久开放肚脐，工具可直接插入" onPress={performNavelSurgery} />
 
       <Text style={[styles.section, { color: colors.mutedForeground }]}>寄生虫清除</Text>
