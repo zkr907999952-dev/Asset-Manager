@@ -63,9 +63,10 @@ interface SegmentMapProps {
   label: string;
   accentColor: string;
   containerWidth: number;
+  exposedIndices?: Set<number>;
 }
 
-function SegmentMap({ segs, label, accentColor, containerWidth }: SegmentMapProps) {
+function SegmentMap({ segs, label, accentColor, containerWidth, exposedIndices }: SegmentMapProps) {
   const colors = useColors();
   const CELL = 14;
   const GAP = 2;
@@ -82,6 +83,7 @@ function SegmentMap({ segs, label, accentColor, containerWidth }: SegmentMapProp
   const broken = segs.filter(s => s.broken).length;
   const ruptured = segs.filter(s => s.ruptured && !s.broken).length;
   const perforated = segs.filter(s => s.perforated && !s.ruptured && !s.broken).length;
+  const exposed = exposedIndices ? exposedIndices.size : 0;
 
   return (
     <View style={styles.segMapContainer}>
@@ -89,6 +91,9 @@ function SegmentMap({ segs, label, accentColor, containerWidth }: SegmentMapProp
         <Text style={[styles.segMapTitle, { color: accentColor }]}>{label}</Text>
         <View style={styles.segMapMeta}>
           <Text style={[styles.segMapAvg, { color: healthColor(avgHealth) }]}>均值 {avgHealth}</Text>
+          {exposed > 0 && (
+            <Text style={[styles.segMapTag, { color: '#44ddcc', borderColor: '#44ddcc55' }]}>露出×{exposed}</Text>
+          )}
           {broken > 0 && (
             <Text style={[styles.segMapTag, { color: '#cc2244', borderColor: '#cc224455' }]}>断裂×{broken}</Text>
           )}
@@ -106,10 +111,18 @@ function SegmentMap({ segs, label, accentColor, containerWidth }: SegmentMapProp
           {rowSegs.map((seg, colIdx) => {
             const globalIdx = rowIdx * COLS + colIdx;
             const isResected = !!(seg as any).resected;
+            const isExposed = exposedIndices ? exposedIndices.has(globalIdx) : false;
             const bg = segBgColor(seg);
             const painAlpha = Math.round(seg.pain * 0.6).toString(16).padStart(2, '0');
             return (
-              <View key={globalIdx} style={[styles.segCell, { backgroundColor: bg, overflow: 'hidden' }]}>
+              <View
+                key={globalIdx}
+                style={[
+                  styles.segCell,
+                  { backgroundColor: bg, overflow: 'hidden' },
+                  isExposed && styles.segCellExposed,
+                ]}
+              >
                 {isResected ? (
                   <>
                     <View style={styles.resectedDiagA} />
@@ -143,6 +156,7 @@ export function AttributePanel() {
 
   const ruptures = state.intestinalRuptures;
   const breaks = state.intestinalBreaks;
+  const exposedSet = React.useMemo(() => new Set(state.exposedSmallIndices), [state.exposedSmallIndices]);
   const avgPressure = state.renderSmallSegs.length > 0
     ? state.renderSmallSegs.reduce((a, s) => a + s.pressure, 0) / state.renderSmallSegs.length : 0;
   const avgSensitivity = state.renderSmallSegs.length > 0
@@ -203,6 +217,9 @@ export function AttributePanel() {
       <StatRow label="已切除肠段" value={`${state.resectedCount ?? 0} 段`}
         color={(state.resectedCount ?? 0) > 0 ? '#cc3333' : colors.mutedForeground}
         highlight={(state.resectedCount ?? 0) > 0} />
+      <StatRow label="小肠露出段数" value={`${state.exposedSmallIndices.length} 段`}
+        color={state.exposedSmallIndices.length > 0 ? '#44ddcc' : colors.mutedForeground}
+        highlight={state.exposedSmallIndices.length > 0} />
 
       <View style={[styles.divider, { backgroundColor: colors.border }]} />
       <Text style={[styles.sectionTitle, { color: colors.primary }]}>肠道平均状态</Text>
@@ -216,15 +233,16 @@ export function AttributePanel() {
 
       <View style={[styles.legendRow]}>
         {([
-          ['#22cc55', '健康'],
-          ['#ccaa22', '受损'],
-          ['#cc5522', '危险'],
-          ['#cc2244', '断裂'],
-          ['#cc6622', '穿孔'],
-          ['#111111', '切除'],
-        ] as [string, string][]).map(([c, l]) => (
+          ['#22cc55', '健康', null],
+          ['#ccaa22', '受损', null],
+          ['#cc5522', '危险', null],
+          ['#cc2244', '断裂', null],
+          ['#cc6622', '穿孔', null],
+          ['#111111', '切除', '#cc3333'],
+          ['#22cc55', '露出', '#44ddcc'],
+        ] as [string, string, string | null][]).map(([c, l, border]) => (
           <View key={l} style={styles.legendItem}>
-            <View style={[styles.legendDot, { backgroundColor: c, borderColor: l === '切除' ? '#cc3333' : 'transparent', borderWidth: l === '切除' ? 1 : 0 }]} />
+            <View style={[styles.legendDot, { backgroundColor: c, borderColor: border ?? 'transparent', borderWidth: border ? 1 : 0 }]} />
             <Text style={[styles.legendText, { color: colors.mutedForeground }]}>{l}</Text>
           </View>
         ))}
@@ -235,6 +253,7 @@ export function AttributePanel() {
         label={`小肠  ${state.renderSmallSegs.length} 段`}
         accentColor="#88ddaa"
         containerWidth={panelWidth}
+        exposedIndices={exposedSet}
       />
 
       <View style={{ height: 10 }} />
@@ -350,6 +369,10 @@ const styles = StyleSheet.create({
     borderRadius: 2,
     overflow: 'hidden',
     justifyContent: 'flex-end',
+  },
+  segCellExposed: {
+    borderWidth: 1.5,
+    borderColor: '#44ddcc',
   },
   resectedDiagA: {
     position: 'absolute',
