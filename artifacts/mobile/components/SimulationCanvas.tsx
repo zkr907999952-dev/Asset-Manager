@@ -407,6 +407,34 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
   hrRef.current.activateHookGrab = activateHookGrab;
   hrRef.current.clearExposedNodes = clearExposedNodes;
 
+  // Returns true if (px, py) is inside the belly hit zone (ellipse or upper rect)
+  const inBellyHitZone = (px: number, py: number): boolean => {
+    const ex = (px - BELLY_HIT_CX) / BELLY_HIT_RX;
+    const ey = (py - BELLY_HIT_CY) / BELLY_HIT_RY;
+    if (ex * ex + ey * ey <= 1) return true;
+    return px >= BELLY_UPPER_LEFT && px <= BELLY_UPPER_RIGHT
+      && py >= BELLY_UPPER_TOP && py <= BELLY_UPPER_BOT;
+  };
+
+  // Clip end point of a line (x1,y1)→(x2,y2) to the belly ellipse boundary.
+  // Assumes (x1,y1) is inside the ellipse. Returns the clipped end point.
+  const clipEndToEllipse = (x1: number, y1: number, x2: number, y2: number): { x: number; y: number } => {
+    const ux = (x1 - BELLY_HIT_CX) / BELLY_HIT_RX;
+    const uy = (y1 - BELLY_HIT_CY) / BELLY_HIT_RY;
+    const vx = (x2 - x1) / BELLY_HIT_RX;
+    const vy = (y2 - y1) / BELLY_HIT_RY;
+    const a = vx * vx + vy * vy;
+    if (a < 1e-9) return { x: x2, y: y2 };
+    const b = 2 * (ux * vx + uy * vy);
+    const c = ux * ux + uy * uy - 1;
+    const disc = b * b - 4 * a * c;
+    if (disc < 0) return { x: x2, y: y2 };
+    // start is inside (c<0), so we want the positive root
+    const t = (-b + Math.sqrt(disc)) / (2 * a);
+    if (t <= 0 || t > 1) return { x: x2, y: y2 }; // end is still inside
+    return { x: x1 + t * (x2 - x1), y: y1 + t * (y2 - y1) };
+  };
+
   const findNearestLargeNodeIdx = (pos: { x: number; y: number }) => {
     let best = -1, bestD = 9999;
     physicsRef.current.largeNodes.forEach((n, i) => {
@@ -437,8 +465,9 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
       const touchOfsY = s.touchOffsetY ?? 0;
       const pos = tpc(locationX, locationY - touchOfsY);
 
-      // Katana slash: if katana selected, start slash drag
+      // Katana slash: if katana selected and start is inside belly hit zone
       if (s.selectedWeapon === '武士刀' && !s.resectionSelectionMode && !s.mesenterySelectionMode && !s.bellyStrikeTool) {
+        if (!inBellyHitZone(pos.x, pos.y)) return;
         katanaDragRef.current = { active: true, startX: pos.x, startY: pos.y, endX: pos.x, endY: pos.y };
         setKatanaSlashOverlay({ x1: pos.x, y1: pos.y, x2: pos.x, y2: pos.y, halfWidth: s.katanaSlashWidth ?? 24 });
         return;
@@ -730,12 +759,14 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
       const touchOfsY = s.touchOffsetY ?? 0;
       const pos = tpc(locationX, locationY - touchOfsY);
 
-      // Katana slash drag: update end point
+      // Katana slash drag: update end point, clipped to ellipse boundary
       if (katanaDragRef.current.active) {
-        katanaDragRef.current.endX = pos.x;
-        katanaDragRef.current.endY = pos.y;
+        const { startX, startY } = katanaDragRef.current;
+        const clipped = clipEndToEllipse(startX, startY, pos.x, pos.y);
+        katanaDragRef.current.endX = clipped.x;
+        katanaDragRef.current.endY = clipped.y;
         const { state: s2 } = hrRef.current;
-        setKatanaSlashOverlay({ x1: katanaDragRef.current.startX, y1: katanaDragRef.current.startY, x2: pos.x, y2: pos.y, halfWidth: s2.katanaSlashWidth ?? 24 });
+        setKatanaSlashOverlay({ x1: startX, y1: startY, x2: clipped.x, y2: clipped.y, halfWidth: s2.katanaSlashWidth ?? 24 });
         return;
       }
 
