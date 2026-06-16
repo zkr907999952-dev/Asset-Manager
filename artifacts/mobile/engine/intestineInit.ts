@@ -238,5 +238,7 @@ export function createInitialPhysicsState(): PhysicsState {
     hookedPendingIndices: [],
     exposedSmallIndices: [],
     exposurePendingTrigger: false,
+    // Capsule bomb system
+    capsuleBombs: [],
   };
 }

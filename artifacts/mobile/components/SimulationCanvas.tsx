@@ -32,6 +32,7 @@ import {
 } from '../constants/gameConfig';
 import { buildSmoothPath } from '../engine/physics';
 import { useGame } from '../contexts/GameContext';
+import type { CapsuleBombPhysics } from '../engine/physics';
 
 
 const NAVEL_X = CANVAS_W / 2;
@@ -250,6 +251,7 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
     toggleMesenteryNode, setResectionSelection,
     applyBellyStrike, applyGunshot, applyKatanaSlash,
     insertHookViaNavel, retractHook, activateHookGrab, clearExposedNodes,
+    placeCapsuleBombInCavity, setCapsuleBombSwallowTarget, moveCavityBomb,
   } = useGame();
   const lastDialogueTime = useRef(0);
   const isDragging = useRef(false);
@@ -307,6 +309,12 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
   } | null>(null);
   const katanaSweepAnim = useRef(new Animated.Value(0)).current;
   const [katanaSweepLine, setKatanaSweepLine] = useState<{ x1: number; y1: number; x2: number; y2: number } | null>(null);
+
+  // Capsule bomb cavity drag state
+  const capsuleBombDragRef = useRef<{
+    active: boolean;
+    id: number;
+  }>({ active: false, id: -1 });
 
   // Belly strike drag state
   const bellyStrikeDragRef = useRef<{
@@ -383,6 +391,9 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
     retractHook,
     activateHookGrab,
     clearExposedNodes,
+    placeCapsuleBombInCavity,
+    setCapsuleBombSwallowTarget,
+    moveCavityBomb,
   });
   hrRef.current.state = state;
   hrRef.current.toPhysicsCoords = toPhysicsCoords;
@@ -397,6 +408,9 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
   hrRef.current.insertViaNavel = insertViaNavel;
   hrRef.current.setNavelPierced = setNavelPierced;
   hrRef.current.triggerDialogue = triggerDialogue;
+  hrRef.current.placeCapsuleBombInCavity = placeCapsuleBombInCavity;
+  hrRef.current.setCapsuleBombSwallowTarget = setCapsuleBombSwallowTarget;
+  hrRef.current.moveCavityBomb = moveCavityBomb;
   hrRef.current.toggleMesenteryNode = toggleMesenteryNode;
   hrRef.current.setResectionSelection = setResectionSelection;
   hrRef.current.applyBellyStrike = applyBellyStrike;
@@ -470,6 +484,51 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
         if (!inBellyHitZone(pos.x, pos.y)) return;
         katanaDragRef.current = { active: true, startX: pos.x, startY: pos.y, endX: pos.x, endY: pos.y };
         setKatanaSlashOverlay({ x1: pos.x, y1: pos.y, x2: pos.x, y2: pos.y, halfWidth: s.katanaSlashWidth ?? 24 });
+        return;
+      }
+
+      // Capsule bomb placement/drag
+      if (s.selectedWeapon === '胶囊炸弹' && !s.resectionSelectionMode && !s.mesenterySelectionMode && !s.bellyStrikeTool) {
+        const { placeCapsuleBombInCavity: placeBomb, setCapsuleBombSwallowTarget: setSwTarget } = hrRef.current;
+        if (s.capsuleBombPlacementMode === 'cavity') {
+          const bombs = physicsRef.current.capsuleBombs || [];
+          const BOMB_PICK_R = 22;
+          let pickedId = -1;
+          for (const b of bombs) {
+            if (b.mode !== 'cavity') continue;
+            if (Math.hypot(b.cavityX - pos.x, b.cavityY - pos.y) < BOMB_PICK_R) {
+              pickedId = b.id; break;
+            }
+          }
+          if (pickedId >= 0) {
+            capsuleBombDragRef.current = { active: true, id: pickedId };
+          } else {
+            const ex = (pos.x - CAVITY_CX) / CAVITY_RX;
+            const ey = (pos.y - CAVITY_CY) / CAVITY_RY;
+            if (ex * ex + ey * ey <= 1.0) {
+              placeBomb(pos.x, pos.y);
+            }
+          }
+        } else if (s.capsuleBombPlacementMode === 'swallow') {
+          const bombs = physicsRef.current.capsuleBombs || [];
+          const swallowBomb = bombs.find(b => b.mode === 'swallow');
+          if (swallowBomb) {
+            if (swallowBomb.inLarge) {
+              const { idx, dist: d } = findNearestLargeNodeIdx(pos);
+              if (idx >= 0 && d < 75) setSwTarget({ largeIdx: idx });
+              const cecum = physicsRef.current.largeNodes[0];
+              if (cecum && Math.hypot(cecum.x - pos.x, cecum.y - pos.y) < 55) setSwTarget({ inLarge: false });
+            } else {
+              const { idx, dist: d } = findNearestSmallNodeIdx(pos);
+              if (idx >= 0 && d < 80) setSwTarget({ smallIdx: idx });
+              const terminal = physicsRef.current.smallNodes[physicsRef.current.smallNodes.length - 1];
+              const cecum = physicsRef.current.largeNodes[0];
+              const tiD = terminal ? Math.hypot(terminal.x - pos.x, terminal.y - pos.y) : 9999;
+              const cD = cecum ? Math.hypot(cecum.x - pos.x, cecum.y - pos.y) : 9999;
+              if (Math.min(tiD, cD) < 55) setSwTarget({ inLarge: true, largeIdx: 0 });
+            }
+          }
+        }
         return;
       }
 
@@ -759,6 +818,37 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
       const touchOfsY = s.touchOffsetY ?? 0;
       const pos = tpc(locationX, locationY - touchOfsY);
 
+      // Capsule bomb cavity bomb drag
+      if (capsuleBombDragRef.current.active) {
+        const { moveCavityBomb: mvBomb } = hrRef.current;
+        const ex = (pos.x - CAVITY_CX) / CAVITY_RX;
+        const ey = (pos.y - CAVITY_CY) / CAVITY_RY;
+        if (ex * ex + ey * ey <= 1.0) mvBomb(capsuleBombDragRef.current.id, pos.x, pos.y);
+        return;
+      }
+      // Capsule bomb swallow drag: continuously update target
+      if (hrRef.current.state.selectedWeapon === '胶囊炸弹' && hrRef.current.state.capsuleBombPlacementMode === 'swallow') {
+        const { setCapsuleBombSwallowTarget: setSwTarget } = hrRef.current;
+        const bombs = physicsRef.current.capsuleBombs || [];
+        const swallowBomb = bombs.find(b => b.mode === 'swallow');
+        if (swallowBomb) {
+          if (swallowBomb.inLarge) {
+            const { idx, dist: d } = findNearestLargeNodeIdx(pos);
+            if (idx >= 0 && d < 75) setSwTarget({ largeIdx: idx });
+            const cecum = physicsRef.current.largeNodes[0];
+            if (cecum && Math.hypot(cecum.x - pos.x, cecum.y - pos.y) < 55) setSwTarget({ inLarge: false });
+          } else {
+            const { idx, dist: d } = findNearestSmallNodeIdx(pos);
+            if (idx >= 0 && d < 80) setSwTarget({ smallIdx: idx });
+            const terminal = physicsRef.current.smallNodes[physicsRef.current.smallNodes.length - 1];
+            const cecum = physicsRef.current.largeNodes[0];
+            const tiD = terminal ? Math.hypot(terminal.x - pos.x, terminal.y - pos.y) : 9999;
+            const cD = cecum ? Math.hypot(cecum.x - pos.x, cecum.y - pos.y) : 9999;
+            if (Math.min(tiD, cD) < 55) setSwTarget({ inLarge: true, largeIdx: 0 });
+          }
+        }
+      }
+
       // Katana slash drag: update end point, clipped to ellipse boundary
       if (katanaDragRef.current.active) {
         const { startX, startY } = katanaDragRef.current;
@@ -1030,6 +1120,12 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
     },
     onPanResponderRelease: () => {
       isDragging.current = false;
+
+      // Capsule bomb cavity drag: drop bomb
+      if (capsuleBombDragRef.current.active) {
+        capsuleBombDragRef.current.active = false;
+        return;
+      }
 
       // Katana slash on release: trigger physics + effects
       if (katanaDragRef.current.active) {
@@ -2688,6 +2784,46 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
                 <Circle cx={0} cy={0} r={1.5}
                   fill="rgba(255,160,200,0.85)" />
               )}
+            </G>
+          );
+        })()}
+
+        {/* 胶囊炸弹 — cavity bombs (orange pill shapes) + swallowed bomb along intestine */}
+        {(() => {
+          const bombs = physicsRef.current.capsuleBombs;
+          if (!bombs || bombs.length === 0) return null;
+          return (
+            <G>
+              {bombs.map(bomb => {
+                if (bomb.mode === 'cavity') {
+                  const cx = bomb.cavityX;
+                  const cy = bomb.cavityY;
+                  return (
+                    <G key={bomb.id} transform={`translate(${cx},${cy})`}>
+                      <Ellipse cx={0} cy={0} rx={10} ry={6} fill="#cc4400" stroke="#ff6600" strokeWidth={1.2} />
+                      <Ellipse cx={-2} cy={0} rx={8} ry={5} fill="#ff6600" stroke="none" />
+                      <Line x1={0} y1={-5.5} x2={0} y2={5.5} stroke="rgba(255,200,100,0.35)" strokeWidth={0.8} />
+                      <Ellipse cx={-3} cy={-2} rx={2.5} ry={1.5} fill="rgba(255,200,150,0.55)" />
+                      <Rect x={6} y={-3} width={4} height={6} rx={1} fill="#ffcc00" stroke="#aa8800" strokeWidth={0.8} />
+                    </G>
+                  );
+                } else {
+                  const node = bomb.inLarge
+                    ? physicsRef.current.largeNodes[bomb.largeIdx]
+                    : physicsRef.current.smallNodes[bomb.smallIdx];
+                  if (!node) return null;
+                  const { x, y } = node;
+                  return (
+                    <G key={bomb.id} transform={`translate(${x},${y})`}>
+                      <Ellipse cx={0} cy={0} rx={8} ry={5} fill="#cc4400" stroke="#ff6600" strokeWidth={1} />
+                      <Ellipse cx={-1.5} cy={0} rx={6.5} ry={4} fill="#ff6600" stroke="none" />
+                      <Line x1={0} y1={-4.5} x2={0} y2={4.5} stroke="rgba(255,200,100,0.35)" strokeWidth={0.7} />
+                      <Ellipse cx={-2.5} cy={-1.8} rx={2} ry={1.2} fill="rgba(255,200,150,0.5)" />
+                      <Circle cx={5} cy={-2} r={1.8} fill="#ffcc00" stroke="#aa8800" strokeWidth={0.7} />
+                    </G>
+                  );
+                }
+              })}
             </G>
           );
         })()}

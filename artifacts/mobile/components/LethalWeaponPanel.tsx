@@ -22,6 +22,20 @@ function WeaponIcon({ id, selected, size }: { id: LethalWeaponId; selected: bool
       </View>
     );
   }
+  if (id === '胶囊炸弹') {
+    const c1 = selected ? '#ff6600' : '#884422';
+    const c2 = selected ? '#cc4400' : '#553311';
+    return (
+      <View style={{ width: 44, height: 28, alignItems: 'center', justifyContent: 'center' }}>
+        <View style={{ width: 36, height: 16, borderRadius: 8, overflow: 'hidden', flexDirection: 'row' }}>
+          <View style={{ flex: 1, backgroundColor: c1 }} />
+          <View style={{ width: 1, backgroundColor: selected ? '#ffaa44' : '#664422' }} />
+          <View style={{ flex: 1, backgroundColor: c2 }} />
+        </View>
+        <View style={{ position: 'absolute', top: 1, right: 5, width: 6, height: 6, borderRadius: 1, backgroundColor: selected ? '#ffcc00' : '#665500', borderWidth: 1, borderColor: selected ? '#ffaa00' : '#443300' }} />
+      </View>
+    );
+  }
   return null;
 }
 
@@ -31,7 +45,7 @@ const POWER_BADGES: Record<LethalWeaponId, { label: string; color: string }> = {
   '7.62mm步枪':         { label: '重伤', color: '#e84118' },
   '12.7mm反器材狙击枪': { label: '即死', color: '#c0392b' },
   '武士刀':             { label: '断肠', color: '#cc44aa' },
-  '胶囊炸弹':           { label: '预留', color: '#555' },
+  '胶囊炸弹':           { label: '爆炸', color: '#ff6600' },
 };
 
 const SIGHT_LABELS: Record<string, string> = {
@@ -103,11 +117,14 @@ export function LethalWeaponPanel() {
         const def = LETHAL_WEAPON_LIST.find(w => w.id === selected);
         if (!def || def.reserved) return null;
         const isKatana = selected === '武士刀';
-        const hintColor = isKatana ? '#cc44aaaa' : '#e84040aa';
-        const hintBg = isKatana ? 'rgba(204,68,170,0.05)' : 'rgba(232,64,64,0.05)';
-        const hintBorder = isKatana ? `${'#cc44aa'}44` : `${colors.border}44`;
+        const isBomb = selected === '胶囊炸弹';
+        const hintColor = isKatana ? '#cc44aaaa' : isBomb ? '#ff6600aa' : '#e84040aa';
+        const hintBg = isKatana ? 'rgba(204,68,170,0.05)' : isBomb ? 'rgba(255,102,0,0.05)' : 'rgba(232,64,64,0.05)';
+        const hintBorder = isKatana ? `${'#cc44aa'}44` : isBomb ? '#ff660044' : `${colors.border}44`;
         const hintText = isKatana
           ? '点击为斩击起点，拖拽至终点\n松开即触发斩击，范围内肠段全部断裂\n斩击宽度可在设置中调整'
+          : isBomb
+          ? '下方选择放置模式\n腹腔模式：点击/拖拽放置（需刺穿肚脐）\n吞入模式：拖拽定位肠道中的位置\n调整威力后按引爆同时爆炸'
           : '按住并拖拽定位瞄准位置\n瞄准点偏移可在设置中调整\n松开即触发开火';
         return (
           <View style={[styles.hintBox, { borderColor: hintBorder, backgroundColor: hintBg }]}>

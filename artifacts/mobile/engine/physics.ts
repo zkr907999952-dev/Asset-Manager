@@ -48,6 +48,16 @@ export interface SegmentProps {
   resected: boolean;   // surgically removed — segment is hidden and skipped
 }
 
+export interface CapsuleBombPhysics {
+  id: number;
+  mode: 'cavity' | 'swallow';
+  cavityX: number;
+  cavityY: number;
+  inLarge: boolean;
+  smallIdx: number;
+  largeIdx: number;
+}
+
 export interface PhysicsState {
   smallNodes: PhysicsNode[];
   largeNodes: PhysicsNode[];
@@ -131,6 +141,8 @@ export interface PhysicsState {
   hookedPendingIndices: number[];  // nodes grabbed but not yet exposed (inside body)
   exposedSmallIndices: number[];   // sorted ascending: nodes outside the body
   exposurePendingTrigger: boolean; // flag set by physics when insideLen→0 with grab active
+  // === Capsule bomb system ===
+  capsuleBombs: CapsuleBombPhysics[];
 }
 
 function clamp(v: number, min: number, max: number) {
@@ -319,6 +331,7 @@ export function stepPhysics(state: PhysicsState) {
   if (state.hookedSmallSegIdx === undefined) state.hookedSmallSegIdx = -1;
   if (state.exposurePendingTrigger === undefined) state.exposurePendingTrigger = false;
   if (!state.hookRodLength) state.hookRodLength = 90;
+  if (!state.capsuleBombs) state.capsuleBombs = [];
 
   const exposedSet: Set<number> = state.exposedSmallIndices.length > 0
     ? new Set(state.exposedSmallIndices)
@@ -1263,6 +1276,39 @@ export function stepPhysics(state: PhysicsState) {
       }
     }
 
+  // === CAVITY BOMBS — push intestine nodes away (float freely, no gravity) ===
+  if (state.capsuleBombs && state.capsuleBombs.length > 0) {
+    const BOMB_R = 10;
+    const S_MIN_D = SMALL_RADIUS + BOMB_R;
+    const L_MIN_D = LARGE_RADIUS + BOMB_R;
+    for (const bomb of state.capsuleBombs) {
+      if (bomb.mode !== 'cavity') continue;
+      const bx = bomb.cavityX, by = bomb.cavityY;
+      for (let i = 0; i < state.smallNodes.length; i++) {
+        const n = state.smallNodes[i];
+        if (n.pinned) continue;
+        const dx = n.x - bx, dy = n.y - by;
+        const d2 = dx * dx + dy * dy;
+        if (d2 < S_MIN_D * S_MIN_D && d2 > 0.01) {
+          const d = Math.sqrt(d2);
+          const push = (S_MIN_D - d) * 0.45;
+          n.x += (dx / d) * push; n.y += (dy / d) * push;
+        }
+      }
+      for (let i = 0; i < state.largeNodes.length; i++) {
+        const n = state.largeNodes[i];
+        if (n.pinned) continue;
+        const dx = n.x - bx, dy = n.y - by;
+        const d2 = dx * dx + dy * dy;
+        if (d2 < L_MIN_D * L_MIN_D && d2 > 0.01) {
+          const d = Math.sqrt(d2);
+          const push = (L_MIN_D - d) * 0.45;
+          n.x += (dx / d) * push; n.y += (dy / d) * push;
+        }
+      }
+    }
+  }
+
   // === HOOK TOOL (小肠露出) physics ===
   if (state.hookInserted && state.hookAnchor && state.hookPos) {
     const HOOK_ROD_LEN = state.hookRodLength || 90;
@@ -1736,6 +1782,38 @@ export function applyKatanaSlashPhysics(
 
   processNodes(state.smallNodes, state.smallSegs);
   processNodes(state.largeNodes, state.largeSegs);
+}
+
+// applyCapsuleBombExplosion: detonates all capsule bombs simultaneously.
+// power 0-100 scales from 7.62mm level to 2× 12.7mm level.
+export function applyCapsuleBombExplosion(
+  state: PhysicsState,
+  power: number,
+): void {
+  if (!state.capsuleBombs || state.capsuleBombs.length === 0) return;
+  const t = Math.max(0, Math.min(1, power / 100));
+  const directHitRadius = 22 + 14 * t;
+  const shockwaveRange = 78 + 152 * t;
+  const shockwavePower = 90 + 230 * t;
+  const breakAllInRange = t > 0.8;
+  for (const bomb of state.capsuleBombs) {
+    let bx: number, by: number;
+    if (bomb.mode === 'cavity') {
+      bx = bomb.cavityX;
+      by = bomb.cavityY;
+    } else {
+      const nodes = bomb.inLarge ? state.largeNodes : state.smallNodes;
+      const idx = bomb.inLarge
+        ? clamp(bomb.largeIdx, 0, state.largeNodes.length - 1)
+        : clamp(bomb.smallIdx, 0, state.smallNodes.length - 1);
+      const node = nodes[idx];
+      if (!node) continue;
+      bx = node.x;
+      by = node.y;
+    }
+    applyGunshotPhysics(state, bx, by, directHitRadius, shockwaveRange, shockwavePower, -1, 1, breakAllInRange);
+  }
+  state.capsuleBombs = [];
 }
 
 export function buildSmoothPath(nodes: { x: number; y: number }[]): string {

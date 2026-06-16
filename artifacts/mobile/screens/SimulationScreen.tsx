@@ -12,6 +12,7 @@ import { DialogueBox } from '@/components/DialogueBox';
 import { HeartRateMonitor } from '@/components/HeartRateMonitor';
 import { CharacterStatusBadges } from '@/components/CharacterStatusBadges';
 import { HookActionBar } from '@/components/HookActionBar';
+import { CapsuleBombActionBar } from '@/components/CapsuleBombActionBar';
 import { stepPhysics } from '@/engine/physics';
 
 interface Props {
@@ -242,6 +243,7 @@ export function SimulationScreen({ onMenuPress }: Props) {
 
         <View style={[styles.bottomOverlay, { pointerEvents: 'box-none', paddingBottom: bottomPad }]}>
           <DialogueBox dialogue={state.currentDialogue} />
+          <CapsuleBombActionBar />
           <HookActionBar />
           <ToolControls />
         </View>

@@ -3,8 +3,8 @@ import React, {
 } from 'react';
 import { Platform } from 'react-native';
 import { createInitialPhysicsState } from '../engine/intestineInit';
-import type { PhysicsState } from '../engine/physics';
-import { applyBellyStrikePhysics as applyBellyStrikePhysicsFunc, applyGunshotPhysics as applyGunshotPhysicsFunc, applyKatanaSlashPhysics as applyKatanaSlashPhysicsFunc } from '../engine/physics';
+import type { PhysicsState, CapsuleBombPhysics } from '../engine/physics';
+import { applyBellyStrikePhysics as applyBellyStrikePhysicsFunc, applyGunshotPhysics as applyGunshotPhysicsFunc, applyKatanaSlashPhysics as applyKatanaSlashPhysicsFunc, applyCapsuleBombExplosion as applyCapsuleBombExplosionFunc } from '../engine/physics';
 import {
   TOOLS, N_LARGE, N_SMALL, CAVITY_CX, CAVITY_CY,
   BREATH_AMPLITUDE_DEFAULT, EXPANSION_SCALE_DEFAULT,
@@ -233,6 +233,10 @@ export interface GameUIState {
   hookedSmallSegIdx: number;
   hookedPendingIndices: number[];  // hooked but not yet exposed
   exposedSmallIndices: number[];
+  // === Capsule bomb system ===
+  capsuleBombs: CapsuleBombPhysics[];
+  capsuleBombPower: number;        // 0-100
+  capsuleBombPlacementMode: 'cavity' | 'swallow' | null;
 }
 
 interface GameContextType {
@@ -320,6 +324,15 @@ interface GameContextType {
   retractHook: () => void;
   activateHookGrab: () => void;
   clearExposedNodes: () => void;
+  // Capsule bomb system
+  placeCapsuleBombInCavity: (x: number, y: number) => void;
+  swallowCapsuleBomb: () => void;
+  setCapsuleBombSwallowTarget: (params: { smallIdx?: number; inLarge?: boolean; largeIdx?: number }) => void;
+  detonateCapsuleBombs: () => void;
+  clearCapsuleBombs: () => void;
+  setCapsuleBombPower: (v: number) => void;
+  setCapsuleBombPlacementMode: (mode: 'cavity' | 'swallow' | null) => void;
+  moveCavityBomb: (id: number, x: number, y: number) => void;
 }
 
 const DEFAULT_TOOL_POS = { x: CAVITY_CX, y: CAVITY_CY - 40 };
@@ -405,6 +418,16 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
   });
 
   const eggAnimRef = useRef({
+    targetSmallIdx: 0,
+    targetInLarge: false,
+    targetLargeIdx: 0,
+    lastStepTime: 0,
+  });
+
+  const capsuleBombIdRef = useRef(0);
+  const capsuleBombPowerRef = useRef(50);
+  const capsuleBombPlacementModeRef = useRef<'cavity' | 'swallow' | null>(null);
+  const capsuleBombSwallowAnimRef = useRef({
     targetSmallIdx: 0,
     targetInLarge: false,
     targetLargeIdx: 0,
@@ -514,6 +537,10 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     hookedSmallSegIdx: -1,
     hookedPendingIndices: [],
     exposedSmallIndices: [],
+    // Capsule bomb system
+    capsuleBombs: [],
+    capsuleBombPower: 50,
+    capsuleBombPlacementMode: null,
   });
 
   const syncFromPhysics = useCallback(() => {
@@ -679,6 +706,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         hookedSmallSegIdx: p.hookedSmallSegIdx,
         hookedPendingIndices: p.hookedPendingIndices?.length > 0 ? [...p.hookedPendingIndices] : [],
         exposedSmallIndices: p.exposedSmallIndices.length > 0 ? [...p.exposedSmallIndices] : [],
+        capsuleBombs: p.capsuleBombs ? [...p.capsuleBombs] : [],
         renderSmallNodes: snap.smallNodes.map(n => ({ x: n.x, y: n.y })),
         renderLargeNodes: snap.largeNodes.map(n => ({ x: n.x, y: n.y })),
         renderSmallSegs: snap.smallSegs.map(s => ({ ...s })),
@@ -1277,6 +1305,41 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
               const newIdx = Math.max(0, Math.min(N_LARGE - 1, curLarge + dir));
               p.eggLargeHeadIdx = newIdx;
               upd.eggLargeHeadIdx = newIdx;
+            }
+          }
+        }
+      }
+
+      // --- 胶囊炸弹（吞入型） — move swallowed bomb toward target index ---
+      const swallowBombs = p.capsuleBombs ? p.capsuleBombs.filter(b => b.mode === 'swallow') : [];
+      if (swallowBombs.length > 0) {
+        const sanim = capsuleBombSwallowAnimRef.current;
+        const speedMs = 100;
+        if (now - sanim.lastStepTime >= speedMs) {
+          sanim.lastStepTime = now;
+          for (const bomb of swallowBombs) {
+            if (!bomb.inLarge && !sanim.targetInLarge) {
+              if (bomb.smallIdx !== sanim.targetSmallIdx) {
+                const dir = sanim.targetSmallIdx > bomb.smallIdx ? 1 : -1;
+                bomb.smallIdx = Math.max(0, Math.min(N_SMALL - 1, bomb.smallIdx + dir));
+              }
+            } else if (!bomb.inLarge && sanim.targetInLarge) {
+              if (bomb.smallIdx < N_SMALL - 1) {
+                bomb.smallIdx = Math.min(N_SMALL - 1, bomb.smallIdx + 1);
+              } else {
+                bomb.inLarge = true; bomb.largeIdx = 0;
+              }
+            } else if (bomb.inLarge && !sanim.targetInLarge) {
+              if (bomb.largeIdx > 0) {
+                bomb.largeIdx = Math.max(0, bomb.largeIdx - 1);
+              } else {
+                bomb.inLarge = false; bomb.smallIdx = N_SMALL - 1;
+              }
+            } else if (bomb.inLarge && sanim.targetInLarge) {
+              if (bomb.largeIdx !== sanim.targetLargeIdx) {
+                const dir = sanim.targetLargeIdx > bomb.largeIdx ? 1 : -1;
+                bomb.largeIdx = Math.max(0, Math.min(N_LARGE - 1, bomb.largeIdx + dir));
+              }
             }
           }
         }
@@ -2634,6 +2697,64 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
   }, [triggerDialogue]);
 
 
+  // === Capsule bomb system ===
+  const placeCapsuleBombInCavity = useCallback((x: number, y: number) => {
+    const id = ++capsuleBombIdRef.current;
+    const bomb = { id, mode: 'cavity' as const, cavityX: x, cavityY: y, inLarge: false, smallIdx: 0, largeIdx: 0 };
+    physicsRef.current.capsuleBombs = [...(physicsRef.current.capsuleBombs || []), bomb];
+    setState(prev => ({ ...prev, capsuleBombs: [...prev.capsuleBombs, bomb] }));
+  }, []);
+
+  const swallowCapsuleBomb = useCallback(() => {
+    const existing = physicsRef.current.capsuleBombs || [];
+    if (existing.some(b => b.mode === 'swallow')) return;
+    const id = ++capsuleBombIdRef.current;
+    const bomb = { id, mode: 'swallow' as const, cavityX: 0, cavityY: 0, inLarge: false, smallIdx: 0, largeIdx: 0 };
+    capsuleBombSwallowAnimRef.current = { targetSmallIdx: 0, targetInLarge: false, targetLargeIdx: 0, lastStepTime: 0 };
+    physicsRef.current.capsuleBombs = [...existing, bomb];
+    setState(prev => ({ ...prev, capsuleBombs: [...prev.capsuleBombs, bomb], capsuleBombPlacementMode: 'swallow' }));
+    capsuleBombPlacementModeRef.current = 'swallow';
+  }, []);
+
+  const setCapsuleBombSwallowTarget = useCallback((params: { smallIdx?: number; inLarge?: boolean; largeIdx?: number }) => {
+    const anim = capsuleBombSwallowAnimRef.current;
+    if (params.smallIdx !== undefined) anim.targetSmallIdx = params.smallIdx;
+    if (params.inLarge !== undefined) anim.targetInLarge = params.inLarge;
+    if (params.largeIdx !== undefined) anim.targetLargeIdx = params.largeIdx;
+  }, []);
+
+  const detonateCapsuleBombs = useCallback(() => {
+    const p = physicsRef.current;
+    if (!p.capsuleBombs || p.capsuleBombs.length === 0) return;
+    applyCapsuleBombExplosionFunc(p, capsuleBombPowerRef.current);
+    triggerDialogue('explosion');
+    setState(prev => ({ ...prev, capsuleBombs: [], capsuleBombPlacementMode: null }));
+    capsuleBombPlacementModeRef.current = null;
+  }, [triggerDialogue]);
+
+  const clearCapsuleBombs = useCallback(() => {
+    physicsRef.current.capsuleBombs = [];
+    setState(prev => ({ ...prev, capsuleBombs: [], capsuleBombPlacementMode: null }));
+    capsuleBombPlacementModeRef.current = null;
+  }, []);
+
+  const setCapsuleBombPower = useCallback((v: number) => {
+    capsuleBombPowerRef.current = v;
+    setState(prev => ({ ...prev, capsuleBombPower: v }));
+  }, []);
+
+  const setCapsuleBombPlacementMode = useCallback((mode: 'cavity' | 'swallow' | null) => {
+    capsuleBombPlacementModeRef.current = mode;
+    setState(prev => ({ ...prev, capsuleBombPlacementMode: mode }));
+  }, []);
+
+  const moveCavityBomb = useCallback((id: number, x: number, y: number) => {
+    const p = physicsRef.current;
+    if (!p.capsuleBombs) return;
+    const bomb = p.capsuleBombs.find(b => b.id === id && b.mode === 'cavity');
+    if (bomb) { bomb.cavityX = x; bomb.cavityY = y; }
+  }, []);
+
   // === Hook tool (小肠露出) ===
   const hookToolRef = useRef<string | null>(null);
 
@@ -2750,6 +2871,9 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       setBellyStrikeImpulseScale, setBellyStrikeToolPower, applyBellyStrike,
       setSelectedWeapon, applyGunshot, setKatanaSlashWidth, applyKatanaSlash,
       setHookTool, insertHookViaNavel, retractHook, activateHookGrab, clearExposedNodes,
+      placeCapsuleBombInCavity, swallowCapsuleBomb, setCapsuleBombSwallowTarget,
+      detonateCapsuleBombs, clearCapsuleBombs, setCapsuleBombPower,
+      setCapsuleBombPlacementMode, moveCavityBomb,
     }}>
       {children}
     </GameContext.Provider>
