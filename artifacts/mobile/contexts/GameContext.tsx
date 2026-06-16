@@ -228,6 +228,7 @@ export interface GameUIState {
   hookInserted: boolean;
   hookGrabActive: boolean;
   hookedSmallSegIdx: number;
+  hookedPendingIndices: number[];  // hooked but not yet exposed
   exposedSmallIndices: number[];
 }
 
@@ -504,6 +505,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     hookInserted: false,
     hookGrabActive: false,
     hookedSmallSegIdx: -1,
+    hookedPendingIndices: [],
     exposedSmallIndices: [],
   });
 
@@ -668,6 +670,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         hookInserted: p.hookInserted,
         hookGrabActive: p.hookGrabActive,
         hookedSmallSegIdx: p.hookedSmallSegIdx,
+        hookedPendingIndices: p.hookedPendingIndices?.length > 0 ? [...p.hookedPendingIndices] : [],
         exposedSmallIndices: p.exposedSmallIndices.length > 0 ? [...p.exposedSmallIndices] : [],
         renderSmallNodes: snap.smallNodes.map(n => ({ x: n.x, y: n.y })),
         renderLargeNodes: snap.largeNodes.map(n => ({ x: n.x, y: n.y })),
@@ -2612,12 +2615,15 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
   const insertHookViaNavel = useCallback(() => {
     const p = physicsRef.current;
     if (!p.navelPierced || !hookToolRef.current) return;
+    const toolDef = INTESTINE_HOOK_TOOL_LIST.find(t => t.id === hookToolRef.current);
     p.hookToolType = hookToolRef.current;
+    p.hookRodLength = toolDef?.rodLength ?? 90;
     p.hookAnchor = { x: CAVITY_CX, y: CAVITY_CY };
     p.hookPos = { x: CAVITY_CX, y: CAVITY_CY - 40 };
     p.hookInserted = true;
     p.hookGrabActive = false;
     p.hookedSmallSegIdx = -1;
+    p.hookedPendingIndices = [];
     setState(prev => ({ ...prev, hookInserted: true }));
   }, []);
 
@@ -2626,11 +2632,12 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     p.hookInserted = false;
     p.hookGrabActive = false;
     p.hookedSmallSegIdx = -1;
+    p.hookedPendingIndices = [];
     p.hookPos = null;
     p.hookAnchor = null;
     p.exposedSmallIndices = [];
     p.exposurePendingTrigger = false;
-    setState(prev => ({ ...prev, hookInserted: false, hookGrabActive: false, hookedSmallSegIdx: -1, exposedSmallIndices: [] }));
+    setState(prev => ({ ...prev, hookInserted: false, hookGrabActive: false, hookedSmallSegIdx: -1, hookedPendingIndices: [], exposedSmallIndices: [] }));
   }, []);
 
   const activateHookGrab = useCallback(() => {
@@ -2643,10 +2650,11 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
   const clearExposedNodes = useCallback(() => {
     const p = physicsRef.current;
     p.exposedSmallIndices = [];
+    p.hookedPendingIndices = [];
     p.hookGrabActive = false;
     p.hookedSmallSegIdx = -1;
     p.exposurePendingTrigger = false;
-    setState(prev => ({ ...prev, exposedSmallIndices: [], hookGrabActive: false, hookedSmallSegIdx: -1 }));
+    setState(prev => ({ ...prev, exposedSmallIndices: [], hookedPendingIndices: [], hookGrabActive: false, hookedSmallSegIdx: -1 }));
   }, []);
 
   // Handle exposure pending trigger — switch to external view on first full exposure

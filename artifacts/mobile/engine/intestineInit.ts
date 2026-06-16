@@ -229,11 +229,13 @@ export function createInitialPhysicsState(): PhysicsState {
     bulletHitLarge: new Array(N_LARGE - 1).fill(0),
     // Hook tool (小肠露出)
     hookToolType: null,
+    hookRodLength: 90,
     hookPos: null,
     hookAnchor: null,
     hookInserted: false,
     hookGrabActive: false,
     hookedSmallSegIdx: -1,
+    hookedPendingIndices: [],
     exposedSmallIndices: [],
     exposurePendingTrigger: false,
   };

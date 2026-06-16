@@ -15,16 +15,10 @@ const HOOK_ICONS: Record<string, string> = {
 
 export function IntestineExposurePanel() {
   const colors = useColors();
-  const {
-    state,
-    setHookTool,
-    insertHookViaNavel,
-    retractHook,
-    activateHookGrab,
-    clearExposedNodes,
-  } = useGame();
+  const { state, setHookTool } = useGame();
 
-  const { hookTool, hookInserted, hookGrabActive, exposedSmallIndices, navelPierced } = state;
+  const { hookTool, hookInserted, hookGrabActive, exposedSmallIndices, navelPierced, hookedPendingIndices } = state;
+  const hasPending = (hookedPendingIndices?.length ?? 0) > 0;
 
   return (
     <ScrollView showsVerticalScrollIndicator={false} style={styles.scroll} nestedScrollEnabled>
@@ -43,6 +37,7 @@ export function IntestineExposurePanel() {
               },
             ]}
             onPress={() => setHookTool(isSelected ? null : tool.id as HookToolId)}
+            disabled={hookInserted}
             activeOpacity={0.75}
           >
             <Feather
@@ -54,7 +49,9 @@ export function IntestineExposurePanel() {
               <Text style={[styles.toolName, { color: isSelected ? colors.primary : colors.foreground }]}>
                 {tool.id}
               </Text>
-              <Text style={[styles.toolDesc, { color: colors.mutedForeground }]}>{tool.desc}</Text>
+              <Text style={[styles.toolDesc, { color: colors.mutedForeground }]}>
+                {tool.desc} · {tool.rodLength}px杆长
+              </Text>
             </View>
             {isSelected && (
               <View style={[styles.dot, { backgroundColor: colors.primary }]} />
@@ -65,7 +62,7 @@ export function IntestineExposurePanel() {
 
       <View style={[styles.divider, { backgroundColor: colors.border }]} />
 
-      {/* Status */}
+      {/* Status indicators */}
       <View style={styles.statusRow}>
         <View style={[styles.statusDot, { backgroundColor: navelPierced ? '#88dd88' : '#888' }]} />
         <Text style={[styles.statusText, { color: colors.mutedForeground }]}>
@@ -73,75 +70,38 @@ export function IntestineExposurePanel() {
         </Text>
       </View>
 
+      {hookInserted && (
+        <View style={styles.statusRow}>
+          <View style={[styles.statusDot, { backgroundColor: '#88aaff' }]} />
+          <Text style={[styles.statusText, { color: '#88aaff' }]}>
+            工具已插入 {hookGrabActive ? '· 抓取中' : ''}
+          </Text>
+        </View>
+      )}
+
+      {hasPending && (
+        <View style={styles.statusRow}>
+          <View style={[styles.statusDot, { backgroundColor: '#ff8844' }]} />
+          <Text style={[styles.statusText, { color: '#ff8844' }]}>
+            已钩住 {hookedPendingIndices!.length} 节 — 向外拖动拉出
+          </Text>
+        </View>
+      )}
+
       {exposedSmallIndices.length > 0 && (
         <View style={styles.statusRow}>
           <View style={[styles.statusDot, { backgroundColor: '#ff8844' }]} />
           <Text style={[styles.statusText, { color: '#ff8844' }]}>
-            {exposedSmallIndices.length} 节肠管已露出
+            {exposedSmallIndices.length} 节肠管已露出体外
           </Text>
         </View>
       )}
 
       <View style={[styles.divider, { backgroundColor: colors.border }]} />
 
-      {/* Action buttons */}
-      {!hookInserted ? (
-        <TouchableOpacity
-          style={[
-            styles.actionBtn,
-            {
-              borderColor: (navelPierced && !!hookTool) ? `${colors.primary}cc` : `${colors.border}66`,
-              opacity: (navelPierced && !!hookTool) ? 1 : 0.45,
-            },
-          ]}
-          onPress={insertHookViaNavel}
-          disabled={!navelPierced || !hookTool}
-          activeOpacity={0.75}
-        >
-          <Feather name="log-in" size={13} color={colors.primary} />
-          <Text style={[styles.actionText, { color: colors.primary }]}>经肚脐插入</Text>
-        </TouchableOpacity>
-      ) : (
-        <>
-          {!hookGrabActive ? (
-            <TouchableOpacity
-              style={[styles.actionBtn, { borderColor: '#ff884499' }]}
-              onPress={activateHookGrab}
-              activeOpacity={0.75}
-            >
-              <Feather name="zap" size={13} color="#ff8844" />
-              <Text style={[styles.actionText, { color: '#ff8844' }]}>勾住肠管</Text>
-            </TouchableOpacity>
-          ) : (
-            <View style={[styles.actionBtn, { borderColor: '#ff884466', opacity: 0.65 }]}>
-              <Feather name="check-circle" size={13} color="#ff8844" />
-              <Text style={[styles.actionText, { color: '#ff8844' }]}>
-                {state.hookedSmallSegIdx >= 0 ? '已钩住 — 拖动钩出' : '搜索中...'}
-              </Text>
-            </View>
-          )}
-
-          <TouchableOpacity
-            style={[styles.actionBtn, { borderColor: `${colors.border}88`, marginTop: 4 }]}
-            onPress={retractHook}
-            activeOpacity={0.75}
-          >
-            <Feather name="log-out" size={13} color={colors.mutedForeground} />
-            <Text style={[styles.actionText, { color: colors.mutedForeground }]}>收回工具</Text>
-          </TouchableOpacity>
-        </>
-      )}
-
-      {exposedSmallIndices.length > 0 && (
-        <TouchableOpacity
-          style={[styles.actionBtn, { borderColor: '#e8404066', marginTop: 4 }]}
-          onPress={clearExposedNodes}
-          activeOpacity={0.75}
-        >
-          <Feather name="rotate-ccw" size={13} color="#e84040" />
-          <Text style={[styles.actionText, { color: '#e84040' }]}>还纳肠管</Text>
-        </TouchableOpacity>
-      )}
+      <Text style={[styles.hint, { color: colors.mutedForeground }]}>
+        操作按钮显示在屏幕下方
+      </Text>
 
       <View style={styles.spacer} />
     </ScrollView>
@@ -176,16 +136,6 @@ const styles = StyleSheet.create({
   statusRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 4, paddingHorizontal: 2 },
   statusDot: { width: 6, height: 6, borderRadius: 3 },
   statusText: { fontSize: 10, fontFamily: 'Inter_400Regular' },
-  actionBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-    borderRadius: 6,
-    borderWidth: 1,
-    marginBottom: 4,
-  },
-  actionText: { fontSize: 11, fontFamily: 'Inter_600SemiBold' },
+  hint: { fontSize: 9, fontFamily: 'Inter_400Regular', paddingHorizontal: 4, opacity: 0.6 },
   spacer: { height: 8 },
 });

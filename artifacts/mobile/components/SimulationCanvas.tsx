@@ -523,7 +523,7 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
       if (s.hookInserted && !s.hookGrabActive && s.hookTool) {
         const hp = physicsRef.current;
         if (hp.hookAnchor && hp.hookPos) {
-          const HOOK_ROD_LEN = 90;
+          const HOOK_ROD_LEN = hp.hookRodLength || 90;
           const hdist = Math.hypot(hp.hookPos.x - hp.hookAnchor.x, hp.hookPos.y - hp.hookAnchor.y) || 1;
           const insideLen = Math.max(0, HOOK_ROD_LEN - hdist);
           const dx = (hp.hookAnchor.x - hp.hookPos.x) / hdist;
@@ -2614,7 +2614,7 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
           if (!hp.hookInserted || !hp.hookAnchor || !hp.hookPos) return null;
           const anchor = hp.hookAnchor;
           const handle = hp.hookPos;
-          const HOOK_ROD_LEN = 90;
+          const HOOK_ROD_LEN = hp.hookRodLength || 90;
           const hdist = Math.hypot(handle.x - anchor.x, handle.y - anchor.y) || 1;
           const insideLen = Math.max(0, HOOK_ROD_LEN - hdist);
           if (insideLen < 0.5) return null;
@@ -2626,6 +2626,7 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
             : hp.hookToolType === '铁钩' ? '#c8d0d8'
             : hp.hookToolType === '长柄夹' ? '#909090'
             : '#dde0e8';
+          const hasPending = hp.hookedPendingIndices && hp.hookedPendingIndices.length > 0;
           return (
             <G>
               {/* External handle rod */}
@@ -2642,44 +2643,59 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
                 fill={hp.hookGrabActive ? 'rgba(255,140,80,0.8)' : `${hookColor}cc`}
                 stroke={hp.hookGrabActive ? '#ff8844' : hookColor}
                 strokeWidth={1.5} />
-              {hp.hookGrabActive && hp.hookedSmallSegIdx < 0 && (
+              {hp.hookGrabActive && !hasPending && hp.hookedSmallSegIdx < 0 && (
                 <Circle cx={headX} cy={headY} r={12}
                   fill="none" stroke="rgba(255,140,80,0.4)" strokeWidth={1.5} strokeDasharray="3 2" />
               )}
+              {/* Hooked-but-pending nodes: subtle orange glow to show what's grabbed */}
+              {hasPending && hp.hookedPendingIndices.map((pi) => {
+                const n = renderSmallNodes[pi];
+                if (!n) return null;
+                return (
+                  <Circle key={`pend-${pi}`} cx={n.x} cy={n.y} r={SMALL_RADIUS + 3}
+                    fill="none" stroke="rgba(255,160,50,0.5)" strokeWidth={2} />
+                );
+              })}
             </G>
           );
         })()}
 
-        {/* === EXPOSED SMALL INTESTINE segments (outside body) — rendered over cavity clip === */}
+        {/* === EXPOSED SMALL INTESTINE segments (outside body) — same style as internal === */}
         {(() => {
           const expIdx = physicsRef.current.exposedSmallIndices;
           if (expIdx.length === 0) return null;
-          const expSet = new Set(expIdx);
-          // Find contiguous runs of exposed segments and render them
-          const paths: string[] = [];
-          let run: { x: number; y: number }[] = [];
-          for (let i = 0; i < renderSmallNodes.length - 1; i++) {
-            if (expSet.has(i) && expSet.has(i + 1)) {
-              run.push(renderSmallNodes[i]);
-              if (i + 1 === renderSmallNodes.length - 1) run.push(renderSmallNodes[i + 1]);
-            } else {
-              if (run.length > 0) { run.push(renderSmallNodes[i]); paths.push(buildSmoothPath(run)); run = []; }
-            }
-          }
-          if (run.length > 0) paths.push(buildSmoothPath(run));
           return (
             <G>
-              {paths.map((d, pi) => (
-                <G key={`exp-${pi}`}>
-                  <Path d={d} stroke="rgba(255,120,120,0.55)" strokeWidth={21} fill="none" strokeLinecap="round" strokeLinejoin="round" />
-                  <Path d={d} stroke="#e86868" strokeWidth={17} fill="none" strokeLinecap="round" strokeLinejoin="round" />
-                  <Path d={d} stroke="rgba(255,200,180,0.22)" strokeWidth={8} fill="none" strokeLinecap="round" />
-                </G>
-              ))}
+              {/* Pass 1: outline casing — matches internal small intestine style */}
               {expIdx.map(i => {
-                const n = renderSmallNodes[i];
-                if (!n) return null;
-                return <Circle key={`expn-${i}`} cx={n.x} cy={n.y} r={3} fill="rgba(255,100,100,0.6)" />;
+                const d = smallSegPaths[i];
+                if (!d) return null;
+                const seg = renderSmallSegs[i];
+                if (!seg || seg.broken || seg.resected) return null;
+                const sPeriScale = periScaleSmall?.[i] ?? 1;
+                const w = SMALL_RADIUS * sPeriScale * 2 + (seg.pressure / 100) * SMALL_RADIUS * expansionScale;
+                return (
+                  <Path key={`exp-out-${i}`} d={d}
+                    stroke="rgba(175, 100, 80, 0.55)"
+                    strokeWidth={w + 3.5}
+                    fill="none" strokeLinecap="round" strokeLinejoin="round" />
+                );
+              })}
+              {/* Pass 2: fill + highlight — exact same segmentColor as internal */}
+              {expIdx.map(i => {
+                const d = smallSegPaths[i];
+                if (!d) return null;
+                const seg = renderSmallSegs[i];
+                if (!seg || seg.broken || seg.resected) return null;
+                const sPeriScale = periScaleSmall?.[i] ?? 1;
+                const w = SMALL_RADIUS * sPeriScale * 2 + (seg.pressure / 100) * SMALL_RADIUS * expansionScale;
+                const col = segmentColor(seg.health, seg.pain, seg.pressure, seg.ruptured, seg.broken, seg.perforated, false, smallTransplantColor ?? undefined);
+                return (
+                  <G key={`exp-${i}`}>
+                    <Path d={d} stroke={col} strokeWidth={w} fill="none" strokeLinecap="round" strokeLinejoin="round" />
+                    <Path d={d} stroke="rgba(255,220,200,0.18)" strokeWidth={SMALL_RADIUS * 0.7} fill="none" strokeLinecap="round" />
+                  </G>
+                );
               })}
             </G>
           );

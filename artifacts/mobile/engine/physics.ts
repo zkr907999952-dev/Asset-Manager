@@ -122,12 +122,14 @@ export interface PhysicsState {
   bulletHitLarge: number[];  // length N_LARGE-1
   // === Intestine exposure hook tool (小肠露出) ===
   hookToolType: string | null;
+  hookRodLength: number;           // lever rod length in physics px (from tool definition)
   hookPos: { x: number; y: number } | null;
   hookAnchor: { x: number; y: number } | null;
   hookInserted: boolean;
   hookGrabActive: boolean;
-  hookedSmallSegIdx: number;  // -1 = none
-  exposedSmallIndices: number[];  // sorted ascending: small node indices that are outside the body
+  hookedSmallSegIdx: number;       // -1 = none; center node of hooked range
+  hookedPendingIndices: number[];  // nodes grabbed but not yet exposed (inside body)
+  exposedSmallIndices: number[];   // sorted ascending: nodes outside the body
   exposurePendingTrigger: boolean; // flag set by physics when insideLen→0 with grab active
 }
 
@@ -311,10 +313,12 @@ export function stepPhysics(state: PhysicsState) {
   // --- Verlet integration with per-node mesentery ---
   // Pre-compute exposed index set once per frame (guard against uninitialised state)
   if (!state.exposedSmallIndices) state.exposedSmallIndices = [];
+  if (!state.hookedPendingIndices) state.hookedPendingIndices = [];
   if (state.hookInserted === undefined) state.hookInserted = false;
   if (state.hookGrabActive === undefined) state.hookGrabActive = false;
   if (state.hookedSmallSegIdx === undefined) state.hookedSmallSegIdx = -1;
   if (state.exposurePendingTrigger === undefined) state.exposurePendingTrigger = false;
+  if (!state.hookRodLength) state.hookRodLength = 90;
 
   const exposedSet: Set<number> = state.exposedSmallIndices.length > 0
     ? new Set(state.exposedSmallIndices)
@@ -1256,18 +1260,24 @@ export function stepPhysics(state: PhysicsState) {
 
   // === HOOK TOOL (小肠露出) physics ===
   if (state.hookInserted && state.hookAnchor && state.hookPos) {
-    const HOOK_ROD_LEN = 90;
+    const HOOK_ROD_LEN = state.hookRodLength || 90;
     const a = state.hookAnchor;
     const tp = state.hookPos;
     const handleDist = dist(tp.x, tp.y, a.x, a.y);
     const insideLen = Math.max(0, HOOK_ROD_LEN - handleDist);
 
     if (insideLen < 0.5) {
-      // Rod withdrawn — clear everything
+      // Rod pulled back to navel
+      if (state.hookGrabActive && state.hookedPendingIndices.length > 0) {
+        // Grabbed intestine exits navel — expose pending nodes
+        state.exposedSmallIndices = [...state.hookedPendingIndices].sort((a, b) => a - b);
+        state.exposurePendingTrigger = true;
+      }
+      // Tool retracts regardless
       state.hookInserted = false;
       state.hookGrabActive = false;
       state.hookedSmallSegIdx = -1;
-      state.exposedSmallIndices = [];
+      state.hookedPendingIndices = [];
     } else {
       // Compute hook head position (lever geometry)
       let hdx = a.x - tp.x, hdy = a.y - tp.y;
@@ -1276,63 +1286,41 @@ export function stepPhysics(state: PhysicsState) {
       const headX = a.x + hdx * insideLen;
       const headY = a.y + hdy * insideLen;
 
-      // Grab nearest small intestine node not already exposed
-      if (state.hookGrabActive && state.hookedSmallSegIdx < 0) {
+      // Grab a contiguous range of nodes when grab is first activated
+      if (state.hookGrabActive && state.hookedPendingIndices.length === 0 && state.hookedSmallSegIdx < 0) {
         const def = state.hookToolType;
-        const grabRange = def === '手指勾肠' ? 22
-          : def === '铁钩' ? 32
+        const grabRange = def === '手指勾肠' ? 20
+          : def === '铁钩' ? 30
           : def === '长柄夹' ? 42
-          : 55; // 手术机械臂
-        let bestIdx = -1, bestD = grabRange + 1;
+          : 58; // 手术机械臂
+        // Collect all nodes within grab range
+        const matched: number[] = [];
         for (let i = 1; i < state.smallNodes.length - 1; i++) {
           if (exposedSet.has(i)) continue;
           const d = dist(state.smallNodes[i].x, state.smallNodes[i].y, headX, headY);
-          if (d < bestD) { bestD = d; bestIdx = i; }
+          if (d < grabRange) matched.push(i);
         }
-        if (bestIdx >= 0) {
-          state.hookedSmallSegIdx = bestIdx;
-          // Mark immediate neighbors as exposed too (initial pull)
-          const newExp = new Set(state.exposedSmallIndices);
-          const lo = Math.max(1, bestIdx - 1);
-          const hi = Math.min(state.smallNodes.length - 2, bestIdx + 1);
-          for (let ii = lo; ii <= hi; ii++) newExp.add(ii);
-          state.exposedSmallIndices = Array.from(newExp).sort((a, b) => a - b);
+        if (matched.length > 0) {
+          // Expand to contiguous range (min..max of matched indices)
+          const lo = Math.max(1, matched[0] - 1);
+          const hi = Math.min(state.smallNodes.length - 2, matched[matched.length - 1] + 1);
+          const pending: number[] = [];
+          for (let i = lo; i <= hi; i++) {
+            if (!exposedSet.has(i)) pending.push(i);
+          }
+          state.hookedPendingIndices = pending;
+          state.hookedSmallSegIdx = matched[Math.floor(matched.length / 2)];
         }
       }
 
-      // Pull hooked node toward hook head
-      if (state.hookGrabActive && state.hookedSmallSegIdx >= 0) {
-        const hookedNode = state.smallNodes[state.hookedSmallSegIdx];
-        if (hookedNode && !hookedNode.pinned) {
-          const pdx = headX - hookedNode.x, pdy = headY - hookedNode.y;
-          hookedNode.x += pdx * 0.18;
-          hookedNode.y += pdy * 0.18;
-        }
-        // Expand exposed set: if an adjacent internal node drifted far from anchor, expose it
-        const expandThreshold = 38;
-        const expArr = state.exposedSmallIndices;
-        if (expArr.length > 0) {
-          const lo2 = expArr[0];
-          const hi2 = expArr[expArr.length - 1];
-          const neighborLo = lo2 - 1;
-          const neighborHi = hi2 + 1;
-          if (neighborLo >= 1) {
-            const nLo = state.smallNodes[neighborLo];
-            if (nLo && dist(nLo.x, nLo.y, CAVITY_CX, CAVITY_CY) > expandThreshold) {
-              expArr.unshift(neighborLo);
-              expArr.sort((x, y) => x - y);
-            }
-          }
-          if (neighborHi <= state.smallNodes.length - 2) {
-            const nHi = state.smallNodes[neighborHi];
-            if (nHi && dist(nHi.x, nHi.y, CAVITY_CX, CAVITY_CY) > expandThreshold) {
-              expArr.push(neighborHi);
-              expArr.sort((x, y) => x - y);
-            }
-          }
-          // Check if insideLen near 0 — trigger view switch
-          if (insideLen < 5 && !state.exposurePendingTrigger) {
-            state.exposurePendingTrigger = true;
+      // Pull ALL pending nodes toward hook head
+      if (state.hookGrabActive && state.hookedPendingIndices.length > 0) {
+        for (const pi of state.hookedPendingIndices) {
+          const hookedNode = state.smallNodes[pi];
+          if (hookedNode && !hookedNode.pinned) {
+            const pdx = headX - hookedNode.x, pdy = headY - hookedNode.y;
+            hookedNode.x += pdx * 0.18;
+            hookedNode.y += pdy * 0.18;
           }
         }
       }
