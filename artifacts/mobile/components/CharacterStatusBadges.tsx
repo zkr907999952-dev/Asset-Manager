@@ -29,6 +29,7 @@ function getBadges(
   heartRateModifier: number,
   avgPain: number,
   isDead: boolean,
+  exposedCount: number,
 ): BadgeInfo[] {
   const badges: BadgeInfo[] = [];
 
@@ -59,11 +60,14 @@ function getBadges(
     }
   }
 
+  if (exposedCount > 0) {
+    badges.push({ label: `肠管露出×${exposedCount}`, color: '#ff9966', bg: '#2a1000', priority: 4 });
+  }
   if (breaks > 0) {
-    badges.push({ label: `肠管断裂×${breaks}`, color: '#ff4444', bg: '#220000', priority: 4 });
+    badges.push({ label: `肠管断裂×${breaks}`, color: '#ff4444', bg: '#220000', priority: 5 });
   }
   if (ruptures > 0) {
-    badges.push({ label: `肠穿孔×${ruptures}`, color: '#cc88ff', bg: '#110022', priority: 5 });
+    badges.push({ label: `肠穿孔×${ruptures}`, color: '#cc88ff', bg: '#110022', priority: 6 });
   }
 
   if (hp < 20 && comaState === 'none') {
@@ -87,13 +91,14 @@ interface Props {
   heartRateModifier: number;
   avgPain: number;
   compact?: boolean;
+  exposedCount?: number;
 }
 
 export function CharacterStatusBadges({
-  comaState, heartRate, hp, isDead = false, ruptures, breaks, heartRateModifier, avgPain, compact = false,
+  comaState, heartRate, hp, isDead = false, ruptures, breaks, heartRateModifier, avgPain, compact = false, exposedCount = 0,
 }: Props) {
   const colors = useColors();
-  const badges = getBadges(comaState, heartRate, hp, ruptures, breaks, heartRateModifier, avgPain, isDead);
+  const badges = getBadges(comaState, heartRate, hp, ruptures, breaks, heartRateModifier, avgPain, isDead, exposedCount);
 
   if (compact) {
     return (

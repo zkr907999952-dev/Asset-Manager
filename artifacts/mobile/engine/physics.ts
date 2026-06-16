@@ -336,9 +336,9 @@ export function stepPhysics(state: PhysicsState) {
       const isAnchor = isExposed && (idx === minExpIdx || idx === maxExpIdx);
 
       if (isAnchor) {
-        // Strongly pull anchor toward navel; kill velocity to simulate tethering
-        n.x += (CAVITY_CX - n.x) * 0.32;
-        n.y += (CAVITY_CY - n.y) * 0.32;
+        // Hard-pin anchor exactly at navel — not a spring, cannot be dragged
+        n.x = CAVITY_CX;
+        n.y = CAVITY_CY;
         n.px = n.x; n.py = n.y;
         continue;
       }
@@ -1289,27 +1289,20 @@ export function stepPhysics(state: PhysicsState) {
       // Grab a contiguous range of nodes when grab is first activated
       if (state.hookGrabActive && state.hookedPendingIndices.length === 0 && state.hookedSmallSegIdx < 0) {
         const def = state.hookToolType;
-        const grabRange = def === '手指勾肠' ? 20
-          : def === '铁钩' ? 30
-          : def === '长柄夹' ? 42
-          : 58; // 手术机械臂
-        // Collect all nodes within grab range
-        const matched: number[] = [];
+        const grabRange = def === '手指勾肠' ? 22
+          : def === '铁钩' ? 32
+          : def === '长柄夹' ? 44
+          : 60; // 手术机械臂
+        // Find the single nearest non-exposed node within grab range
+        let bestIdx = -1, bestDist = grabRange;
         for (let i = 1; i < state.smallNodes.length - 1; i++) {
           if (exposedSet.has(i)) continue;
           const d = dist(state.smallNodes[i].x, state.smallNodes[i].y, headX, headY);
-          if (d < grabRange) matched.push(i);
+          if (d < bestDist) { bestDist = d; bestIdx = i; }
         }
-        if (matched.length > 0) {
-          // Expand to contiguous range (min..max of matched indices)
-          const lo = Math.max(1, matched[0] - 1);
-          const hi = Math.min(state.smallNodes.length - 2, matched[matched.length - 1] + 1);
-          const pending: number[] = [];
-          for (let i = lo; i <= hi; i++) {
-            if (!exposedSet.has(i)) pending.push(i);
-          }
-          state.hookedPendingIndices = pending;
-          state.hookedSmallSegIdx = matched[Math.floor(matched.length / 2)];
+        if (bestIdx >= 0) {
+          state.hookedPendingIndices = [bestIdx];
+          state.hookedSmallSegIdx = bestIdx;
         }
       }
 

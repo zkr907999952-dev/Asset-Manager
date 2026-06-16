@@ -102,7 +102,10 @@ export type DialogueTrigger =
   | 'strike_hammer_low'
   | 'strike_hammer_mid'
   | 'strike_hammer_high'
-  | 'dead_revive';
+  | 'dead_revive'
+  | 'expose_hook'
+  | 'expose_pulled'
+  | 'expose_complete';
 
 export const DIALOGUES: Record<DialogueTrigger, string[]> = {
   idle: [
@@ -596,6 +599,25 @@ export const DIALOGUES: Record<DialogueTrigger, string[]> = {
     '嗯……心跳……又有了……好险……',
     '啊……急救……把我……救回来了……',
     '……活……过来了……感谢……',
+  ],
+  expose_hook: [
+    '唔……！？什么东西钩住我的肠子了……！',
+    '啊……里面……被钩子勾到了……！好怪的感觉……',
+    '呜……肠子……被钩到了……！别拉……！',
+    '嗯……！有东西钩住了……里面……',
+  ],
+  expose_pulled: [
+    '啊啊……！往外扯……！别扯了……！',
+    '不行……！肠子……要被拉出来了……！',
+    '呜……！别使劲拉……肠子……受不了……！',
+    '嗯啊……！里面在往外……被拽出去了……！',
+  ],
+  expose_complete: [
+    '啊……这是……我的肠子……？！',
+    '我的肠子……被扯出来了……！怎么……怎么会……！',
+    '呜啊……肠子在外面……好奇怪……好冷……',
+    '不……不行……肠子都出来了……！',
+    '啊啊……！这是我的肠子吗……！真的露出来了……！',
   ],
 };
 

@@ -232,6 +232,7 @@ export function SimulationScreen({ onMenuPress }: Props) {
               breaks={state.intestinalBreaks}
               heartRateModifier={state.heartRateModifier}
               avgPain={avgPain}
+              exposedCount={state.exposedSmallIndices?.length ?? 0}
               compact
             />
           </View>

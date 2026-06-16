@@ -2645,7 +2645,8 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     if (!p.hookInserted) return;
     p.hookGrabActive = true;
     setState(prev => ({ ...prev, hookGrabActive: true }));
-  }, []);
+    triggerDialogue('expose_hook');
+  }, [triggerDialogue]);
 
   const clearExposedNodes = useCallback(() => {
     const p = physicsRef.current;
@@ -2666,6 +2667,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         exposureTriggerHandledRef.current = true;
         p.exposurePendingTrigger = false;
         setState(prev => ({ ...prev, viewMode: 'external' }));
+        triggerDialogue('expose_complete');
       }
       if (!p.hookInserted) {
         exposureTriggerHandledRef.current = false;
