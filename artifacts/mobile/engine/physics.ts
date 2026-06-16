@@ -1694,6 +1694,50 @@ export function applyGunshotPhysics(
   state.strikeWave = { x: physX, y: physY, radius: 0, maxRadius, strength: shockwavePower, growRate };
 }
 
+// applyKatanaSlashPhysics: breaks all segments whose midpoint lies within halfWidth of the
+// line segment (x1,y1)→(x2,y2). Also pushes nodes perpendicularly away from the blade.
+export function applyKatanaSlashPhysics(
+  state: PhysicsState,
+  x1: number, y1: number,
+  x2: number, y2: number,
+  halfWidth: number,
+): void {
+  const dx = x2 - x1, dy = y2 - y1;
+  const lenSq = dx * dx + dy * dy;
+  const len = Math.sqrt(lenSq) || 1;
+  // Unit perpendicular to slash direction (for push force)
+  const perpX = -dy / len, perpY = dx / len;
+
+  const processNodes = (nodes: PhysicsNode[], segs: SegmentProps[]) => {
+    for (let i = 0; i < segs.length; i++) {
+      const seg = segs[i];
+      if (!seg || seg.resected) continue;
+      const na = nodes[i], nb = nodes[i + 1];
+      if (!na || !nb) continue;
+      const mx = (na.x + nb.x) / 2;
+      const my = (na.y + nb.y) / 2;
+      // Project (mx,my) onto line segment (x1,y1)→(x2,y2)
+      const t = lenSq > 0 ? Math.max(0, Math.min(1, ((mx - x1) * dx + (my - y1) * dy) / lenSq)) : 0;
+      const closestX = x1 + t * dx;
+      const closestY = y1 + t * dy;
+      const dist = Math.hypot(mx - closestX, my - closestY);
+      if (dist <= halfWidth) {
+        seg.broken = true;
+        seg.health = 0;
+        seg.pain = Math.min(100, seg.pain + 60);
+        // Push nodes perpendicular to slash (outward from blade)
+        const sign = ((mx - x1) * perpX + (my - y1) * perpY) >= 0 ? 1 : -1;
+        const push = 3.5;
+        if (!na.pinned) { na.px -= perpX * sign * push; na.py -= perpY * sign * push; }
+        if (!nb.pinned) { nb.px -= perpX * sign * push; nb.py -= perpY * sign * push; }
+      }
+    }
+  };
+
+  processNodes(state.smallNodes, state.smallSegs);
+  processNodes(state.largeNodes, state.largeSegs);
+}
+
 export function buildSmoothPath(nodes: { x: number; y: number }[]): string {
   if (nodes.length < 2) return '';
   let d = `M ${nodes[0].x.toFixed(1)} ${nodes[0].y.toFixed(1)}`;

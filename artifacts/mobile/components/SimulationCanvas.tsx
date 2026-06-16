@@ -7,6 +7,7 @@ import Svg, {
 } from 'react-native-svg';
 import { StrikeHammerAnim } from './icons/StrikeHammerAnim';
 const AnimatedCircle = Animated.createAnimatedComponent(Circle);
+const AnimatedLine = Animated.createAnimatedComponent(Line);
 type WaveEntry = { id: number; physX: number; physY: number; maxR: number; anim: Animated.Value };
 
 const STRIKE_ANIM_IMAGES: Record<string, any> = {
@@ -247,7 +248,7 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
     setEnemaInSmall, setEnemaSmallHeadIdx, setEnemaTarget,
     setSiliconeTarget, setBeadsTarget, setEggTarget,
     toggleMesenteryNode, setResectionSelection,
-    applyBellyStrike, applyGunshot,
+    applyBellyStrike, applyGunshot, applyKatanaSlash,
     insertHookViaNavel, retractHook, activateHookGrab, clearExposedNodes,
   } = useGame();
   const lastDialogueTime = useRef(0);
@@ -294,6 +295,18 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
 
   // Exposed intestine expand throttle (used when grab tool pulls exposed nodes far from navel)
   const exposedExpandLastRef = useRef<number>(0);
+
+  // Katana slash drag state
+  const katanaDragRef = useRef<{
+    active: boolean;
+    startX: number; startY: number;
+    endX: number; endY: number;
+  }>({ active: false, startX: 0, startY: 0, endX: 0, endY: 0 });
+  const [katanaSlashOverlay, setKatanaSlashOverlay] = useState<{
+    x1: number; y1: number; x2: number; y2: number; halfWidth: number;
+  } | null>(null);
+  const katanaSweepAnim = useRef(new Animated.Value(0)).current;
+  const [katanaSweepLine, setKatanaSweepLine] = useState<{ x1: number; y1: number; x2: number; y2: number } | null>(null);
 
   // Belly strike drag state
   const bellyStrikeDragRef = useRef<{
@@ -365,6 +378,7 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
     setResectionSelection,
     applyBellyStrike,
     applyGunshot,
+    applyKatanaSlash,
     insertHookViaNavel,
     retractHook,
     activateHookGrab,
@@ -387,6 +401,7 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
   hrRef.current.setResectionSelection = setResectionSelection;
   hrRef.current.applyBellyStrike = applyBellyStrike;
   hrRef.current.applyGunshot = applyGunshot;
+  hrRef.current.applyKatanaSlash = applyKatanaSlash;
   hrRef.current.insertHookViaNavel = insertHookViaNavel;
   hrRef.current.retractHook = retractHook;
   hrRef.current.activateHookGrab = activateHookGrab;
@@ -421,6 +436,13 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
       const { locationX, locationY } = evt.nativeEvent;
       const touchOfsY = s.touchOffsetY ?? 0;
       const pos = tpc(locationX, locationY - touchOfsY);
+
+      // Katana slash: if katana selected, start slash drag
+      if (s.selectedWeapon === '武士刀' && !s.resectionSelectionMode && !s.mesenterySelectionMode && !s.bellyStrikeTool) {
+        katanaDragRef.current = { active: true, startX: pos.x, startY: pos.y, endX: pos.x, endY: pos.y };
+        setKatanaSlashOverlay({ x1: pos.x, y1: pos.y, x2: pos.x, y2: pos.y, halfWidth: s.katanaSlashWidth ?? 24 });
+        return;
+      }
 
       // Weapon aiming mode: finger down starts aiming; aim point offset by touchOffsetY
       if (s.selectedWeapon && !s.resectionSelectionMode && !s.mesenterySelectionMode && !s.bellyStrikeTool) {
@@ -708,6 +730,15 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
       const touchOfsY = s.touchOffsetY ?? 0;
       const pos = tpc(locationX, locationY - touchOfsY);
 
+      // Katana slash drag: update end point
+      if (katanaDragRef.current.active) {
+        katanaDragRef.current.endX = pos.x;
+        katanaDragRef.current.endY = pos.y;
+        const { state: s2 } = hrRef.current;
+        setKatanaSlashOverlay({ x1: katanaDragRef.current.startX, y1: katanaDragRef.current.startY, x2: pos.x, y2: pos.y, halfWidth: s2.katanaSlashWidth ?? 24 });
+        return;
+      }
+
       // Weapon aiming drag: update aim position
       if (gunAimDragRef.current.active) {
         const aimPos = tpc(locationX, locationY - touchOfsY);
@@ -968,6 +999,40 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
     },
     onPanResponderRelease: () => {
       isDragging.current = false;
+
+      // Katana slash on release: trigger physics + effects
+      if (katanaDragRef.current.active) {
+        katanaDragRef.current.active = false;
+        const { startX, startY, endX, endY } = katanaDragRef.current;
+        setKatanaSlashOverlay(null);
+        const { applyKatanaSlash: aks } = hrRef.current;
+        const slashLen = Math.hypot(endX - startX, endY - startY);
+        if (slashLen > 8 && aks) {
+          aks(startX, startY, endX, endY);
+        }
+        // White flash
+        setFlashColor('rgba(255,255,255,0.82)');
+        strikeFlashAnim.setValue(1);
+        Animated.timing(strikeFlashAnim, { toValue: 0, duration: 240, useNativeDriver: false }).start();
+        // Screen shake
+        shakeAnim.setValue(0);
+        Animated.sequence([
+          Animated.timing(shakeAnim, { toValue: 12, duration: 25, useNativeDriver: true }),
+          Animated.timing(shakeAnim, { toValue: -10, duration: 35, useNativeDriver: true }),
+          Animated.timing(shakeAnim, { toValue: 5, duration: 25, useNativeDriver: true }),
+          Animated.timing(shakeAnim, { toValue: -3, duration: 20, useNativeDriver: true }),
+          Animated.timing(shakeAnim, { toValue: 0, duration: 15, useNativeDriver: true }),
+        ]).start();
+        // Sweep glow line fades out
+        if (slashLen > 8) {
+          setKatanaSweepLine({ x1: startX, y1: startY, x2: endX, y2: endY });
+          katanaSweepAnim.setValue(1);
+          Animated.timing(katanaSweepAnim, { toValue: 0, duration: 350, useNativeDriver: false }).start(() => {
+            setKatanaSweepLine(null);
+          });
+        }
+        return;
+      }
 
       // Weapon fire on release: instant fire at aim point
       if (gunAimDragRef.current.active) {
@@ -2902,6 +2967,63 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
             );
           }
         })}
+
+        {/* Katana slash scars — persistent red cuts */}
+        {state.slashScars && state.slashScars.map((scar) => (
+          <G key={`ks-${scar.id}`}>
+            <Line
+              x1={scar.physX1} y1={scar.physY1} x2={scar.physX2} y2={scar.physY2}
+              stroke="rgba(160,0,0,0.50)" strokeWidth={5} strokeLinecap="round" />
+            <Line
+              x1={scar.physX1} y1={scar.physY1} x2={scar.physX2} y2={scar.physY2}
+              stroke="rgba(230,20,20,0.85)" strokeWidth={1.5} strokeLinecap="round" />
+          </G>
+        ))}
+
+        {/* Katana sweep glow line — fades out after slash */}
+        {katanaSweepLine && (() => {
+          const opacityGlow = katanaSweepAnim.interpolate({ inputRange: [0, 1], outputRange: [0, 0.35] });
+          const opacityCore = katanaSweepAnim.interpolate({ inputRange: [0, 1], outputRange: [0, 0.95] });
+          return (
+            <G>
+              <AnimatedLine
+                x1={katanaSweepLine.x1} y1={katanaSweepLine.y1}
+                x2={katanaSweepLine.x2} y2={katanaSweepLine.y2}
+                stroke="rgba(255,255,255,1)" strokeWidth={12} strokeLinecap="round"
+                opacity={opacityGlow} />
+              <AnimatedLine
+                x1={katanaSweepLine.x1} y1={katanaSweepLine.y1}
+                x2={katanaSweepLine.x2} y2={katanaSweepLine.y2}
+                stroke="rgba(255,240,200,1)" strokeWidth={2.5} strokeLinecap="round"
+                opacity={opacityCore} />
+            </G>
+          );
+        })()}
+
+        {/* Katana slash overlay during drag — center line + range band */}
+        {katanaSlashOverlay && (() => {
+          const { x1, y1, x2, y2, halfWidth } = katanaSlashOverlay;
+          const dx = x2 - x1, dy = y2 - y1;
+          const len = Math.hypot(dx, dy) || 1;
+          const nx = -dy / len * halfWidth, ny = dx / len * halfWidth;
+          const bandPath = [
+            `M ${(x1 + nx).toFixed(1)} ${(y1 + ny).toFixed(1)}`,
+            `L ${(x2 + nx).toFixed(1)} ${(y2 + ny).toFixed(1)}`,
+            `L ${(x2 - nx).toFixed(1)} ${(y2 - ny).toFixed(1)}`,
+            `L ${(x1 - nx).toFixed(1)} ${(y1 - ny).toFixed(1)}`,
+            'Z',
+          ].join(' ');
+          return (
+            <G>
+              <Path d={bandPath} fill="rgba(220,60,160,0.10)" stroke="rgba(220,60,160,0.50)"
+                strokeWidth={1.2} strokeDasharray="5,4" />
+              <Line x1={x1} y1={y1} x2={x2} y2={y2}
+                stroke="rgba(255,80,200,0.85)" strokeWidth={1.8} strokeLinecap="round" strokeDasharray="6,3" />
+              <Circle cx={x1} cy={y1} r={4} fill="rgba(255,80,200,0.9)" />
+              <Circle cx={x2} cy={y2} r={3} fill="rgba(255,80,200,0.7)" />
+            </G>
+          );
+        })()}
 
         {/* Bullet holes on external view — AI-generated textures */}
         {!isInternal && state.bulletHoles && state.bulletHoles.map((hole) => {

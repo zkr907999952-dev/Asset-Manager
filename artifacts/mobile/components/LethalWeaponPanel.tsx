@@ -13,6 +13,15 @@ function WeaponIcon({ id, selected, size }: { id: LethalWeaponId; selected: bool
   if (id === '9MM手枪')            return <WeaponPistol9mmIcon  size={size ?? 44} selected={selected} />;
   if (id === '7.62mm步枪')         return <WeaponRifle762Icon   size={size ?? 52} selected={selected} />;
   if (id === '12.7mm反器材狙击枪') return <WeaponSniper127Icon  size={size ?? 56} selected={selected} />;
+  if (id === '武士刀') {
+    const c = selected ? '#cc44aa' : '#888899';
+    return (
+      <View style={{ width: 52, height: 28, alignItems: 'center', justifyContent: 'center' }}>
+        <View style={{ width: 44, height: 3, backgroundColor: c, borderRadius: 2, transform: [{ rotate: '-20deg' }], shadowColor: selected ? '#cc44aa' : 'transparent', shadowRadius: selected ? 4 : 0, shadowOpacity: 0.8 }} />
+        <View style={{ position: 'absolute', right: 4, bottom: 2, width: 10, height: 10, borderRadius: 2, borderWidth: 1.5, borderColor: c }} />
+      </View>
+    );
+  }
   return null;
 }
 
@@ -21,7 +30,7 @@ const POWER_BADGES: Record<LethalWeaponId, { label: string; color: string }> = {
   '9MM手枪':            { label: '中伤', color: '#e1b12c' },
   '7.62mm步枪':         { label: '重伤', color: '#e84118' },
   '12.7mm反器材狙击枪': { label: '即死', color: '#c0392b' },
-  '武士刀':             { label: '预留', color: '#555' },
+  '武士刀':             { label: '断肠', color: '#cc44aa' },
   '胶囊炸弹':           { label: '预留', color: '#555' },
 };
 
@@ -93,11 +102,16 @@ export function LethalWeaponPanel() {
       {selected && (() => {
         const def = LETHAL_WEAPON_LIST.find(w => w.id === selected);
         if (!def || def.reserved) return null;
+        const isKatana = selected === '武士刀';
+        const hintColor = isKatana ? '#cc44aaaa' : '#e84040aa';
+        const hintBg = isKatana ? 'rgba(204,68,170,0.05)' : 'rgba(232,64,64,0.05)';
+        const hintBorder = isKatana ? `${'#cc44aa'}44` : `${colors.border}44`;
+        const hintText = isKatana
+          ? '点击为斩击起点，拖拽至终点\n松开即触发斩击，范围内肠段全部断裂\n斩击宽度可在设置中调整'
+          : '按住并拖拽定位瞄准位置\n瞄准点偏移可在设置中调整\n松开即触发开火';
         return (
-          <View style={[styles.hintBox, { borderColor: `${colors.border}44`, backgroundColor: 'rgba(232,64,64,0.05)' }]}>
-            <Text style={[styles.hintText, { color: '#e84040aa' }]}>
-              {'按住并拖拽定位瞄准位置\n瞄准点偏移可在设置中调整\n松开即触发开火'}
-            </Text>
+          <View style={[styles.hintBox, { borderColor: hintBorder, backgroundColor: hintBg }]}>
+            <Text style={[styles.hintText, { color: hintColor }]}>{hintText}</Text>
           </View>
         );
       })()}

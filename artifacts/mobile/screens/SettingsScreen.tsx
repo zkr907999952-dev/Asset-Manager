@@ -91,7 +91,7 @@ export function SettingsScreen({ onMenuPress }: Props) {
     setDrugDuration, setHatchDuration, setParasiteDamageInterval, setParasitePerforationChance,
     setMaxResectionSegments,
     setBellyStrikeImpulseScale, setBellyStrikeToolPower,
-    setTouchOffsetY,
+    setTouchOffsetY, setKatanaSlashWidth,
     physicsRef,
   } = useGame();
   const topPad = Platform.OS === 'web' ? 16 : insets.top;
@@ -254,6 +254,19 @@ export function SettingsScreen({ onMenuPress }: Props) {
             min={0} max={1} step={0.01}
             onValueChange={setParasitePerforationChance}
             trackColor="#cc4444"
+          />
+        </View>
+
+        {/* Katana settings */}
+        <Text style={[styles.sectionTitle, { color: colors.primary }]}>武士刀设置</Text>
+        <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
+          <SliderRow
+            label="斩击宽度"
+            value={state.katanaSlashWidth ?? 24}
+            displayValue={`${Math.round(state.katanaSlashWidth ?? 24)} px`}
+            min={8} max={80} step={2}
+            onValueChange={setKatanaSlashWidth}
+            trackColor="#cc44aa"
           />
         </View>
 

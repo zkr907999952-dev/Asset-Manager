@@ -129,6 +129,24 @@ export function CharacterView({ width, height }: Props) {
             />
           )}
 
+          {/* Katana slash scars — red diagonal wounds synced from simulation */}
+          {state.slashScars && state.slashScars.map((scar) => {
+            const xS = width / CANVAS_W;
+            const yS = xS * 0.55;
+            const sx1 = cx + (scar.physX1 - CAVITY_CX) * xS;
+            const sy1 = height * BELLY_Y_FRAC + (scar.physY1 - CAVITY_CY) * yS;
+            const sx2 = cx + (scar.physX2 - CAVITY_CX) * xS;
+            const sy2 = height * BELLY_Y_FRAC + (scar.physY2 - CAVITY_CY) * yS;
+            return (
+              <G key={`ks-${scar.id}`}>
+                <Line x1={sx1} y1={sy1} x2={sx2} y2={sy2}
+                  stroke="rgba(180,0,0,0.55)" strokeWidth={3.5} strokeLinecap="round" />
+                <Line x1={sx1} y1={sy1} x2={sx2} y2={sy2}
+                  stroke="rgba(240,30,30,0.80)" strokeWidth={1.5} strokeLinecap="round" />
+              </G>
+            );
+          })}
+
           {/* Bullet holes — synced from simulation (physics → CharacterView coords)
               Navel anchor: physics (CAVITY_CX, CAVITY_CY) → CV (width/2, height*BELLY_Y_FRAC)
               xS: belly fills ~full view width   (width / CANVAS_W ≈ 0.53)

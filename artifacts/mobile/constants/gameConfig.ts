@@ -49,6 +49,8 @@ export const EXPANSION_SCALE_DEFAULT = 1.3;
 
 export const MAX_RESECTION_SEGMENTS_DEFAULT = 6;
 
+export const KATANA_SLASH_WIDTH_DEFAULT = 24;
+
 export const TOOLS = {
   METAL_ROD: '金属棒',
   GRAB: '抓握',
@@ -246,16 +248,15 @@ export const LETHAL_WEAPON_LIST: LethalWeaponDef[] = [
   },
   {
     id: LETHAL_WEAPONS.KATANA,
-    desc: '（预留）',
-    reserved: true,
-    hpDamageRatio: 0,
+    desc: '拖拽绘制斩击线段，范围内肠段全部断裂',
+    hpDamageRatio: 0.3,
     directHitRadius: 0,
     shockwaveRange: 0,
     shockwavePower: 0,
     sightType: 'iron',
-    flashIntensity: 0,
-    shakeStrength: 0,
-    pleasureGain: 0,
+    flashIntensity: 0.95,
+    shakeStrength: 12,
+    pleasureGain: 15,
     perfThreshold: -1,
     breakThreshold: 1,
     breakAllInRange: false,

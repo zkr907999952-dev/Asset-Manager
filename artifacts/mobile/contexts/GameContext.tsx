@@ -4,13 +4,14 @@ import React, {
 import { Platform } from 'react-native';
 import { createInitialPhysicsState } from '../engine/intestineInit';
 import type { PhysicsState } from '../engine/physics';
-import { applyBellyStrikePhysics as applyBellyStrikePhysicsFunc, applyGunshotPhysics as applyGunshotPhysicsFunc } from '../engine/physics';
+import { applyBellyStrikePhysics as applyBellyStrikePhysicsFunc, applyGunshotPhysics as applyGunshotPhysicsFunc, applyKatanaSlashPhysics as applyKatanaSlashPhysicsFunc } from '../engine/physics';
 import {
   TOOLS, N_LARGE, N_SMALL, CAVITY_CX, CAVITY_CY,
   BREATH_AMPLITUDE_DEFAULT, EXPANSION_SCALE_DEFAULT,
   PRESSURE_DIFFUSION_RATE_DEFAULT,
   PERISTALSIS_WAVE_AMPLITUDE_DEFAULT, PERISTALSIS_WAVE_SPEED_DEFAULT,
   MAX_RESECTION_SEGMENTS_DEFAULT, PHYSICS_FPS,
+  KATANA_SLASH_WIDTH_DEFAULT,
   BELLY_STRIKE_TOOL_LIST, LETHAL_WEAPON_LIST,
   INTESTINE_HOOK_TOOL_LIST,
 } from '../constants/gameConfig';
@@ -223,6 +224,8 @@ export interface GameUIState {
   // Lethal weapons
   selectedWeapon: LethalWeaponId | null;
   bulletHoles: { id: number; physX: number; physY: number; radius: number; weaponId: LethalWeaponId }[];
+  slashScars: { id: number; physX1: number; physY1: number; physX2: number; physY2: number }[];
+  katanaSlashWidth: number;
   // === Intestine exposure hook tool (小肠露出) ===
   hookTool: string | null;         // selected hook tool id
   hookInserted: boolean;
@@ -309,6 +312,8 @@ interface GameContextType {
   // Lethal weapons
   setSelectedWeapon: (weapon: LethalWeaponId | null) => void;
   applyGunshot: (physX: number, physY: number) => void;
+  setKatanaSlashWidth: (v: number) => void;
+  applyKatanaSlash: (x1: number, y1: number, x2: number, y2: number) => void;
   // Hook tool (小肠露出)
   setHookTool: (tool: HookToolId | null) => void;
   insertHookViaNavel: () => void;
@@ -496,6 +501,8 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     touchOffsetY: 0,
     selectedWeapon: null,
     bulletHoles: [],
+    slashScars: [],
+    katanaSlashWidth: KATANA_SLASH_WIDTH_DEFAULT,
     resectedSmallRanges: [],
     resectedLargeRanges: [],
     resectedCount: 0,
@@ -2558,6 +2565,8 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
 
   const selectedWeaponRef = useRef<LethalWeaponId | null>(null);
   const bulletHoleIdRef = useRef(0);
+  const slashScarIdRef = useRef(0);
+  const katanaSlashWidthRef = useRef(KATANA_SLASH_WIDTH_DEFAULT);
 
   const setSelectedWeapon = useCallback((weapon: LethalWeaponId | null) => {
     selectedWeaponRef.current = weapon;
@@ -2602,6 +2611,27 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
 
     triggerDialogue('pain_high');
   }, [triggerDialogue]);
+
+  const setKatanaSlashWidth = useCallback((v: number) => {
+    katanaSlashWidthRef.current = v;
+    setState(prev => ({ ...prev, katanaSlashWidth: v }));
+  }, []);
+
+  const applyKatanaSlash = useCallback((x1: number, y1: number, x2: number, y2: number) => {
+    const p = physicsRef.current;
+    const halfWidth = katanaSlashWidthRef.current;
+    applyKatanaSlashPhysicsFunc(p, x1, y1, x2, y2, halfWidth);
+    // HP damage: 30 points flat
+    p.hpPenalty = Math.min(200, (p.hpPenalty ?? 0) + 30);
+    // Add slash scar
+    const scarId = ++slashScarIdRef.current;
+    setState(prev => ({
+      ...prev,
+      slashScars: [...prev.slashScars, { id: scarId, physX1: x1, physY1: y1, physX2: x2, physY2: y2 }].slice(-8),
+    }));
+    triggerDialogue('pain_high');
+  }, [triggerDialogue]);
+
 
   // === Hook tool (小肠露出) ===
   const hookToolRef = useRef<string | null>(null);
@@ -2717,7 +2747,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       setResectionSelection, setMaxResectionSegments, setTouchOffsetY,
       setBellyStrikeTool, setBellyStrikeForce, setBellyStrikeRange,
       setBellyStrikeImpulseScale, setBellyStrikeToolPower, applyBellyStrike,
-      setSelectedWeapon, applyGunshot,
+      setSelectedWeapon, applyGunshot, setKatanaSlashWidth, applyKatanaSlash,
       setHookTool, insertHookViaNavel, retractHook, activateHookGrab, clearExposedNodes,
     }}>
       {children}
