@@ -61,6 +61,7 @@ export function SurgeryPanel() {
     performFirstAid, startTransfusion,
     repairIntestine, sutureIntestine,
     performNavelSurgery,
+    repairNavel,
     transplantSmallIntestine, transplantLargeIntestine, transplantAllIntestines,
     enterMesenterySelection, executeMesenterySelection, cancelMesenterySelection,
     performParasiteSurgery,
@@ -96,6 +97,13 @@ export function SurgeryPanel() {
         variant={state.exposedSmallIndices?.length > 0 ? 'normal' : 'disabled'}
       />
       <SurgButton icon="circle" label="肚脐贯通手术" subLabel="永久开放肚脐，工具可直接插入" onPress={performNavelSurgery} />
+      <SurgButton
+        icon="x-circle"
+        label="肚脐修复术"
+        subLabel={state.navelPierced ? '将已穿孔的肚脐还原为未穿孔状态' : '肚脐当前未贯通'}
+        onPress={repairNavel}
+        variant={state.navelPierced ? 'danger' : 'disabled'}
+      />
 
       <Text style={[styles.section, { color: colors.mutedForeground }]}>寄生虫清除</Text>
       {state.parasiteSurgeryPhase === 0 ? (

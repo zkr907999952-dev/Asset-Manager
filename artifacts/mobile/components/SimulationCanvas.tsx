@@ -343,9 +343,10 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
   useEffect(() => {
     if (state.forcePierceMode) {
       const rodLen = 80 + state.toolParam1 * 1.0;
-      const startY = NAVEL_Y_EXTERNAL - rodLen * 0.85;
-      fpRef.current = { handle: { x: NAVEL_X, y: startY }, progress: 0, triggered: false };
-      physicsRef.current.toolPos = { x: NAVEL_X, y: startY };
+      const startDist = rodLen * 0.85;
+      // Start directly above navel
+      fpRef.current = { handle: { x: NAVEL_X, y: NAVEL_Y_EXTERNAL - startDist }, progress: 0, triggered: false, startDist };
+      physicsRef.current.toolPos = { x: NAVEL_X, y: NAVEL_Y_EXTERNAL - startDist };
       setForcePierceProgress(0);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -389,7 +390,9 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
   const [flashColor, setFlashColor] = useState('rgba(255,100,30,0.15)');
 
   // Force pierce mode state
-  const fpRef = useRef({ handle: { x: NAVEL_X, y: NAVEL_Y_EXTERNAL - 80 }, progress: 0, triggered: false });
+  const fpRef = useRef<{ handle: { x: number; y: number }; progress: number; triggered: boolean; startDist: number }>(
+    { handle: { x: NAVEL_X, y: NAVEL_Y_EXTERNAL - 80 }, progress: 0, triggered: false, startDist: 80 }
+  );
   const [forcePierceProgress, setForcePierceProgress] = useState(0);
 
   const toPhysicsCoords = useCallback((localX: number, localY: number) => {
@@ -927,18 +930,18 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
       const touchOfsY = s.touchOffsetY ?? 0;
       const pos = tpc(locationX, locationY - touchOfsY);
 
-      // Force pierce drag: handle moves with damping toward navel
+      // Force pierce drag: handle moves freely (lever-style, no axis lock)
       if (s.forcePierceMode) {
-        const DAMPING = 0.32;
-        const FORCE_PIERCE_THRESHOLD = 40;
-        const rodLen = 80 + s.toolParam1 * 1.0;
+        const DAMPING = 0.45;
+        const FORCE_PIERCE_THRESHOLD = 35;
         const fp = fpRef.current;
-        const targetY = Math.min(pos.y, NAVEL_Y_EXTERNAL - 2);
-        fp.handle.y = fp.handle.y + (targetY - fp.handle.y) * DAMPING;
-        fp.handle.x = NAVEL_X;
-        physicsRef.current.toolPos = { x: NAVEL_X, y: fp.handle.y };
-        const startY = NAVEL_Y_EXTERNAL - rodLen * 0.85;
-        const depth = Math.max(0, fp.handle.y - startY);
+        // Free movement in both X and Y
+        fp.handle.x = fp.handle.x + (pos.x - fp.handle.x) * DAMPING;
+        fp.handle.y = fp.handle.y + (pos.y - fp.handle.y) * DAMPING;
+        physicsRef.current.toolPos = { x: fp.handle.x, y: fp.handle.y };
+        // Depth = how far handle has moved toward navel from starting distance
+        const currentDist = Math.hypot(fp.handle.x - NAVEL_X, fp.handle.y - NAVEL_Y_EXTERNAL);
+        const depth = Math.max(0, fp.startDist - currentDist);
         fp.progress = Math.min(1, depth / FORCE_PIERCE_THRESHOLD);
         setForcePierceProgress(fp.progress);
         if (fp.progress >= 1 && !fp.triggered) {
@@ -2701,7 +2704,7 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
           );
         })()}
 
-        {/* Force pierce rod — custom lever geometry, external view only */}
+        {/* Force pierce rod — lever geometry, any angle */}
         {state.forcePierceMode && !isInternal && activeTool === TOOLS.METAL_ROD && (() => {
           const fp = fpRef.current;
           const PIERCE_MAX = 40;
@@ -2711,14 +2714,23 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
           const r = Math.round(80 + progressFrac * 140);
           const g2 = Math.round(80 - progressFrac * 50);
           const glowCol = `rgba(${r},${g2},80,${0.3 + progressFrac * 0.55})`;
+          // Direction from handle toward navel
+          const hdx = NAVEL_X - fp.handle.x;
+          const hdy = navelYBreath - fp.handle.y;
+          const hdist = Math.max(0.01, Math.hypot(hdx, hdy));
+          const dirX = hdx / hdist;
+          const dirY = hdy / hdist;
+          // Inside end — continues past navel in same direction
+          const insideEndX = NAVEL_X + dirX * insideLen;
+          const insideEndY = navelYBreath + dirY * insideLen;
           return (
             <G key="fp-rod">
-              {/* Handle to navel — outside portion */}
+              {/* Handle to navel — outside portion (any angle) */}
               <Line x1={fp.handle.x} y1={fp.handle.y} x2={NAVEL_X} y2={navelYBreath}
                 stroke={rodColor} strokeWidth={5} strokeLinecap="round" />
-              {/* Inside (past navel) — fades in as rod penetrates */}
+              {/* Inside (past navel) — extends in same lever direction */}
               {insideLen > 1 && (
-                <Line x1={NAVEL_X} y1={navelYBreath} x2={NAVEL_X} y2={navelYBreath + insideLen}
+                <Line x1={NAVEL_X} y1={navelYBreath} x2={insideEndX} y2={insideEndY}
                   stroke={rodColor} strokeWidth={5} strokeLinecap="round" opacity={0.28} />
               )}
               {/* Handle grip */}

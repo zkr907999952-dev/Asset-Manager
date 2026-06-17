@@ -342,6 +342,7 @@ interface GameContextType {
   repairIntestine: () => void;
   sutureIntestine: () => void;
   performNavelSurgery: () => void;
+  repairNavel: () => void;
   transplantSmallIntestine: () => void;
   transplantLargeIntestine: () => void;
   transplantAllIntestines: () => void;
@@ -1763,6 +1764,18 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     triggerDialogueRef.current('force_navel_pierce');
   }, []);
 
+  const repairNavel = useCallback(() => {
+    physicsRef.current.navelPierced = false;
+    physicsRef.current.toolAnchor = null;
+    physicsRef.current.toolInserted = false;
+    setState(prev => ({
+      ...prev,
+      navelPierced: false,
+      toolAnchor: null,
+      toolInserted: false,
+    }));
+  }, []);
+
   const setNavelPierced = useCallback((v: boolean) => {
     physicsRef.current.navelPierced = v;
     setState(prev => ({ ...prev, navelPierced: v }));
@@ -2986,7 +2999,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       relaxAbdomen, takeLaxative, takeStimulant, takeSedative, clearComaByShock,
       setDrugDuration,
       performFirstAid, startTransfusion,
-      repairIntestine, sutureIntestine, performNavelSurgery,
+      repairIntestine, sutureIntestine, performNavelSurgery, repairNavel,
       transplantSmallIntestine, transplantLargeIntestine, transplantAllIntestines,
       enterMesenterySelection, executeMesenterySelection, cancelMesenterySelection,
       toggleMesenteryNode,
