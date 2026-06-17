@@ -26,7 +26,7 @@ const TOOL_PARAMS: Record<string, {
 
 function ToolSection({ toolId, isActive }: { toolId: string; isActive: boolean }) {
   const colors = useColors();
-  const { state, setToolState, setActiveTool, clearElectrodes, setForcePierceMode, setViewMode, addClampPoint, clearClampPoints } = useGame();
+  const { state, setToolState, setActiveTool, clearElectrodes, setElectricMode, setForcePierceMode, setViewMode, addClampPoint, clearClampPoints } = useGame();
 
   const focusTool = () => {
     if (!isActive) setActiveTool(toolId as any);
@@ -73,15 +73,47 @@ function ToolSection({ toolId, isActive }: { toolId: string; isActive: boolean }
           )}
         </View>
         <View style={styles.sectionHeaderRight}>
-          {toolId === TOOLS.ELECTRIC && (
-            <TouchableOpacity
-              style={[styles.extraBtn, { borderColor: `${colors.border}66` }]}
-              onPress={() => { focusTool(); clearElectrodes(); }}
-            >
-              <Feather name="trash-2" size={10} color={colors.mutedForeground} />
-              <Text style={[styles.extraBtnText, { color: colors.mutedForeground }]}>清除电极</Text>
-            </TouchableOpacity>
-          )}
+          {toolId === TOOLS.ELECTRIC && (() => {
+            const elecMode = state.electricMode ?? 'external';
+            const isExternal = elecMode === 'external';
+            const isInternal = elecMode === 'internal';
+            const canInternal = state.navelPierced;
+            return (
+              <>
+                <TouchableOpacity
+                  style={[styles.extraBtn, {
+                    borderColor: isExternal ? 'rgba(80,200,255,0.7)' : `${colors.border}55`,
+                    backgroundColor: isExternal ? 'rgba(80,200,255,0.1)' : 'transparent',
+                  }]}
+                  onPress={() => { focusTool(); setElectricMode('external'); }}
+                >
+                  <Feather name="radio" size={10} color={isExternal ? '#50c8ff' : colors.mutedForeground} />
+                  <Text style={[styles.extraBtnText, { color: isExternal ? '#50c8ff' : colors.mutedForeground }]}>外用贴片</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.extraBtn, {
+                    borderColor: isInternal ? 'rgba(255,200,40,0.7)' : (canInternal ? `${colors.border}55` : `${colors.border}22`),
+                    backgroundColor: isInternal ? 'rgba(255,200,40,0.12)' : 'transparent',
+                    opacity: canInternal ? 1 : 0.4,
+                  }]}
+                  onPress={() => { if (canInternal) { focusTool(); setElectricMode('internal'); } }}
+                  activeOpacity={canInternal ? 0.75 : 1}
+                >
+                  <Feather name="zap" size={10} color={isInternal ? '#ffc828' : (canInternal ? colors.mutedForeground : colors.mutedForeground)} />
+                  <Text style={[styles.extraBtnText, { color: isInternal ? '#ffc828' : colors.mutedForeground }]}>
+                    {canInternal ? '体内植入' : '体内(需穿脐)'}
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.extraBtn, { borderColor: `${colors.border}66` }]}
+                  onPress={() => { focusTool(); clearElectrodes(); }}
+                >
+                  <Feather name="trash-2" size={10} color={colors.mutedForeground} />
+                  <Text style={[styles.extraBtnText, { color: colors.mutedForeground }]}>清除电极</Text>
+                </TouchableOpacity>
+              </>
+            );
+          })()}
           {toolId === TOOLS.GRAB && (
             <>
               <TouchableOpacity

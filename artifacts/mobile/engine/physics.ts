@@ -92,6 +92,7 @@ export interface PhysicsState {
   pendingClampCount: number; // clamp slots waiting to be placed
   // Electric
   electrodes: { x: number; y: number }[];
+  electricMode: 'external' | 'internal';
   // Enema tube head
   enemaHeadIdx: number;
   enemaInSmall: boolean;
@@ -222,6 +223,7 @@ function clampToCavity(node: PhysicsNode, margin: number) {
 }
 
 function applyElectricPhysics(state: PhysicsState, param1: number, param2: number) {
+  const extMult = state.electricMode === 'external' ? 0.5 : 1.0;
   const voltage = param1 * 0.01;
   const radius = 30 + param2 * 0.3;
   for (const el of state.electrodes) {
@@ -231,13 +233,13 @@ function applyElectricPhysics(state: PhysicsState, param1: number, param2: numbe
         const f = 1 - d / radius;
         const seg = state.smallSegs[i];
         if (seg && !seg.broken) {
-          seg.pain = clamp(seg.pain + voltage * 6.0 * f, 0, 100);
-          seg.sensitivity = clamp(seg.sensitivity + voltage * 4.0 * f, 0, 100);
-          seg.health = clamp(seg.health - voltage * 0.6 * f, 0, 100);
+          seg.pain = clamp(seg.pain + voltage * 6.0 * f * extMult, 0, 100);
+          seg.sensitivity = clamp(seg.sensitivity + voltage * 4.0 * f * extMult, 0, 100);
+          seg.health = clamp(seg.health - voltage * 0.6 * f * extMult, 0, 100);
         }
-        const spasm = voltage * 42 * fastSin(state.time * 1.5 + i * 0.8);
-        state.smallNodes[i].x += spasm * 0.7 + (Math.random() - 0.5) * voltage * 18;
-        state.smallNodes[i].y += spasm + (Math.random() - 0.5) * voltage * 18;
+        const spasm = voltage * 42 * extMult * fastSin(state.time * 1.5 + i * 0.8);
+        state.smallNodes[i].x += spasm * 0.7 + (Math.random() - 0.5) * voltage * 18 * extMult;
+        state.smallNodes[i].y += spasm + (Math.random() - 0.5) * voltage * 18 * extMult;
       }
     }
     for (let i = 0; i < state.largeNodes.length; i++) {
@@ -246,12 +248,12 @@ function applyElectricPhysics(state: PhysicsState, param1: number, param2: numbe
         const f = 1 - d / radius;
         const seg = state.largeSegs[i];
         if (seg && !seg.broken) {
-          seg.pain = clamp(seg.pain + voltage * 4.5 * f, 0, 100);
-          seg.sensitivity = clamp(seg.sensitivity + voltage * 3.0 * f, 0, 100);
+          seg.pain = clamp(seg.pain + voltage * 4.5 * f * extMult, 0, 100);
+          seg.sensitivity = clamp(seg.sensitivity + voltage * 3.0 * f * extMult, 0, 100);
         }
-        const spasm = voltage * 34 * fastSin(state.time * 1.5 + i * 0.6);
-        state.largeNodes[i].x += spasm * 0.6 + (Math.random() - 0.5) * voltage * 14;
-        state.largeNodes[i].y += spasm + (Math.random() - 0.5) * voltage * 14;
+        const spasm = voltage * 34 * extMult * fastSin(state.time * 1.5 + i * 0.6);
+        state.largeNodes[i].x += spasm * 0.6 + (Math.random() - 0.5) * voltage * 14 * extMult;
+        state.largeNodes[i].y += spasm + (Math.random() - 0.5) * voltage * 14 * extMult;
       }
     }
   }

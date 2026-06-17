@@ -204,6 +204,7 @@ export interface GameUIState {
   periScaleSmall: number[];
   periScaleLarge: number[];
   electrodes: { x: number; y: number }[];
+  electricMode: 'external' | 'internal';
   toolPos: { x: number; y: number } | null;
   toolAnchor: { x: number; y: number } | null;
   toolInserted: boolean;
@@ -317,6 +318,7 @@ interface GameContextType {
   triggerDialogue: (trigger: DialogueTrigger) => void;
   addElectrode: (x: number, y: number) => void;
   clearElectrodes: () => void;
+  setElectricMode: (mode: 'external' | 'internal') => void;
   addClampPoint: () => void;
   clearClampPoints: () => void;
   insertViaNavel: () => void;
@@ -527,6 +529,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     periScaleSmall: [...physicsRef.current.periScaleSmall],
     periScaleLarge: [...physicsRef.current.periScaleLarge],
     electrodes: [],
+    electricMode: 'external',
     toolPos: null,
     toolAnchor: null,
     toolInserted: false,
@@ -919,13 +922,14 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         p.toolType === '电击器' && p.toolActive && (p.toolParam2 ?? 0) >= 40;
       const killSmallSegs = new Set<number>();
       const killLargeSegs = new Set<number>();
+      const elecKillRadius = p.electricMode === 'external' ? 22 : 44;
       if (electricMedium && p.electrodes.length > 0) {
         p.electrodes.forEach(elec => {
           p.smallNodes.forEach((n, i) => {
-            if (i < N_SMALL - 1 && Math.hypot(n.x - elec.x, n.y - elec.y) < 44) killSmallSegs.add(i);
+            if (i < N_SMALL - 1 && Math.hypot(n.x - elec.x, n.y - elec.y) < elecKillRadius) killSmallSegs.add(i);
           });
           p.largeNodes.forEach((n, i) => {
-            if (i < N_LARGE - 1 && Math.hypot(n.x - elec.x, n.y - elec.y) < 44) killLargeSegs.add(i);
+            if (i < N_LARGE - 1 && Math.hypot(n.x - elec.x, n.y - elec.y) < elecKillRadius) killLargeSegs.add(i);
           });
         });
       }
@@ -1715,6 +1719,11 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
   const clearElectrodes = useCallback(() => {
     physicsRef.current.electrodes = [];
     setState(prev => ({ ...prev, electrodes: [] }));
+  }, []);
+
+  const setElectricMode = useCallback((mode: 'external' | 'internal') => {
+    physicsRef.current.electricMode = mode;
+    setState(prev => ({ ...prev, electricMode: mode }));
   }, []);
 
   const addClampPoint = useCallback(() => {
@@ -2990,7 +2999,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       setPeriWaveAmplitude, setPeriWaveSpeed,
       setBreathAmplitude, setExpansionScale, setPressureDiffusionRate,
       setDebugMode, setShowCollisionBoxes, setPhysicsFps,
-      syncFromPhysics, triggerDialogue, addElectrode, clearElectrodes,
+      syncFromPhysics, triggerDialogue, addElectrode, clearElectrodes, setElectricMode,
       addClampPoint, clearClampPoints,
       insertViaNavel, retractTool, setNavelPierced, setEnemaHeadIdx,
       setEnemaInSmall, setEnemaSmallHeadIdx, setEnemaTarget,

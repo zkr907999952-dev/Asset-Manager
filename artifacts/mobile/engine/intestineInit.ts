@@ -194,6 +194,7 @@ export function createInitialPhysicsState(): PhysicsState {
     activeClampIdx: -1,
     pendingClampCount: 0,
     electrodes: [],
+    electricMode: 'external',
     enemaHeadIdx: N_LARGE - 1,
     enemaInSmall: false,
     enemaSmallHeadIdx: N_SMALL - 1,
