@@ -252,6 +252,7 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
     applyBellyStrike, applyGunshot, applyKatanaSlash,
     insertHookViaNavel, retractHook, activateHookGrab, clearExposedNodes,
     placeCapsuleBombInCavity, setCapsuleBombSwallowTarget, moveCavityBomb,
+    clearExplosionPositions,
   } = useGame();
   const lastDialogueTime = useRef(0);
   const isDragging = useRef(false);
@@ -315,6 +316,27 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
     active: boolean;
     id: number;
   }>({ active: false, id: -1 });
+
+  // Explosion visual effect: animated rings at each bomb position
+  const [explosionWaves, setExplosionWaves] = useState<WaveEntry[]>([]);
+  const clearExplosionPositionsRef = useRef(clearExplosionPositions);
+  clearExplosionPositionsRef.current = clearExplosionPositions;
+  useEffect(() => {
+    const positions = state.explosionPositions;
+    if (!positions || positions.length === 0) return;
+    const power = state.capsuleBombPower ?? 50;
+    const baseR = 60 + power * 1.5;
+    const newWaves: WaveEntry[] = positions.map(pos => {
+      const id = ++waveIdRef.current;
+      const anim = new Animated.Value(0);
+      Animated.timing(anim, { toValue: 1, duration: 550, useNativeDriver: false })
+        .start(() => setExplosionWaves(prev => prev.filter(w => w.id !== id)));
+      return { id, physX: pos.x, physY: pos.y, maxR: baseR, anim };
+    });
+    setExplosionWaves(prev => [...prev, ...newWaves]);
+    clearExplosionPositionsRef.current();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state.explosionSeq]);
 
   // Belly strike drag state
   const bellyStrikeDragRef = useRef<{
@@ -503,10 +525,15 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
           if (pickedId >= 0) {
             capsuleBombDragRef.current = { active: true, id: pickedId };
           } else {
+            // Always place at navel position (not at touch position)
+            // Also allow tapping near navel to place
+            const navelY = NAVEL_Y_EXTERNAL;
+            const distToNavel = Math.hypot(pos.x - NAVEL_X, pos.y - navelY);
+            const isNavelTap = distToNavel < NAVEL_RADIUS * 1.8;
             const ex = (pos.x - CAVITY_CX) / CAVITY_RX;
             const ey = (pos.y - CAVITY_CY) / CAVITY_RY;
-            if (ex * ex + ey * ey <= 1.0) {
-              placeBomb(pos.x, pos.y);
+            if (isNavelTap || ex * ex + ey * ey <= 1.0) {
+              placeBomb(NAVEL_X, navelY);
             }
           }
         } else if (s.capsuleBombPlacementMode === 'swallow') {
@@ -3049,6 +3076,34 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
                 stroke="rgba(255,160,60,1)"
                 strokeWidth={animSW}
                 opacity={animOp} />
+            </G>
+          );
+        })}
+
+        {/* Capsule bomb explosion rings */}
+        {explosionWaves.map(wave => {
+          const { id, physX, physY, maxR, anim } = wave;
+          const animR1 = anim.interpolate({ inputRange: [0, 1], outputRange: [4, maxR] });
+          const animR2 = anim.interpolate({ inputRange: [0, 1], outputRange: [4, maxR * 0.55] });
+          const animR3 = anim.interpolate({ inputRange: [0, 1], outputRange: [4, maxR * 0.28] });
+          const animOp1 = anim.interpolate({ inputRange: [0, 0.1, 0.65, 1], outputRange: [0, 1, 0.55, 0] });
+          const animOp2 = anim.interpolate({ inputRange: [0, 0.08, 0.45, 1], outputRange: [0, 0.85, 0.3, 0] });
+          const animOp3 = anim.interpolate({ inputRange: [0, 0.06, 0.3, 1], outputRange: [0, 0.7, 0.0, 0] });
+          const animSW = anim.interpolate({ inputRange: [0, 0.2, 1], outputRange: [8, 4, 1.5] });
+          return (
+            <G key={id}>
+              {/* Bright inner fireball */}
+              <AnimatedCircle cx={physX} cy={physY} r={animR3}
+                fill="rgba(255,240,100,1)" opacity={animOp3} />
+              {/* Mid orange bloom */}
+              <AnimatedCircle cx={physX} cy={physY} r={animR2}
+                fill="rgba(255,100,20,1)" opacity={animOp2} />
+              {/* Outer shockwave ring */}
+              <AnimatedCircle cx={physX} cy={physY} r={animR1}
+                fill="none"
+                stroke="rgba(255,60,0,1)"
+                strokeWidth={animSW}
+                opacity={animOp1} />
             </G>
           );
         })}

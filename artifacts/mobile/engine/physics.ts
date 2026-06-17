@@ -56,6 +56,9 @@ export interface CapsuleBombPhysics {
   inLarge: boolean;
   smallIdx: number;
   largeIdx: number;
+  // floating physics for cavity mode
+  vx: number;
+  vy: number;
 }
 
 export interface PhysicsState {
@@ -1276,13 +1279,16 @@ export function stepPhysics(state: PhysicsState) {
       }
     }
 
-  // === CAVITY BOMBS — push intestine nodes away (float freely, no gravity) ===
+  // === CAVITY BOMBS — push intestine nodes away; bombs float freely with reaction force ===
   if (state.capsuleBombs && state.capsuleBombs.length > 0) {
     const BOMB_R = 10;
     const S_MIN_D = SMALL_RADIUS + BOMB_R;
     const L_MIN_D = LARGE_RADIUS + BOMB_R;
     for (const bomb of state.capsuleBombs) {
       if (bomb.mode !== 'cavity') continue;
+      if (bomb.vx === undefined) bomb.vx = 0;
+      if (bomb.vy === undefined) bomb.vy = 0;
+      let fxTotal = 0, fyTotal = 0;
       const bx = bomb.cavityX, by = bomb.cavityY;
       for (let i = 0; i < state.smallNodes.length; i++) {
         const n = state.smallNodes[i];
@@ -1293,6 +1299,9 @@ export function stepPhysics(state: PhysicsState) {
           const d = Math.sqrt(d2);
           const push = (S_MIN_D - d) * 0.45;
           n.x += (dx / d) * push; n.y += (dy / d) * push;
+          // Newton's 3rd law: bomb receives opposite reaction
+          fxTotal -= (dx / d) * push * 0.28;
+          fyTotal -= (dy / d) * push * 0.28;
         }
       }
       for (let i = 0; i < state.largeNodes.length; i++) {
@@ -1304,7 +1313,27 @@ export function stepPhysics(state: PhysicsState) {
           const d = Math.sqrt(d2);
           const push = (L_MIN_D - d) * 0.45;
           n.x += (dx / d) * push; n.y += (dy / d) * push;
+          fxTotal -= (dx / d) * push * 0.22;
+          fyTotal -= (dy / d) * push * 0.22;
         }
+      }
+      // Integrate velocity with damping (floaty feel)
+      bomb.vx = (bomb.vx + fxTotal) * 0.80;
+      bomb.vy = (bomb.vy + fyTotal) * 0.80;
+      bomb.cavityX += bomb.vx;
+      bomb.cavityY += bomb.vy;
+      // Clamp inside cavity ellipse; reflect off boundary
+      const ex = (bomb.cavityX - CAVITY_CX) / CAVITY_RX;
+      const ey = (bomb.cavityY - CAVITY_CY) / CAVITY_RY;
+      const e2 = ex * ex + ey * ey;
+      if (e2 > 1.0) {
+        const e = Math.sqrt(e2);
+        const nx2 = ex / e, ny2 = ey / e;
+        bomb.cavityX = CAVITY_CX + nx2 * CAVITY_RX * 0.96;
+        bomb.cavityY = CAVITY_CY + ny2 * CAVITY_RY * 0.96;
+        const dot = bomb.vx * nx2 + bomb.vy * ny2;
+        bomb.vx = (bomb.vx - 2 * dot * nx2) * 0.25;
+        bomb.vy = (bomb.vy - 2 * dot * ny2) * 0.25;
       }
     }
   }

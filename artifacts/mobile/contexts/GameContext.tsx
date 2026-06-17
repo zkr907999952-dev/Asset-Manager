@@ -237,6 +237,9 @@ export interface GameUIState {
   capsuleBombs: CapsuleBombPhysics[];
   capsuleBombPower: number;        // 0-100
   capsuleBombPlacementMode: 'cavity' | 'swallow' | null;
+  // explosion effect: positions to animate, seq increments each detonation
+  explosionPositions: Array<{ x: number; y: number }> | null;
+  explosionSeq: number;
 }
 
 interface GameContextType {
@@ -333,6 +336,7 @@ interface GameContextType {
   setCapsuleBombPower: (v: number) => void;
   setCapsuleBombPlacementMode: (mode: 'cavity' | 'swallow' | null) => void;
   moveCavityBomb: (id: number, x: number, y: number) => void;
+  clearExplosionPositions: () => void;
 }
 
 const DEFAULT_TOOL_POS = { x: CAVITY_CX, y: CAVITY_CY - 40 };
@@ -541,6 +545,8 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     capsuleBombs: [],
     capsuleBombPower: 50,
     capsuleBombPlacementMode: null,
+    explosionPositions: null,
+    explosionSeq: 0,
   });
 
   const syncFromPhysics = useCallback(() => {
@@ -2700,7 +2706,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
   // === Capsule bomb system ===
   const placeCapsuleBombInCavity = useCallback((x: number, y: number) => {
     const id = ++capsuleBombIdRef.current;
-    const bomb = { id, mode: 'cavity' as const, cavityX: x, cavityY: y, inLarge: false, smallIdx: 0, largeIdx: 0 };
+    const bomb = { id, mode: 'cavity' as const, cavityX: x, cavityY: y, inLarge: false, smallIdx: 0, largeIdx: 0, vx: 0, vy: 0 };
     physicsRef.current.capsuleBombs = [...(physicsRef.current.capsuleBombs || []), bomb];
     setState(prev => ({ ...prev, capsuleBombs: [...prev.capsuleBombs, bomb] }));
   }, []);
@@ -2726,11 +2732,33 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
   const detonateCapsuleBombs = useCallback(() => {
     const p = physicsRef.current;
     if (!p.capsuleBombs || p.capsuleBombs.length === 0) return;
+    // Capture positions for explosion visual effect
+    const explosionPositions: Array<{ x: number; y: number }> = [];
+    for (const b of p.capsuleBombs) {
+      if (b.mode === 'cavity') {
+        explosionPositions.push({ x: b.cavityX, y: b.cavityY });
+      } else {
+        const nodes = b.inLarge ? p.largeNodes : p.smallNodes;
+        const idx = b.inLarge ? b.largeIdx : b.smallIdx;
+        const n = nodes[Math.min(idx, nodes.length - 1)];
+        if (n) explosionPositions.push({ x: n.x, y: n.y });
+      }
+    }
     applyCapsuleBombExplosionFunc(p, capsuleBombPowerRef.current);
     triggerDialogue('explosion');
-    setState(prev => ({ ...prev, capsuleBombs: [], capsuleBombPlacementMode: null }));
+    setState(prev => ({
+      ...prev,
+      capsuleBombs: [],
+      capsuleBombPlacementMode: null,
+      explosionPositions,
+      explosionSeq: prev.explosionSeq + 1,
+    }));
     capsuleBombPlacementModeRef.current = null;
   }, [triggerDialogue]);
+
+  const clearExplosionPositions = useCallback(() => {
+    setState(prev => ({ ...prev, explosionPositions: null }));
+  }, []);
 
   const clearCapsuleBombs = useCallback(() => {
     physicsRef.current.capsuleBombs = [];
@@ -2873,7 +2901,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       setHookTool, insertHookViaNavel, retractHook, activateHookGrab, clearExposedNodes,
       placeCapsuleBombInCavity, swallowCapsuleBomb, setCapsuleBombSwallowTarget,
       detonateCapsuleBombs, clearCapsuleBombs, setCapsuleBombPower,
-      setCapsuleBombPlacementMode, moveCavityBomb,
+      setCapsuleBombPlacementMode, moveCavityBomb, clearExplosionPositions,
     }}>
       {children}
     </GameContext.Provider>
