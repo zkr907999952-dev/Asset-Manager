@@ -123,6 +123,50 @@ export interface ToolInstanceState {
   pos?: { x: number; y: number } | null;
 }
 
+export interface DisplayOptions {
+  // Small intestine rendering
+  smallOutline: boolean;
+  smallHighlight: boolean;
+  smallColorVariation: boolean;
+  smallPeristalsis: boolean;
+  // Large intestine rendering
+  largeOutline: boolean;
+  largeHighlight: boolean;
+  largeColorVariation: boolean;
+  cecumCap: boolean;
+  ileocecalJunction: boolean;
+  // Damage / surgical markers
+  ruptureMarkers: boolean;
+  breakMarkers: boolean;
+  perforationMarkers: boolean;
+  repairMarks: boolean;
+  sutureMarks: boolean;
+  // Rendering parameters
+  physicsIterations: number;   // constraint iterations per step (1-16)
+  smallChunks: number;         // mobile: segments merged per draw call (1-16)
+  largeChunks: number;         // mobile: segments merged per draw call (1-8)
+}
+
+export const DEFAULT_DISPLAY_OPTIONS: DisplayOptions = {
+  smallOutline: true,
+  smallHighlight: true,
+  smallColorVariation: true,
+  smallPeristalsis: true,
+  largeOutline: true,
+  largeHighlight: true,
+  largeColorVariation: true,
+  cecumCap: true,
+  ileocecalJunction: true,
+  ruptureMarkers: true,
+  breakMarkers: true,
+  perforationMarkers: true,
+  repairMarks: true,
+  sutureMarks: true,
+  physicsIterations: 2,
+  smallChunks: 8,
+  largeChunks: 4,
+};
+
 export interface GameUIState {
   hp: number;
   isDead: boolean;
@@ -240,6 +284,8 @@ export interface GameUIState {
   // explosion effect: positions to animate, seq increments each detonation
   explosionPositions: Array<{ x: number; y: number }> | null;
   explosionSeq: number;
+  // === Display options ===
+  displayOptions: DisplayOptions;
 }
 
 interface GameContextType {
@@ -337,6 +383,7 @@ interface GameContextType {
   setCapsuleBombPlacementMode: (mode: 'cavity' | 'swallow' | null) => void;
   moveCavityBomb: (id: number, x: number, y: number) => void;
   clearExplosionPositions: () => void;
+  setDisplayOption: <K extends keyof DisplayOptions>(key: K, value: DisplayOptions[K]) => void;
 }
 
 const DEFAULT_TOOL_POS = { x: CAVITY_CX, y: CAVITY_CY - 40 };
@@ -547,6 +594,8 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     capsuleBombPlacementMode: null,
     explosionPositions: null,
     explosionSeq: 0,
+    // Display options
+    displayOptions: { ...DEFAULT_DISPLAY_OPTIONS },
   });
 
   const syncFromPhysics = useCallback(() => {
@@ -2760,6 +2809,16 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     setState(prev => ({ ...prev, explosionPositions: null }));
   }, []);
 
+  const setDisplayOption = useCallback(<K extends keyof DisplayOptions>(key: K, value: DisplayOptions[K]) => {
+    setState(prev => ({
+      ...prev,
+      displayOptions: { ...prev.displayOptions, [key]: value },
+    }));
+    if (key === 'physicsIterations') {
+      physicsRef.current.physicsIterations = value as number;
+    }
+  }, []);
+
   const clearCapsuleBombs = useCallback(() => {
     physicsRef.current.capsuleBombs = [];
     setState(prev => ({ ...prev, capsuleBombs: [], capsuleBombPlacementMode: null }));
@@ -2902,6 +2961,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       placeCapsuleBombInCavity, swallowCapsuleBomb, setCapsuleBombSwallowTarget,
       detonateCapsuleBombs, clearCapsuleBombs, setCapsuleBombPower,
       setCapsuleBombPlacementMode, moveCavityBomb, clearExplosionPositions,
+      setDisplayOption,
     }}>
       {children}
     </GameContext.Provider>

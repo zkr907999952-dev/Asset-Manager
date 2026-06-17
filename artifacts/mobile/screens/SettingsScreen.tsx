@@ -92,8 +92,10 @@ export function SettingsScreen({ onMenuPress }: Props) {
     setMaxResectionSegments,
     setBellyStrikeImpulseScale, setBellyStrikeToolPower,
     setTouchOffsetY, setKatanaSlashWidth,
+    setDisplayOption,
     physicsRef,
   } = useGame();
+  const dispOpts = state.displayOptions;
   const topPad = Platform.OS === 'web' ? 16 : insets.top;
   const bottomPad = Platform.OS === 'web' ? 16 : insets.bottom;
   const [resetStatus, setResetStatus] = useState<'idle' | 'confirm' | 'saving' | 'done'>('idle');
@@ -313,6 +315,132 @@ export function SettingsScreen({ onMenuPress }: Props) {
             min={1} max={12} step={1}
             onValueChange={setMaxResectionSegments}
             trackColor="#cc3333"
+          />
+        </View>
+
+        {/* Display control section */}
+        <Text style={[styles.sectionTitle, { color: colors.primary }]}>显示控制</Text>
+        <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
+          <View style={styles.subLabel}><Text style={[styles.subLabelText, { color: colors.mutedForeground }]}>小肠渲染</Text></View>
+          <ToggleRow
+            label="小肠轮廓"
+            description="绘制每个小肠段的外边缘轮廓（plicae circulares 环线）"
+            value={dispOpts.smallOutline}
+            onToggle={v => setDisplayOption('smallOutline', v)}
+          />
+          <View style={[styles.divider, { backgroundColor: colors.border }]} />
+          <ToggleRow
+            label="小肠高光"
+            description="在小肠内侧绘制半透明高光条"
+            value={dispOpts.smallHighlight}
+            onToggle={v => setDisplayOption('smallHighlight', v)}
+          />
+          <View style={[styles.divider, { backgroundColor: colors.border }]} />
+          <ToggleRow
+            label="小肠动态着色"
+            description="根据健康/疼痛/压力动态调整颜色；关闭后使用固定颜色"
+            value={dispOpts.smallColorVariation}
+            onToggle={v => setDisplayOption('smallColorVariation', v)}
+          />
+          <View style={[styles.divider, { backgroundColor: colors.border }]} />
+          <ToggleRow
+            label="蠕动宽度变化"
+            description="小肠/大肠随蠕动波动态改变管径粗细"
+            value={dispOpts.smallPeristalsis}
+            onToggle={v => setDisplayOption('smallPeristalsis', v)}
+          />
+          <View style={[styles.divider, { backgroundColor: colors.border }]} />
+          <View style={styles.subLabel}><Text style={[styles.subLabelText, { color: colors.mutedForeground }]}>大肠渲染</Text></View>
+          <ToggleRow
+            label="大肠高光"
+            description="在大肠内侧绘制半透明高光条"
+            value={dispOpts.largeHighlight}
+            onToggle={v => setDisplayOption('largeHighlight', v)}
+          />
+          <View style={[styles.divider, { backgroundColor: colors.border }]} />
+          <ToggleRow
+            label="大肠动态着色"
+            description="根据健康/疼痛/压力动态调整颜色；关闭后使用固定颜色"
+            value={dispOpts.largeColorVariation}
+            onToggle={v => setDisplayOption('largeColorVariation', v)}
+          />
+          <View style={[styles.divider, { backgroundColor: colors.border }]} />
+          <ToggleRow
+            label="盲肠端盖"
+            description="在盲肠末端绘制圆形端盖"
+            value={dispOpts.cecumCap}
+            onToggle={v => setDisplayOption('cecumCap', v)}
+          />
+          <View style={[styles.divider, { backgroundColor: colors.border }]} />
+          <ToggleRow
+            label="回盲瓣"
+            description="绘制小肠末端与盲肠之间的连接管"
+            value={dispOpts.ileocecalJunction}
+            onToggle={v => setDisplayOption('ileocecalJunction', v)}
+          />
+          <View style={[styles.divider, { backgroundColor: colors.border }]} />
+          <View style={styles.subLabel}><Text style={[styles.subLabelText, { color: colors.mutedForeground }]}>损伤与手术标记</Text></View>
+          <ToggleRow
+            label="破裂标记"
+            description="在已破裂的肠段上显示爆裂光晕与射线"
+            value={dispOpts.ruptureMarkers}
+            onToggle={v => setDisplayOption('ruptureMarkers', v)}
+          />
+          <View style={[styles.divider, { backgroundColor: colors.border }]} />
+          <ToggleRow
+            label="断裂标记"
+            description="在断裂肠段的断口处显示红色叉形标记"
+            value={dispOpts.breakMarkers}
+            onToggle={v => setDisplayOption('breakMarkers', v)}
+          />
+          <View style={[styles.divider, { backgroundColor: colors.border }]} />
+          <ToggleRow
+            label="穿孔标记"
+            description="在穿孔部位显示深色圆点标记"
+            value={dispOpts.perforationMarkers}
+            onToggle={v => setDisplayOption('perforationMarkers', v)}
+          />
+          <View style={[styles.divider, { backgroundColor: colors.border }]} />
+          <ToggleRow
+            label="修复标记"
+            description="在已修复的穿孔处显示十字标记"
+            value={dispOpts.repairMarks}
+            onToggle={v => setDisplayOption('repairMarks', v)}
+          />
+          <View style={[styles.divider, { backgroundColor: colors.border }]} />
+          <ToggleRow
+            label="缝合标记"
+            description="在已愈合的断裂处显示缝合线纹"
+            value={dispOpts.sutureMarks}
+            onToggle={v => setDisplayOption('sutureMarks', v)}
+          />
+          <View style={[styles.divider, { backgroundColor: colors.border }]} />
+          <View style={styles.subLabel}><Text style={[styles.subLabelText, { color: colors.mutedForeground }]}>渲染参数</Text></View>
+          <SliderRow
+            label="约束迭代次数"
+            value={dispOpts.physicsIterations}
+            displayValue={`${dispOpts.physicsIterations}次`}
+            min={1} max={16} step={1}
+            onValueChange={v => setDisplayOption('physicsIterations', Math.round(v))}
+            trackColor={colors.primary}
+          />
+          <View style={[styles.divider, { backgroundColor: colors.border }]} />
+          <SliderRow
+            label="小肠绘制分块数"
+            value={dispOpts.smallChunks}
+            displayValue={`${dispOpts.smallChunks}块`}
+            min={1} max={16} step={1}
+            onValueChange={v => setDisplayOption('smallChunks', Math.round(v))}
+            trackColor={colors.primary}
+          />
+          <View style={[styles.divider, { backgroundColor: colors.border }]} />
+          <SliderRow
+            label="大肠绘制分块数"
+            value={dispOpts.largeChunks}
+            displayValue={`${dispOpts.largeChunks}块`}
+            min={1} max={8} step={1}
+            onValueChange={v => setDisplayOption('largeChunks', Math.round(v))}
+            trackColor={colors.primary}
           />
         </View>
 

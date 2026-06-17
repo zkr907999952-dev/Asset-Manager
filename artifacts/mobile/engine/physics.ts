@@ -146,6 +146,8 @@ export interface PhysicsState {
   exposurePendingTrigger: boolean; // flag set by physics when insideLen→0 with grab active
   // === Capsule bomb system ===
   capsuleBombs: CapsuleBombPhysics[];
+  // === Runtime-adjustable constraint iterations (overrides PHYSICS_ITERATIONS constant) ===
+  physicsIterations?: number;
 }
 
 function clamp(v: number, min: number, max: number) {
@@ -477,7 +479,7 @@ export function stepPhysics(state: PhysicsState) {
     segs: SegmentProps[], cavMargin: number,
     noCavPushSet?: Set<number>,
   ) => {
-    for (let iter = 0; iter < PHYSICS_ITERATIONS; iter++) {
+    for (let iter = 0; iter < (state.physicsIterations ?? PHYSICS_ITERATIONS); iter++) {
       for (let i = 0; i < nodes.length - 1; i++) {
         if (breakBroken && segs[i] && (segs[i].broken || segs[i].resected)) continue;
         const a = nodes[i], b = nodes[i + 1];

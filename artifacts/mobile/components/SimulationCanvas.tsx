@@ -31,7 +31,7 @@ import {
   BELLY_UPPER_LEFT, BELLY_UPPER_RIGHT, BELLY_UPPER_TOP, BELLY_UPPER_BOT,
 } from '../constants/gameConfig';
 import { buildSmoothPath } from '../engine/physics';
-import { useGame } from '../contexts/GameContext';
+import { useGame, DEFAULT_DISPLAY_OPTIONS } from '../contexts/GameContext';
 import type { CapsuleBombPhysics } from '../engine/physics';
 
 
@@ -1379,6 +1379,8 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
   const periScaleSmall = snap.periScaleSmall;
   const periScaleLarge = snap.periScaleLarge;
 
+  const dispOpts = state.displayOptions ?? DEFAULT_DISPLAY_OPTIONS;
+
   const avgPain = snap.avgPain;
   const avgPressure = snap.avgPressure;
   const bulge = 1 + avgPressure * 0.003;
@@ -1564,7 +1566,7 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
   const largeChunkPaths: ChunkPath[] = [];
 
   if (isMobile) {
-    const S_CHUNKS = 8;
+    const S_CHUNKS = Math.max(1, Math.min(16, dispOpts.smallChunks));
     const sChunkSize = Math.ceil(nSmallSegs / S_CHUNKS);
     for (let c = 0; c < S_CHUNKS; c++) {
       const start = c * sChunkSize;
@@ -1576,20 +1578,22 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
         if (!smallSegPaths[i] || seg.broken || seg.resected) continue;
         chunkD += (chunkD ? ' ' : '') + smallSegPaths[i];
         sumH += seg.health; sumPa += seg.pain; sumPr += seg.pressure;
-        sumPeri += (periScaleSmall?.[i] ?? 1);
+        sumPeri += dispOpts.smallPeristalsis ? (periScaleSmall?.[i] ?? 1) : 1;
         cnt++;
       }
       if (cnt > 0 && chunkD) {
         const avgH = sumH / cnt, avgPa = sumPa / cnt, avgPr = sumPr / cnt, avgPeri = sumPeri / cnt;
         smallChunkPaths.push({
           d: chunkD,
-          color: segmentColor(avgH, avgPa, avgPr, false, false, false, false, smallTransplantColor ?? undefined),
+          color: dispOpts.smallColorVariation
+            ? segmentColor(avgH, avgPa, avgPr, false, false, false, false, smallTransplantColor ?? undefined)
+            : '#c07060',
           width: SMALL_RADIUS * avgPeri * 2 + (avgPr / 100) * SMALL_RADIUS * expansionScale,
         });
       }
     }
 
-    const L_CHUNKS = 4;
+    const L_CHUNKS = Math.max(1, Math.min(8, dispOpts.largeChunks));
     const lChunkSize = Math.ceil(nLargeSegs / L_CHUNKS);
     for (let c = 0; c < L_CHUNKS; c++) {
       const start = c * lChunkSize;
@@ -1601,14 +1605,16 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
         if (!largeSegPaths[i] || seg.broken || seg.resected) continue;
         chunkD += (chunkD ? ' ' : '') + largeSegPaths[i];
         sumH += seg.health; sumPa += seg.pain; sumPr += seg.pressure;
-        sumPeri += (periScaleLarge?.[i] ?? 1);
+        sumPeri += dispOpts.smallPeristalsis ? (periScaleLarge?.[i] ?? 1) : 1;
         cnt++;
       }
       if (cnt > 0 && chunkD) {
         const avgH = sumH / cnt, avgPa = sumPa / cnt, avgPr = sumPr / cnt, avgPeri = sumPeri / cnt;
         largeChunkPaths.push({
           d: chunkD,
-          color: segmentColor(avgH, avgPa, avgPr, false, false, false, true, largeTransplantColor ?? undefined),
+          color: dispOpts.largeColorVariation
+            ? segmentColor(avgH, avgPa, avgPr, false, false, false, true, largeTransplantColor ?? undefined)
+            : '#b86858',
           width: LARGE_RADIUS * avgPeri * 2 + (avgPr / LARGE_RUPTURE_PRESSURE) * LARGE_RADIUS * expansionScale,
         });
       }
@@ -1758,19 +1764,23 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
               const d = largeSegPaths[i];
               if (!d) return null;
               if (seg.broken) return null;
-              const lPeriScale = (periScaleLarge?.[i] ?? 1);
+              const lPeriScale = dispOpts.smallPeristalsis ? (periScaleLarge?.[i] ?? 1) : 1;
               const w = LARGE_RADIUS * lPeriScale * 2 + (seg.pressure / LARGE_RUPTURE_PRESSURE) * LARGE_RADIUS * expansionScale;
-              const col = segmentColor(seg.health, seg.pain, seg.pressure, seg.ruptured, seg.broken, seg.perforated, true, largeTransplantColor ?? undefined);
+              const col = dispOpts.largeColorVariation
+                ? segmentColor(seg.health, seg.pain, seg.pressure, seg.ruptured, seg.broken, seg.perforated, true, largeTransplantColor ?? undefined)
+                : '#b86858';
               return (
                 <G key={`lg-${i}`}>
                   <Path d={d} stroke={col} strokeWidth={w} fill="none" strokeLinecap="round" strokeLinejoin="round" />
-                  <Path d={d} stroke="rgba(255,200,175,0.22)" strokeWidth={LARGE_RADIUS * 0.65} fill="none" strokeLinecap="round" />
+                  {dispOpts.largeHighlight && (
+                    <Path d={d} stroke="rgba(255,200,175,0.22)" strokeWidth={LARGE_RADIUS * 0.65} fill="none" strokeLinecap="round" />
+                  )}
                 </G>
               );
             })}
 
             {/* Ileocecal junction — visible tube connecting terminal ileum to cecum */}
-            {renderSmallNodes.length > 0 && renderLargeNodes.length > 0 && (() => {
+            {dispOpts.ileocecalJunction && renderSmallNodes.length > 0 && renderLargeNodes.length > 0 && (() => {
               const ileum = renderSmallNodes[renderSmallNodes.length - 1];
               const cecum = renderLargeNodes[0];
               const seg0 = renderSmallSegs[renderSmallSegs.length - 1];
@@ -1790,7 +1800,7 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
             })()}
 
             {/* Large intestine cecum end-cap */}
-            {renderLargeNodes.length > 0 && (() => {
+            {dispOpts.cecumCap && renderLargeNodes.length > 0 && (() => {
               const seg0 = renderLargeSegs[0];
               if (seg0?.broken) return null;
               const col = segmentColor(
@@ -1806,7 +1816,7 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
             })()}
 
             {/* Large intestine perforation markers */}
-            {renderLargeSegs.map((seg, i) =>
+            {dispOpts.perforationMarkers && renderLargeSegs.map((seg, i) =>
               seg.perforated && !seg.broken ? (
                 <G key={`lgprf-${i}`}>
                   <Circle cx={renderLargeNodes[i]?.x ?? 0} cy={renderLargeNodes[i]?.y ?? 0}
@@ -1818,7 +1828,7 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
             )}
 
             {/* Large intestine break markers */}
-            {renderLargeSegs.map((seg, i) => {
+            {dispOpts.breakMarkers && renderLargeSegs.map((seg, i) => {
               if (!seg.broken) return null;
               const nodeA = renderLargeNodes[i];
               const nodeB = renderLargeNodes[i + 1];
@@ -1845,11 +1855,11 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
             {/* Pass 1: outline casing — per-segment, slightly wider than fill.
                 Adjacent outlines' round caps overlap at each segment midpoint,
                 creating the natural plicae circulares divider rings. */}
-            {renderSmallSegs.map((seg, i) => {
+            {dispOpts.smallOutline && renderSmallSegs.map((seg, i) => {
               const d = smallSegPaths[i];
               if (!d) return null;
               if (seg.broken || seg.resected) return null;
-              const sPeriScale = (periScaleSmall?.[i] ?? 1);
+              const sPeriScale = dispOpts.smallPeristalsis ? (periScaleSmall?.[i] ?? 1) : 1;
               const w = SMALL_RADIUS * sPeriScale * 2 + (seg.pressure / 100) * SMALL_RADIUS * expansionScale;
               return (
                 <Path key={`sm-out-${i}`} d={d}
@@ -1863,19 +1873,23 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
               const d = smallSegPaths[i];
               if (!d) return null;
               if (seg.broken || seg.resected) return null;
-              const sPeriScale = (periScaleSmall?.[i] ?? 1);
+              const sPeriScale = dispOpts.smallPeristalsis ? (periScaleSmall?.[i] ?? 1) : 1;
               const w = SMALL_RADIUS * sPeriScale * 2 + (seg.pressure / 100) * SMALL_RADIUS * expansionScale;
-              const col = segmentColor(seg.health, seg.pain, seg.pressure, seg.ruptured, seg.broken, seg.perforated, false, smallTransplantColor ?? undefined);
+              const col = dispOpts.smallColorVariation
+                ? segmentColor(seg.health, seg.pain, seg.pressure, seg.ruptured, seg.broken, seg.perforated, false, smallTransplantColor ?? undefined)
+                : '#c07060';
               return (
                 <G key={`sm-${i}`}>
                   <Path d={d} stroke={col} strokeWidth={w} fill="none" strokeLinecap="round" strokeLinejoin="round" />
-                  <Path d={d} stroke="rgba(255,220,200,0.18)" strokeWidth={SMALL_RADIUS * 0.7} fill="none" strokeLinecap="round" />
+                  {dispOpts.smallHighlight && (
+                    <Path d={d} stroke="rgba(255,220,200,0.18)" strokeWidth={SMALL_RADIUS * 0.7} fill="none" strokeLinecap="round" />
+                  )}
                 </G>
               );
             })}
 
             {/* Rupture burst markers */}
-            {renderSmallSegs.map((seg, i) => {
+            {dispOpts.ruptureMarkers && renderSmallSegs.map((seg, i) => {
               if (!seg.ruptured) return null;
               const n = renderSmallNodes[i];
               if (!n) return null;
@@ -1900,7 +1914,7 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
                 </G>
               );
             })}
-            {renderLargeSegs.map((seg, i) => {
+            {dispOpts.ruptureMarkers && renderLargeSegs.map((seg, i) => {
               if (!seg.ruptured) return null;
               const n = renderLargeNodes[i];
               if (!n) return null;
@@ -1924,7 +1938,7 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
             })}
 
             {/* Small intestine break markers */}
-            {renderSmallSegs.map((seg, i) => {
+            {dispOpts.breakMarkers && renderSmallSegs.map((seg, i) => {
               if (!seg.broken) return null;
               const nodeA = renderSmallNodes[i];
               const nodeB = renderSmallNodes[i + 1];
@@ -1946,7 +1960,7 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
             })}
 
             {/* Perforation markers */}
-            {renderSmallSegs.map((seg, i) =>
+            {dispOpts.perforationMarkers && renderSmallSegs.map((seg, i) =>
               seg.perforated && !seg.broken ? (
                 <Circle key={`prf-${i}`} cx={renderSmallNodes[i]?.x ?? 0} cy={renderSmallNodes[i]?.y ?? 0}
                   r={2.5} fill="#440000" stroke="#aa3030" strokeWidth={0.8} />
@@ -1954,7 +1968,7 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
             )}
 
             {/* ===== REPAIR MARKS — + cross at healed perforation sites ===== */}
-            {(repairMarks ?? []).map(i => {
+            {dispOpts.repairMarks && (repairMarks ?? []).map(i => {
               const n = renderSmallNodes[i];
               if (!n) return null;
               return (
@@ -1965,7 +1979,7 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
                 </G>
               );
             })}
-            {(largeRepairMarks ?? []).map(i => {
+            {dispOpts.repairMarks && (largeRepairMarks ?? []).map(i => {
               const n = renderLargeNodes[i];
               if (!n) return null;
               return (
@@ -1978,7 +1992,7 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
             })}
 
             {/* ===== SUTURE MARKS — stitch dashes at healed break sites ===== */}
-            {(sutureMarks ?? []).map(i => {
+            {dispOpts.sutureMarks && (sutureMarks ?? []).map(i => {
               const nodeA = renderSmallNodes[i];
               const nodeB = renderSmallNodes[i + 1];
               if (!nodeA || !nodeB) return null;
@@ -2000,7 +2014,7 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
                 </G>
               );
             })}
-            {(largeSutureMarks ?? []).map(i => {
+            {dispOpts.sutureMarks && (largeSutureMarks ?? []).map(i => {
               const nodeA = renderLargeNodes[i];
               const nodeB = renderLargeNodes[i + 1];
               if (!nodeA || !nodeB) return null;
