@@ -1567,15 +1567,20 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
   const rodGeo = (() => {
     if (!handlePos) return null;
     const tool = activeTool;
-    if (tool === TOOLS.METAL_ROD || tool === TOOLS.VIBRATOR) {
-      const isVib = tool === TOOLS.VIBRATOR;
-      const rodLen = 80 + toolParam1 * (isVib ? 1.2 : 1.0);
-      const stirAmp = toolActive ? (isVib ? 4 : 2 + toolParam2 * 0.04) : 0;
+    if (tool === TOOLS.METAL_ROD) {
+      const rodLen = 80 + toolParam1 * 1.0;
+      const stirAmp = toolActive ? 2 + toolParam2 * 0.04 : 0;
       return { g: computeRodGeoFor(toolInserted, toolAnchor, handlePos, rodLen, stirAmp, renderTime), radius: 9 };
+    }
+    if (tool === TOOLS.VIBRATOR) {
+      // Fixed length; no wobble (stirAmp=0) — vibration is a radial physics effect, not a swing
+      const rodLen = 120;
+      return { g: computeRodGeoFor(toolInserted, toolAnchor, handlePos, rodLen, 0, renderTime), radius: 9 };
     }
     if (tool === TOOLS.NEEDLE) {
       const rodLen = 90 + toolParam1 * 1.0;
-      const stirAmp = toolActive ? 1.5 + toolParam2 * 0.04 : 0;
+      // Auto-activates when inserted — no manual toggle
+      const stirAmp = toolInserted ? 1.5 + toolParam2 * 0.04 : 0;
       return { g: computeRodGeoFor(toolInserted, toolAnchor, handlePos, rodLen, stirAmp, renderTime), radius: 5 };
     }
     if (tool === TOOLS.BAYONET) {

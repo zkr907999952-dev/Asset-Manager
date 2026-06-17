@@ -135,7 +135,7 @@ function ToolSection({ toolId, isActive }: { toolId: string; isActive: boolean }
               </TouchableOpacity>
             );
           })()}
-          {toolId !== TOOLS.GRAB && (
+          {toolId !== TOOLS.GRAB && toolId !== TOOLS.NEEDLE && (
             <TouchableOpacity
               style={[
                 styles.toggleBtn,

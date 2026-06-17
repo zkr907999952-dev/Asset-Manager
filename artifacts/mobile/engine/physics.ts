@@ -676,17 +676,27 @@ export function stepPhysics(state: PhysicsState) {
     return { head, segments, insideLen: rodLen };
   };
 
-  const applyRodCollision = (rodSegments: { x: number; y: number }[], rodRadius: number) => {
-    const allNodes = [state.smallNodes, state.largeNodes];
-    for (const nodes of allNodes) {
-      for (const n of nodes) {
-        for (const seg of rodSegments) {
-          const d = dist(n.x, n.y, seg.x, seg.y);
-          if (d < rodRadius && d > 0.01) {
-            const push = (rodRadius - d) / d * 0.7;
-            n.x += (n.x - seg.x) * push;
-            n.y += (n.y - seg.y) * push;
-          }
+  const applyRodCollision = (rodSegments: { x: number; y: number }[], rodRadius: number, skipExposed = false) => {
+    const expSet = skipExposed ? new Set(state.exposedSmallIndices) : null;
+    for (let ni = 0; ni < state.smallNodes.length; ni++) {
+      if (expSet && expSet.has(ni)) continue;
+      const n = state.smallNodes[ni];
+      for (const seg of rodSegments) {
+        const d = dist(n.x, n.y, seg.x, seg.y);
+        if (d < rodRadius && d > 0.01) {
+          const push = (rodRadius - d) / d * 0.7;
+          n.x += (n.x - seg.x) * push;
+          n.y += (n.y - seg.y) * push;
+        }
+      }
+    }
+    for (const n of state.largeNodes) {
+      for (const seg of rodSegments) {
+        const d = dist(n.x, n.y, seg.x, seg.y);
+        if (d < rodRadius && d > 0.01) {
+          const push = (rodRadius - d) / d * 0.7;
+          n.x += (n.x - seg.x) * push;
+          n.y += (n.y - seg.y) * push;
         }
       }
     }
@@ -696,17 +706,16 @@ export function stepPhysics(state: PhysicsState) {
   if (state.toolPos) {
     const tp = state.toolPos;
 
-    if (state.toolType === '金属棒' || state.toolType === '振动器') {
-      const isVib = state.toolType === '振动器';
-      const rodLen = 80 + state.toolParam1 * (isVib ? 1.2 : 1.0);
-      const stirAmp = state.toolActive ? (isVib ? 4 : 2 + state.toolParam2 * 0.04) : 0;
+    // --- Metal rod ---
+    if (state.toolType === '金属棒') {
+      const rodLen = 80 + state.toolParam1 * 1.0;
+      const stirAmp = state.toolActive ? 2 + state.toolParam2 * 0.04 : 0;
       const { head, segments } = computeRodGeometry(rodLen, stirAmp);
       const rodRadius = 9;
 
-      // Collision rule: not inserted → only exposed small intestine nodes;
-      //                 inserted     → all cavity nodes (full applyRodCollision)
+      // Inserted → only cavity nodes (skip exposed); not inserted → only exposed nodes
       if (state.toolInserted) {
-        applyRodCollision(segments, rodRadius);
+        applyRodCollision(segments, rodRadius, true);
       } else if (state.exposedSmallIndices.length > 0) {
         for (const idx of state.exposedSmallIndices) {
           const n = state.smallNodes[idx];
@@ -723,9 +732,7 @@ export function stepPhysics(state: PhysicsState) {
       }
 
       if (state.toolActive) {
-        const zone = isVib ? 30 + state.toolParam2 * 0.4 : 18;
-        const sensRate = isVib ? 0.18 : 0.04;
-        const painRate = isVib ? 0.025 : 0.01;
+        const zone = 18;
         const applyZone = (nodes: PhysicsNode[], segs: SegmentProps[]) => {
           for (let i = 0; i < nodes.length; i++) {
             const d = dist(nodes[i].x, nodes[i].y, head.x, head.y);
@@ -733,13 +740,12 @@ export function stepPhysics(state: PhysicsState) {
               const f = 1 - d / zone;
               const seg = segs[i];
               if (seg && !seg.broken) {
-                seg.sensitivity = clamp(seg.sensitivity + sensRate * f, 0, 100);
-                seg.pain = clamp(seg.pain + painRate * f, 0, 100);
+                seg.sensitivity = clamp(seg.sensitivity + 0.04 * f, 0, 100);
+                seg.pain = clamp(seg.pain + 0.01 * f, 0, 100);
               }
             }
           }
         };
-        // Same insertion rule for zone effect
         if (state.toolInserted) {
           applyZone(state.smallNodes, state.smallSegs);
           applyZone(state.largeNodes, state.largeSegs);
@@ -751,22 +757,22 @@ export function stepPhysics(state: PhysicsState) {
             const d = dist(n.x, n.y, head.x, head.y);
             if (d < zone) {
               const f = 1 - d / zone;
-              seg.sensitivity = clamp(seg.sensitivity + sensRate * f, 0, 100);
-              seg.pain = clamp(seg.pain + painRate * f, 0, 100);
+              seg.sensitivity = clamp(seg.sensitivity + 0.04 * f, 0, 100);
+              seg.pain = clamp(seg.pain + 0.01 * f, 0, 100);
             }
           }
         }
       }
 
-      // Electrified rod: apply electric-style effect at rod head
+      // Electrified rod
       const metalRodElectrified = state.toolStates?.['金属棒']?.electrified === true;
       if (state.toolInserted && metalRodElectrified) {
-        const { head } = computeRodGeometry(80 + state.toolParam1 * 1.0, 0);
+        const { head: eHead } = computeRodGeometry(80 + state.toolParam1 * 1.0, 0);
         const eVoltage = (state.toolParam1 * 0.01) * 0.7;
         const eRadius = 30 + state.toolParam2 * 0.25;
         const eTime = state.time;
         for (let i = 0; i < N_SMALL; i++) {
-          const d = dist(state.smallNodes[i].x, state.smallNodes[i].y, head.x, head.y);
+          const d = dist(state.smallNodes[i].x, state.smallNodes[i].y, eHead.x, eHead.y);
           if (d < eRadius) {
             const f = 1 - d / eRadius;
             const seg = state.smallSegs[i];
@@ -781,7 +787,7 @@ export function stepPhysics(state: PhysicsState) {
           }
         }
         for (let i = 0; i < state.largeNodes.length; i++) {
-          const d = dist(state.largeNodes[i].x, state.largeNodes[i].y, head.x, head.y);
+          const d = dist(state.largeNodes[i].x, state.largeNodes[i].y, eHead.x, eHead.y);
           if (d < eRadius) {
             const f = 1 - d / eRadius;
             const seg = state.largeSegs[i];
@@ -794,6 +800,98 @@ export function stepPhysics(state: PhysicsState) {
             state.largeNodes[i].y += spasm + (Math.random() - 0.5) * eVoltage * 12;
           }
         }
+      }
+    }
+
+    // --- Vibrator ---
+    // Not inserted: collides only with exposed (outside-body) nodes, not cavity nodes
+    // Inserted:     collides only with cavity nodes (exposed nodes excluded)
+    // Active:       applies radial physical trembling + sensitivity/pleasure to affected nodes
+    //               param1 = intensity (strength of trembling + stim rate), param2 = range
+    //               Rod does NOT swing/wobble; length is fixed
+    if (state.toolType === '振动器') {
+      const rodLen = 120;
+      const { head, segments } = computeRodGeometry(rodLen, 0); // stirAmp always 0
+      const rodRadius = 9;
+
+      if (state.toolInserted) {
+        applyRodCollision(segments, rodRadius, true); // skip exposed
+      } else if (state.exposedSmallIndices.length > 0) {
+        for (const idx of state.exposedSmallIndices) {
+          const n = state.smallNodes[idx];
+          if (!n) continue;
+          for (const seg of segments) {
+            const d = dist(n.x, n.y, seg.x, seg.y);
+            if (d < rodRadius && d > 0.01) {
+              const push = (rodRadius - d) / d * 0.7;
+              n.x += (n.x - seg.x) * push;
+              n.y += (n.y - seg.y) * push;
+            }
+          }
+        }
+      }
+
+      if (state.toolActive) {
+        const zone = 30 + state.toolParam2 * 0.4;        // range controlled by param2
+        const vibAmp = 0.5 + state.toolParam1 * 0.04;    // physical trembling amplitude (param1)
+        const sensRate = 0.05 + state.toolParam1 * 0.003; // sensitivity/pleasure rate (param1)
+        const t = state.time;
+
+        if (state.toolInserted) {
+          const expSet = new Set(state.exposedSmallIndices);
+          for (let i = 0; i < state.smallNodes.length; i++) {
+            if (expSet.has(i)) continue;
+            const n = state.smallNodes[i];
+            const d = dist(n.x, n.y, head.x, head.y);
+            if (d < zone) {
+              const f = 1 - d / zone;
+              if (!n.pinned) {
+                n.x += fastSin(t * 3.5 + i * 1.2) * vibAmp * f;
+                n.y += fastCos(t * 2.9 + i * 0.9) * vibAmp * f;
+              }
+              const seg = state.smallSegs[i];
+              if (seg && !seg.broken) {
+                seg.sensitivity = clamp(seg.sensitivity + sensRate * f, 0, 100);
+                seg.pain = clamp(seg.pain + sensRate * 0.08 * f, 0, 100);
+              }
+            }
+          }
+          for (let i = 0; i < state.largeNodes.length; i++) {
+            const n = state.largeNodes[i];
+            const d = dist(n.x, n.y, head.x, head.y);
+            if (d < zone) {
+              const f = 1 - d / zone;
+              if (!n.pinned) {
+                n.x += fastSin(t * 3.5 + i * 1.4) * vibAmp * f;
+                n.y += fastCos(t * 2.9 + i * 1.1) * vibAmp * f;
+              }
+              const seg = state.largeSegs[i];
+              if (seg && !seg.broken) {
+                seg.sensitivity = clamp(seg.sensitivity + sensRate * f, 0, 100);
+                seg.pain = clamp(seg.pain + sensRate * 0.08 * f, 0, 100);
+              }
+            }
+          }
+        } else if (state.exposedSmallIndices.length > 0) {
+          for (const idx of state.exposedSmallIndices) {
+            const n = state.smallNodes[idx];
+            const d = dist(n.x, n.y, head.x, head.y);
+            if (d < zone) {
+              const f = 1 - d / zone;
+              if (!n.pinned) {
+                n.x += fastSin(t * 3.5 + idx * 1.2) * vibAmp * f;
+                n.y += fastCos(t * 2.9 + idx * 0.9) * vibAmp * f;
+              }
+              const seg = state.smallSegs[idx];
+              if (seg && !seg.broken) {
+                seg.sensitivity = clamp(seg.sensitivity + sensRate * f, 0, 100);
+                seg.pain = clamp(seg.pain + sensRate * 0.08 * f, 0, 100);
+              }
+            }
+          }
+        }
+        // Vibration also gently accelerates peristalsis
+        state.peristalsisSpeed = Math.max(state.peristalsisSpeed, 1 + state.toolParam1 * 0.01);
       }
     }
 
@@ -863,10 +961,11 @@ export function stepPhysics(state: PhysicsState) {
 
     if (state.toolType === '长柄针') {
       const rodLen = 90 + state.toolParam1 * 1.0;
-      const stirAmp = state.toolActive ? 1.5 + state.toolParam2 * 0.04 : 0;
+      // Auto-activates when inserted — no manual toggle needed
+      const stirAmp = state.toolInserted ? 1.5 + state.toolParam2 * 0.04 : 0;
       const { head, segments } = computeRodGeometry(rodLen, stirAmp);
       applyRodCollision(segments, 5);
-      if (state.toolActive) {
+      if (state.toolInserted) {
         const strength = 0.05 + state.toolParam2 * 0.004;
         const stirSpeed = Math.abs(fastSin(state.time * 0.25)) * stirAmp;
         const range = 14;
