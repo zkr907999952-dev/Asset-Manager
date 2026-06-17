@@ -2597,12 +2597,12 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
               {/* External view: shadow of rod inside body */}
               {splitAtNavel && (
                 <Line x1={nx} y1={ny} x2={g.headX} y2={g.headY}
-                  stroke={rodColor} strokeWidth={rodWidth} strokeLinecap="round" opacity={0.06} />
+                  stroke={rodColor} strokeWidth={rodWidth} strokeLinecap="round" opacity={0.20} />
               )}
               {/* Internal view: outside (handle-to-navel) portion is semi-transparent */}
               {splitAtNavelInternal && (
                 <Line x1={g.tailX} y1={g.tailY} x2={inNx} y2={inNy}
-                  stroke={rodColor} strokeWidth={rodWidth} strokeLinecap="round" opacity={0.10} />
+                  stroke={rodColor} strokeWidth={rodWidth} strokeLinecap="round" opacity={0.15} />
               )}
               {/* Main rod body */}
               <Line

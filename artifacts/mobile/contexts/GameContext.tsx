@@ -1553,6 +1553,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         toolAnchor: null,
         toolInserted: false,
         enemaHeadIdx: p.enemaHeadIdx,
+        viewMode: (tool === TOOLS.METAL_ROD && !p.navelPierced) ? 'external' : prev.viewMode,
       }));
     }
   }, []);

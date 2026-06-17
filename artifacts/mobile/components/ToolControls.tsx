@@ -26,7 +26,7 @@ const TOOL_PARAMS: Record<string, {
 
 function ToolSection({ toolId, isActive }: { toolId: string; isActive: boolean }) {
   const colors = useColors();
-  const { state, setToolState, setActiveTool, clearElectrodes, setForcePierceMode } = useGame();
+  const { state, setToolState, setActiveTool, clearElectrodes, setForcePierceMode, setViewMode } = useGame();
 
   const focusTool = () => {
     if (!isActive) setActiveTool(toolId as any);
@@ -85,7 +85,7 @@ function ToolSection({ toolId, isActive }: { toolId: string; isActive: boolean }
           {toolId === TOOLS.METAL_ROD && !state.navelPierced && !state.forcePierceMode && (
             <TouchableOpacity
               style={[styles.extraBtn, { borderColor: 'rgba(200,60,60,0.55)' }]}
-              onPress={() => { focusTool(); setForcePierceMode(true); }}
+              onPress={() => { focusTool(); setViewMode('external'); setForcePierceMode(true); }}
             >
               <Feather name="zap" size={10} color="#ff8080" />
               <Text style={[styles.extraBtnText, { color: '#ff8080' }]}>强行穿脐</Text>
