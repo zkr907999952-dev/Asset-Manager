@@ -108,7 +108,7 @@ export interface RenderSnapshot {
   periScaleSmall: number[];
   periScaleLarge: number[];
   beadsChain: { x: number; y: number; vx: number; vy: number }[];
-  electrodes: { x: number; y: number }[];
+  electrodes: { x: number; y: number; mode: 'external' | 'internal' }[];
   avgPain: number;
   avgPressure: number;
   avgSensitivity: number;
@@ -203,7 +203,7 @@ export interface GameUIState {
   renderLargeSegs: RenderSegment[];
   periScaleSmall: number[];
   periScaleLarge: number[];
-  electrodes: { x: number; y: number }[];
+  electrodes: { x: number; y: number; mode: 'external' | 'internal' }[];
   electricMode: 'external' | 'internal';
   toolPos: { x: number; y: number } | null;
   toolAnchor: { x: number; y: number } | null;
@@ -672,9 +672,10 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     const elLen = p.electrodes.length;
     if (snap.electrodes.length !== elLen) snap.electrodes.length = elLen;
     for (let i = 0; i < elLen; i++) {
-      if (!snap.electrodes[i]) snap.electrodes[i] = { x: 0, y: 0 };
+      if (!snap.electrodes[i]) snap.electrodes[i] = { x: 0, y: 0, mode: 'external' };
       snap.electrodes[i].x = p.electrodes[i].x;
       snap.electrodes[i].y = p.electrodes[i].y;
+      snap.electrodes[i].mode = p.electrodes[i].mode;
     }
 
     // Aggregate stats — single pass, no intermediate arrays
@@ -1712,7 +1713,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     if (physicsRef.current.electrodes.length >= 8) {
       physicsRef.current.electrodes.shift();
     }
-    physicsRef.current.electrodes.push({ x, y });
+    physicsRef.current.electrodes.push({ x, y, mode: physicsRef.current.electricMode });
     setState(prev => ({ ...prev, electrodes: [...physicsRef.current.electrodes] }));
   }, []);
 

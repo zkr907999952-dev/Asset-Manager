@@ -91,7 +91,7 @@ export interface PhysicsState {
   activeClampIdx: number;   // index into clampPoints being dragged (-1 = none)
   pendingClampCount: number; // clamp slots waiting to be placed
   // Electric
-  electrodes: { x: number; y: number }[];
+  electrodes: { x: number; y: number; mode: 'external' | 'internal' }[];
   electricMode: 'external' | 'internal';
   // Enema tube head
   enemaHeadIdx: number;
@@ -223,10 +223,10 @@ function clampToCavity(node: PhysicsNode, margin: number) {
 }
 
 function applyElectricPhysics(state: PhysicsState, param1: number, param2: number) {
-  const extMult = state.electricMode === 'external' ? 0.5 : 1.0;
   const voltage = param1 * 0.01;
   const radius = 30 + param2 * 0.3;
   for (const el of state.electrodes) {
+    const extMult = el.mode === 'external' ? 0.5 : 1.0;
     for (let i = 0; i < N_SMALL; i++) {
       const d = dist(state.smallNodes[i].x, state.smallNodes[i].y, el.x, el.y);
       if (d < radius) {

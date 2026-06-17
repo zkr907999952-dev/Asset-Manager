@@ -360,6 +360,8 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
     screenX: number;
     screenY: number;
   }>({ active: false, physX: 0, physY: 0, screenX: 0, screenY: 0 });
+  const electrodeDragRef = useRef<{ idx: number }>({ idx: -1 });
+  const electrodeTapRef = useRef<{ x: number; y: number } | null>(null);
   const [strikeOverlay, setStrikeOverlay] = useState<{
     physX: number; physY: number;
     toolId: BellyStrikeToolId;
@@ -714,7 +716,20 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
       physicsRef.current.toolPos = pos;
 
       if (s.activeTool === TOOLS.ELECTRIC) {
-        ae(pos.x, pos.y);
+        const ELECTRODE_HIT_R = 22;
+        const elecs = physicsRef.current.electrodes;
+        let hitIdx = -1, hitDist = ELECTRODE_HIT_R;
+        for (let ei = 0; ei < elecs.length; ei++) {
+          const d = Math.hypot(elecs[ei].x - pos.x, elecs[ei].y - pos.y);
+          if (d < hitDist) { hitDist = d; hitIdx = ei; }
+        }
+        if (hitIdx >= 0) {
+          electrodeDragRef.current.idx = hitIdx;
+          electrodeTapRef.current = null;
+        } else {
+          electrodeDragRef.current.idx = -1;
+          electrodeTapRef.current = { x: pos.x, y: pos.y };
+        }
         return;
       }
       if (s.activeTool === TOOLS.GRAB) {
@@ -1262,6 +1277,22 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
         return;
       }
 
+      // Electrode drag — move existing electrode
+      if (s.activeTool === TOOLS.ELECTRIC) {
+        const di = electrodeDragRef.current.idx;
+        if (di >= 0 && di < physicsRef.current.electrodes.length) {
+          physicsRef.current.electrodes[di].x = pos.x;
+          physicsRef.current.electrodes[di].y = pos.y;
+        } else if (electrodeTapRef.current) {
+          const tp = electrodeTapRef.current;
+          if (Math.hypot(pos.x - tp.x, pos.y - tp.y) > 12) {
+            electrodeTapRef.current = null;
+          }
+        }
+        physicsRef.current.toolPos = pos;
+        return;
+      }
+
       physicsRef.current.toolPos = pos;
 
       const now = Date.now();
@@ -1274,6 +1305,24 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
     },
     onPanResponderRelease: () => {
       isDragging.current = false;
+
+      // Electrode drag finalize / tap to place
+      {
+        const { state: s, addElectrode: ae2 } = hrRef.current;
+        if (s.activeTool === TOOLS.ELECTRIC) {
+          const di = electrodeDragRef.current.idx;
+          electrodeDragRef.current.idx = -1;
+          if (di >= 0) {
+            return;
+          }
+          const tapPos = electrodeTapRef.current;
+          electrodeTapRef.current = null;
+          if (tapPos && ae2) {
+            ae2(tapPos.x, tapPos.y);
+          }
+          return;
+        }
+      }
 
       // Capsule bomb cavity drag: drop bomb
       if (capsuleBombDragRef.current.active) {
@@ -3241,67 +3290,62 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
 
         {/* Electrodes + wires + controller */}
         {(snap.electrodes.length > 0 || activeTool === TOOLS.ELECTRIC || electricIndepActive) && (() => {
-          const elecMode = (physicsRef.current as any).electricMode ?? 'external';
-          const isExternalElec = elecMode === 'external';
+          const nextMode = (physicsRef.current as any).electricMode ?? 'external';
+          const nextIsExternal = nextMode === 'external';
           const elecActive = (activeTool === TOOLS.ELECTRIC && toolActive) || electricIndepActive;
-          const wireColor = elecActive ? (isExternalElec ? '#50c8ff' : '#ffee44') : (isExternalElec ? '#336688' : '#888844');
           const elecParam2 = activeTool === TOOLS.ELECTRIC
             ? toolParam2
             : (toolStates?.[TOOLS.ELECTRIC]?.param2 ?? 50);
           return (
             <G>
-              {/* Wires */}
+              {/* Wires — per electrode mode */}
               {snap.electrodes.map((el, i) => {
-                if (isExternalElec) {
-                  // External pad: wire goes directly from pad to controller
+                const elIsExternal = el.mode === 'external';
+                const wc = elecActive ? (elIsExternal ? '#50c8ff' : '#ffee44') : (elIsExternal ? '#336688' : '#888844');
+                if (elIsExternal) {
                   return (
                     <Line key={`wire-${i}`}
                       x1={el.x} y1={el.y}
                       x2={ELEC_CTRL_X} y2={ELEC_CTRL_Y}
-                      stroke={wireColor} strokeWidth={1.2} strokeOpacity={0.8}
+                      stroke={wc} strokeWidth={1.2} strokeOpacity={0.8}
                       strokeDasharray="4,3" />
                   );
                 }
-                // Internal electrode wires through navel
                 if (isInternal) {
                   return (
                     <G key={`wire-${i}`}>
                       <Line x1={el.x} y1={el.y} x2={NAVEL_X} y2={NAVEL_Y_INTERNAL}
-                        stroke={wireColor} strokeWidth={1} strokeOpacity={0.7} />
+                        stroke={wc} strokeWidth={1} strokeOpacity={0.7} />
                       <Line x1={NAVEL_X} y1={NAVEL_Y_INTERNAL}
                         x2={ELEC_CTRL_X} y2={ELEC_CTRL_Y}
-                        stroke={wireColor} strokeWidth={1} strokeOpacity={0.7} />
+                        stroke={wc} strokeWidth={1} strokeOpacity={0.7} />
                     </G>
                   );
                 }
-                // External view + internal electrode: one navel-to-controller wire
                 if (i !== 0) return null;
                 return (
                   <Line key="wire-ext-navel"
                     x1={NAVEL_X} y1={NAVEL_Y_EXTERNAL}
                     x2={ELEC_CTRL_X} y2={ELEC_CTRL_Y}
-                    stroke={wireColor} strokeWidth={1.2} strokeOpacity={0.75} />
+                    stroke={wc} strokeWidth={1.2} strokeOpacity={0.75} />
                 );
               })}
-              {/* Electrode bodies */}
+              {/* Electrode bodies — per electrode mode */}
               {snap.electrodes.map((el, i) => {
-                if (isExternalElec) {
-                  // External patch electrode: rectangular skin pad
+                const elIsExternal = el.mode === 'external';
+                if (elIsExternal) {
                   const pw = 18, ph = 12;
                   return (
                     <G key={`el-${i}`}>
-                      {/* Pad body */}
                       <Rect x={el.x - pw / 2} y={el.y - ph / 2}
                         width={pw} height={ph} rx={4}
                         fill={elecActive ? '#1a3a4a' : '#122030'}
                         stroke={elecActive ? '#50c8ff' : '#336688'}
                         strokeWidth={1.2} />
-                      {/* Center cross (+ terminal) */}
                       <Line x1={el.x - 4} y1={el.y} x2={el.x + 4} y2={el.y}
                         stroke={elecActive ? '#80e8ff' : '#44aacc'} strokeWidth={1} />
                       <Line x1={el.x} y1={el.y - 4} x2={el.x} y2={el.y + 4}
                         stroke={elecActive ? '#80e8ff' : '#44aacc'} strokeWidth={1} />
-                      {/* Gel shimmer */}
                       <Rect x={el.x - pw / 2 + 2} y={el.y - ph / 2 + 2}
                         width={pw - 4} height={3} rx={1}
                         fill={elecActive ? 'rgba(80,200,255,0.25)' : 'rgba(80,200,255,0.08)'} />
@@ -3312,7 +3356,6 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
                     </G>
                   );
                 }
-                // Internal needle electrode
                 return (
                   <G key={`el-${i}`}>
                     <Circle cx={el.x} cy={el.y} r={6} fill="#ffff00" fillOpacity={0.9}
@@ -3324,23 +3367,22 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
                   </G>
                 );
               })}
-              {/* Controller box */}
+              {/* Controller box — indicator reflects next-electrode mode */}
               {(activeTool === TOOLS.ELECTRIC || electricIndepActive) && (
                 <G>
                   <Rect x={ELEC_CTRL_X - 20} y={ELEC_CTRL_Y - 16}
                     width={40} height={32} rx={3}
-                    fill="#2a2a2a" stroke={isExternalElec ? '#336688' : '#666'} strokeWidth={1.2} />
-                  {/* Mode indicator strip */}
+                    fill="#2a2a2a" stroke={nextIsExternal ? '#336688' : '#666'} strokeWidth={1.2} />
                   <Rect x={ELEC_CTRL_X - 20} y={ELEC_CTRL_Y - 16}
                     width={40} height={4} rx={2}
-                    fill={isExternalElec ? (elecActive ? '#50c8ff' : '#224455') : (elecActive ? '#ffcc00' : '#443300')} />
+                    fill={nextIsExternal ? (elecActive ? '#50c8ff' : '#224455') : (elecActive ? '#ffcc00' : '#443300')} />
                   <Circle cx={ELEC_CTRL_X - 8} cy={ELEC_CTRL_Y}
                     r={3} fill={elecActive ? '#ff4040' : '#664040'} />
                   <Circle cx={ELEC_CTRL_X + 8} cy={ELEC_CTRL_Y}
-                    r={3} fill={elecActive ? (isExternalElec ? '#50c8ff' : '#ffcc40') : '#665540'} />
+                    r={3} fill={elecActive ? (nextIsExternal ? '#50c8ff' : '#ffcc40') : '#665540'} />
                   <Rect x={ELEC_CTRL_X - 16} y={ELEC_CTRL_Y + 7}
                     width={32} height={3}
-                    fill={elecActive ? (isExternalElec ? '#50c8ff' : '#ffee44') : '#444'} />
+                    fill={elecActive ? (nextIsExternal ? '#50c8ff' : '#ffee44') : '#444'} />
                 </G>
               )}
             </G>
