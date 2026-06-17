@@ -2576,7 +2576,7 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
         {/* ===== TOOLS LAYER (active/current tool) ===== */}
 
         {/* Rod / Vibrator */}
-        {handlePos && (activeTool === TOOLS.METAL_ROD || activeTool === TOOLS.VIBRATOR) && (() => {
+        {handlePos && (activeTool === TOOLS.METAL_ROD || activeTool === TOOLS.VIBRATOR) && !(activeTool === TOOLS.METAL_ROD && state.forcePierceMode) && (() => {
           if (!rodGeo) return null;
           const isVib = activeTool === TOOLS.VIBRATOR;
           const { g } = rodGeo;
@@ -2597,12 +2597,12 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
               {/* External view: shadow of rod inside body */}
               {splitAtNavel && (
                 <Line x1={nx} y1={ny} x2={g.headX} y2={g.headY}
-                  stroke={rodColor} strokeWidth={rodWidth} strokeLinecap="round" opacity={0.12} />
+                  stroke={rodColor} strokeWidth={rodWidth} strokeLinecap="round" opacity={0.06} />
               )}
               {/* Internal view: outside (handle-to-navel) portion is semi-transparent */}
               {splitAtNavelInternal && (
                 <Line x1={g.tailX} y1={g.tailY} x2={inNx} y2={inNy}
-                  stroke={rodColor} strokeWidth={rodWidth} strokeLinecap="round" opacity={0.18} />
+                  stroke={rodColor} strokeWidth={rodWidth} strokeLinecap="round" opacity={0.10} />
               )}
               {/* Main rod body */}
               <Line
@@ -2614,9 +2614,26 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
               <Circle cx={g.tailX} cy={g.tailY} r={isVib ? 9 : 7}
                 fill="#666688" stroke="#222" strokeWidth={1}
                 opacity={splitAtNavelInternal ? 0.3 : 1} />
-              {(!splitAtNavel) && (
-                <Circle cx={g.headX} cy={g.headY} r={isVib ? 8 : 6} fill={rodColor} stroke="#222" strokeWidth={0.5} />
-              )}
+              {(!splitAtNavel) && (() => {
+                const rodElectrified = !isVib && toolStates?.[TOOLS.METAL_ROD]?.electrified === true;
+                return (
+                  <G>
+                    {rodElectrified && (
+                      <Circle cx={g.headX} cy={g.headY}
+                        r={28 + toolParam2 * 0.22}
+                        fill="rgba(255,255,0,0.07)" stroke="rgba(255,230,40,0.35)" strokeWidth={1} />
+                    )}
+                    {rodElectrified && (
+                      <Circle cx={g.headX} cy={g.headY}
+                        r={10}
+                        fill="rgba(255,255,120,0.18)" stroke="rgba(255,220,40,0.7)" strokeWidth={1.2} />
+                    )}
+                    <Circle cx={g.headX} cy={g.headY} r={isVib ? 8 : 6}
+                      fill={rodElectrified ? '#ffee44' : rodColor}
+                      stroke={rodElectrified ? '#ffaa00' : '#222'} strokeWidth={0.5} />
+                  </G>
+                );
+              })()}
             </G>
           );
         })()}

@@ -95,7 +95,7 @@ export interface PhysicsState {
   enemaSmallHeadIdx: number;
   expansionScale: number;
   pressureDiffusionRate: number;
-  toolStates: Record<string, { active: boolean; param1: number; param2: number; pos?: { x: number; y: number } | null }>;
+  toolStates: Record<string, { active: boolean; param1: number; param2: number; pos?: { x: number; y: number } | null; electrified?: boolean }>;
   relaxFrames: number;
   laxativeFrames: number;
   hpBonus: number;
@@ -751,6 +751,44 @@ export function stepPhysics(state: PhysicsState) {
               seg.sensitivity = clamp(seg.sensitivity + sensRate * f, 0, 100);
               seg.pain = clamp(seg.pain + painRate * f, 0, 100);
             }
+          }
+        }
+      }
+
+      // Electrified rod: apply electric-style effect at rod head
+      const metalRodElectrified = state.toolStates?.['金属棒']?.electrified === true;
+      if (state.toolInserted && metalRodElectrified) {
+        const { head } = computeRodGeometry(80 + state.toolParam1 * 1.0, 0);
+        const eVoltage = (state.toolParam1 * 0.01) * 0.7;
+        const eRadius = 30 + state.toolParam2 * 0.25;
+        const eTime = state.time;
+        for (let i = 0; i < N_SMALL; i++) {
+          const d = dist(state.smallNodes[i].x, state.smallNodes[i].y, head.x, head.y);
+          if (d < eRadius) {
+            const f = 1 - d / eRadius;
+            const seg = state.smallSegs[i];
+            if (seg && !seg.broken) {
+              seg.pain = clamp(seg.pain + eVoltage * 5.0 * f, 0, 100);
+              seg.sensitivity = clamp(seg.sensitivity + eVoltage * 3.5 * f, 0, 100);
+              seg.health = clamp(seg.health - eVoltage * 0.5 * f, 0, 100);
+            }
+            const spasm = eVoltage * 38 * fastSin(eTime * 1.5 + i * 0.8);
+            state.smallNodes[i].x += spasm * 0.7 + (Math.random() - 0.5) * eVoltage * 15;
+            state.smallNodes[i].y += spasm + (Math.random() - 0.5) * eVoltage * 15;
+          }
+        }
+        for (let i = 0; i < state.largeNodes.length; i++) {
+          const d = dist(state.largeNodes[i].x, state.largeNodes[i].y, head.x, head.y);
+          if (d < eRadius) {
+            const f = 1 - d / eRadius;
+            const seg = state.largeSegs[i];
+            if (seg && !seg.broken) {
+              seg.pain = clamp(seg.pain + eVoltage * 3.5 * f, 0, 100);
+              seg.sensitivity = clamp(seg.sensitivity + eVoltage * 2.5 * f, 0, 100);
+            }
+            const spasm = eVoltage * 30 * fastSin(eTime * 1.5 + i * 0.6);
+            state.largeNodes[i].x += spasm * 0.6 + (Math.random() - 0.5) * eVoltage * 12;
+            state.largeNodes[i].y += spasm + (Math.random() - 0.5) * eVoltage * 12;
           }
         }
       }

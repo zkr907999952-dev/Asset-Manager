@@ -6,6 +6,7 @@ import { useColors } from '@/hooks/useColors';
 import { useGame } from '@/contexts/GameContext';
 import { TOOLS } from '../constants/gameConfig';
 
+
 const TOOL_PARAMS: Record<string, {
   p1Label: string; p1Max: number; p1Step: number;
   p2Label: string; p2Max: number; p2Step: number;
@@ -25,7 +26,7 @@ const TOOL_PARAMS: Record<string, {
 
 function ToolSection({ toolId, isActive }: { toolId: string; isActive: boolean }) {
   const colors = useColors();
-  const { state, setToolState, setActiveTool, clearElectrodes } = useGame();
+  const { state, setToolState, setActiveTool, clearElectrodes, setForcePierceMode } = useGame();
 
   const focusTool = () => {
     if (!isActive) setActiveTool(toolId as any);
@@ -81,6 +82,41 @@ function ToolSection({ toolId, isActive }: { toolId: string; isActive: boolean }
               <Text style={[styles.extraBtnText, { color: colors.mutedForeground }]}>清除电极</Text>
             </TouchableOpacity>
           )}
+          {toolId === TOOLS.METAL_ROD && !state.navelPierced && !state.forcePierceMode && (
+            <TouchableOpacity
+              style={[styles.extraBtn, { borderColor: 'rgba(200,60,60,0.55)' }]}
+              onPress={() => { focusTool(); setForcePierceMode(true); }}
+            >
+              <Feather name="zap" size={10} color="#ff8080" />
+              <Text style={[styles.extraBtnText, { color: '#ff8080' }]}>强行穿脐</Text>
+            </TouchableOpacity>
+          )}
+          {toolId === TOOLS.METAL_ROD && state.forcePierceMode && (
+            <TouchableOpacity
+              style={[styles.extraBtn, { borderColor: 'rgba(200,60,60,0.55)' }]}
+              onPress={() => { setForcePierceMode(false); }}
+            >
+              <Feather name="x" size={10} color="#ff8080" />
+              <Text style={[styles.extraBtnText, { color: '#ff8080' }]}>取消穿脐</Text>
+            </TouchableOpacity>
+          )}
+          {toolId === TOOLS.METAL_ROD && (() => {
+            const electrified = state.toolStates[TOOLS.METAL_ROD]?.electrified === true;
+            return (
+              <TouchableOpacity
+                style={[styles.extraBtn, {
+                  borderColor: electrified ? 'rgba(255,220,40,0.7)' : `${colors.border}66`,
+                  backgroundColor: electrified ? 'rgba(255,220,40,0.12)' : 'transparent',
+                }]}
+                onPress={() => { focusTool(); setToolState(TOOLS.METAL_ROD, { electrified: !electrified }); }}
+              >
+                <Feather name="zap" size={10} color={electrified ? '#ffee44' : colors.mutedForeground} />
+                <Text style={[styles.extraBtnText, { color: electrified ? '#ffee44' : colors.mutedForeground }]}>
+                  {electrified ? '断电' : '通电'}
+                </Text>
+              </TouchableOpacity>
+            );
+          })()}
           <TouchableOpacity
             style={[
               styles.toggleBtn,

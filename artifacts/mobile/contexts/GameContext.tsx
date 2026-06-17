@@ -121,6 +121,7 @@ export interface ToolInstanceState {
   param1: number;
   param2: number;
   pos?: { x: number; y: number } | null;
+  electrified?: boolean;
 }
 
 export interface DisplayOptions {
@@ -1457,6 +1458,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         toolInserted: false,
         toolPos: p.toolPos ? { ...p.toolPos } : null,
         enemaHeadIdx: p.enemaHeadIdx,
+        viewMode: (tool === TOOLS.METAL_ROD && !p.navelPierced) ? 'external' : prev.viewMode,
       }));
     } else {
       enabledToolsRef.current = [];
