@@ -3298,45 +3298,56 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
             : (toolStates?.[TOOLS.ELECTRIC]?.param2 ?? 50);
           return (
             <G>
-              {/* Wires — per electrode mode */}
+              {/* Wires — per electrode mode + per view opacity */}
               {snap.electrodes.map((el, i) => {
                 const elIsExternal = el.mode === 'external';
                 const wc = elecActive ? (elIsExternal ? '#50c8ff' : '#ffee44') : (elIsExternal ? '#336688' : '#888844');
                 if (elIsExternal) {
+                  // External pad → controller. Visible outside, dim inside (pad is on skin).
+                  const wireOp = isInternal ? 0.2 : 0.8;
                   return (
                     <Line key={`wire-${i}`}
                       x1={el.x} y1={el.y}
                       x2={ELEC_CTRL_X} y2={ELEC_CTRL_Y}
-                      stroke={wc} strokeWidth={1.2} strokeOpacity={0.8}
+                      stroke={wc} strokeWidth={1.2} strokeOpacity={wireOp}
                       strokeDasharray="4,3" />
                   );
                 }
+                // Internal electrode wires
                 if (isInternal) {
+                  // Inside cavity: electrode→navel normal, navel→controller dim (exits body).
                   return (
                     <G key={`wire-${i}`}>
                       <Line x1={el.x} y1={el.y} x2={NAVEL_X} y2={NAVEL_Y_INTERNAL}
-                        stroke={wc} strokeWidth={1} strokeOpacity={0.7} />
+                        stroke={wc} strokeWidth={1} strokeOpacity={0.75} />
                       <Line x1={NAVEL_X} y1={NAVEL_Y_INTERNAL}
                         x2={ELEC_CTRL_X} y2={ELEC_CTRL_Y}
-                        stroke={wc} strokeWidth={1} strokeOpacity={0.7} />
+                        stroke={wc} strokeWidth={1} strokeOpacity={0.25} />
                     </G>
                   );
                 }
-                if (i !== 0) return null;
+                // External view: electrode→navel dim (inside belly), navel→controller normal (outside).
                 return (
-                  <Line key="wire-ext-navel"
-                    x1={NAVEL_X} y1={NAVEL_Y_EXTERNAL}
-                    x2={ELEC_CTRL_X} y2={ELEC_CTRL_Y}
-                    stroke={wc} strokeWidth={1.2} strokeOpacity={0.75} />
+                  <G key={`wire-${i}`}>
+                    <Line x1={el.x} y1={el.y} x2={NAVEL_X} y2={NAVEL_Y_EXTERNAL}
+                      stroke={wc} strokeWidth={1} strokeOpacity={0.22} />
+                    {i === 0 && (
+                      <Line x1={NAVEL_X} y1={NAVEL_Y_EXTERNAL}
+                        x2={ELEC_CTRL_X} y2={ELEC_CTRL_Y}
+                        stroke={wc} strokeWidth={1.2} strokeOpacity={0.75} />
+                    )}
+                  </G>
                 );
               })}
-              {/* Electrode bodies — per electrode mode */}
+              {/* Electrode bodies — per electrode mode + per view opacity */}
               {snap.electrodes.map((el, i) => {
                 const elIsExternal = el.mode === 'external';
                 if (elIsExternal) {
+                  // External pad: fully visible outside, dim inside (pad is on skin, not in cavity).
+                  const bodyOp = isInternal ? 0.22 : 1.0;
                   const pw = 18, ph = 12;
                   return (
-                    <G key={`el-${i}`}>
+                    <G key={`el-${i}`} opacity={bodyOp}>
                       <Rect x={el.x - pw / 2} y={el.y - ph / 2}
                         width={pw} height={ph} rx={4}
                         fill={elecActive ? '#1a3a4a' : '#122030'}
@@ -3356,8 +3367,10 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
                     </G>
                   );
                 }
+                // Internal electrode: dim outside (inside belly viewed through skin), normal inside.
+                const bodyOp = isInternal ? 1.0 : 0.28;
                 return (
-                  <G key={`el-${i}`}>
+                  <G key={`el-${i}`} opacity={bodyOp}>
                     <Circle cx={el.x} cy={el.y} r={6} fill="#ffff00" fillOpacity={0.9}
                       stroke="#ffaa00" strokeWidth={1} />
                     {elecActive && (
