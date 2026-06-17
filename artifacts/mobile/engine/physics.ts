@@ -699,7 +699,25 @@ export function stepPhysics(state: PhysicsState) {
       const stirAmp = state.toolActive ? (isVib ? 4 : 2 + state.toolParam2 * 0.04) : 0;
       const { head, segments } = computeRodGeometry(rodLen, stirAmp);
       const rodRadius = 9;
-      applyRodCollision(segments, rodRadius);
+
+      // Collision rule: not inserted → only exposed small intestine nodes;
+      //                 inserted     → all cavity nodes (full applyRodCollision)
+      if (state.toolInserted) {
+        applyRodCollision(segments, rodRadius);
+      } else if (state.exposedSmallIndices.length > 0) {
+        for (const idx of state.exposedSmallIndices) {
+          const n = state.smallNodes[idx];
+          if (!n) continue;
+          for (const seg of segments) {
+            const d = dist(n.x, n.y, seg.x, seg.y);
+            if (d < rodRadius && d > 0.01) {
+              const push = (rodRadius - d) / d * 0.7;
+              n.x += (n.x - seg.x) * push;
+              n.y += (n.y - seg.y) * push;
+            }
+          }
+        }
+      }
 
       if (state.toolActive) {
         const zone = isVib ? 30 + state.toolParam2 * 0.4 : 18;
@@ -718,8 +736,23 @@ export function stepPhysics(state: PhysicsState) {
             }
           }
         };
-        applyZone(state.smallNodes, state.smallSegs);
-        applyZone(state.largeNodes, state.largeSegs);
+        // Same insertion rule for zone effect
+        if (state.toolInserted) {
+          applyZone(state.smallNodes, state.smallSegs);
+          applyZone(state.largeNodes, state.largeSegs);
+        } else if (state.exposedSmallIndices.length > 0) {
+          for (const idx of state.exposedSmallIndices) {
+            const n = state.smallNodes[idx];
+            const seg = state.smallSegs[idx];
+            if (!n || !seg || seg.broken) continue;
+            const d = dist(n.x, n.y, head.x, head.y);
+            if (d < zone) {
+              const f = 1 - d / zone;
+              seg.sensitivity = clamp(seg.sensitivity + sensRate * f, 0, 100);
+              seg.pain = clamp(seg.pain + painRate * f, 0, 100);
+            }
+          }
+        }
       }
     }
 

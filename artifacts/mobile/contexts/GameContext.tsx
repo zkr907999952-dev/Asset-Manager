@@ -173,6 +173,7 @@ export interface GameUIState {
   pleasure: number;
   heartRate: number;
   navelPierced: boolean;
+  forcePierceMode: boolean;
   intestinalRuptures: number;
   intestinalBreaks: number;
   activeTool: ToolType | null;
@@ -384,6 +385,8 @@ interface GameContextType {
   moveCavityBomb: (id: number, x: number, y: number) => void;
   clearExplosionPositions: () => void;
   setDisplayOption: <K extends keyof DisplayOptions>(key: K, value: DisplayOptions[K]) => void;
+  setForcePierceMode: (v: boolean) => void;
+  triggerForcePierce: () => void;
 }
 
 const DEFAULT_TOOL_POS = { x: CAVITY_CX, y: CAVITY_CY - 40 };
@@ -501,7 +504,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
 
   const [state, setState] = useState<GameUIState>({
     hp: 100, isDead: false, pleasure: 0, heartRate: 72,
-    navelPierced: false, intestinalRuptures: 0, intestinalBreaks: 0,
+    navelPierced: false, forcePierceMode: false, intestinalRuptures: 0, intestinalBreaks: 0,
     activeTool: null, enabledTools: [], toolActive: false, toolParam1: 50, toolParam2: 50,
     toolStates: physicsRef.current.toolStates,
     pressureDiffusionRate: physicsRef.current.pressureDiffusionRate,
@@ -1725,6 +1728,26 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     setState(prev => ({ ...prev, toolAnchor: null, toolInserted: false }));
   }, []);
 
+  const setForcePierceMode = useCallback((v: boolean) => {
+    setState(prev => ({ ...prev, forcePierceMode: v }));
+  }, []);
+
+  const triggerForcePierce = useCallback(() => {
+    physicsRef.current.navelPierced = true;
+    physicsRef.current.hpPenalty = (physicsRef.current.hpPenalty ?? 0) + 10;
+    physicsRef.current.toolAnchor = { x: CAVITY_CX, y: CAVITY_CY };
+    physicsRef.current.toolInserted = true;
+    setState(prev => ({
+      ...prev,
+      forcePierceMode: false,
+      navelPierced: true,
+      toolAnchor: { x: CAVITY_CX, y: CAVITY_CY },
+      toolInserted: true,
+      viewMode: 'internal',
+    }));
+    triggerDialogueRef.current('force_navel_pierce');
+  }, []);
+
   const setNavelPierced = useCallback((v: boolean) => {
     physicsRef.current.navelPierced = v;
     setState(prev => ({ ...prev, navelPierced: v }));
@@ -1957,7 +1980,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     setState(prev => ({
       ...prev,
       hp: 100, isDead: false, pleasure: 0, heartRate: 72,
-      navelPierced: false, intestinalRuptures: 0, intestinalBreaks: 0,
+      navelPierced: false, forcePierceMode: false, intestinalRuptures: 0, intestinalBreaks: 0,
       activeTool: null, enabledTools: [], toolActive: false, toolParam1: 50, toolParam2: 50,
       toolStates: fresh.toolStates,
       pressureDiffusionRate: fresh.pressureDiffusionRate,
@@ -2962,6 +2985,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       detonateCapsuleBombs, clearCapsuleBombs, setCapsuleBombPower,
       setCapsuleBombPlacementMode, moveCavityBomb, clearExplosionPositions,
       setDisplayOption,
+      setForcePierceMode, triggerForcePierce,
     }}>
       {children}
     </GameContext.Provider>

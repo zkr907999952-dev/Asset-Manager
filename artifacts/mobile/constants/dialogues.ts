@@ -105,7 +105,8 @@ export type DialogueTrigger =
   | 'dead_revive'
   | 'expose_hook'
   | 'expose_pulled'
-  | 'expose_complete';
+  | 'expose_complete'
+  | 'force_navel_pierce';
 
 export const DIALOGUES: Record<DialogueTrigger, string[]> = {
   idle: [
@@ -618,6 +619,12 @@ export const DIALOGUES: Record<DialogueTrigger, string[]> = {
     '呜啊……肠子在外面……好奇怪……好冷……',
     '不……不行……肠子都出来了……！',
     '啊啊……！这是我的肠子吗……！真的露出来了……！',
+  ],
+  force_navel_pierce: [
+    '啊啊……！肚脐被捅穿了……！好痛……！',
+    '呜……被钝器直接刺穿了……！',
+    '不……不行……戳到肠子了……！',
+    '啊……！强行穿进来了……！里面……好痛……',
   ],
 };
 

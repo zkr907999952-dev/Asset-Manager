@@ -1,5 +1,5 @@
 import React, { useRef, useCallback, useState, useEffect } from 'react';
-import { View, PanResponder, StyleSheet, Animated, Easing, Image, Platform } from 'react-native';
+import { View, PanResponder, StyleSheet, Animated, Easing, Image, Platform, TouchableOpacity, Text } from 'react-native';
 
 import Svg, {
   Ellipse, Circle, Line, Path, Rect, Defs, RadialGradient, LinearGradient, Stop, G,
@@ -253,6 +253,7 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
     insertHookViaNavel, retractHook, activateHookGrab, clearExposedNodes,
     placeCapsuleBombInCavity, setCapsuleBombSwallowTarget, moveCavityBomb,
     clearExplosionPositions,
+    setForcePierceMode, triggerForcePierce,
   } = useGame();
   const lastDialogueTime = useRef(0);
   const isDragging = useRef(false);
@@ -338,6 +339,18 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state.explosionSeq]);
 
+  // Initialize force pierce handle position when mode activates
+  useEffect(() => {
+    if (state.forcePierceMode) {
+      const rodLen = 80 + state.toolParam1 * 1.0;
+      const startY = NAVEL_Y_EXTERNAL - rodLen * 0.85;
+      fpRef.current = { handle: { x: NAVEL_X, y: startY }, progress: 0, triggered: false };
+      physicsRef.current.toolPos = { x: NAVEL_X, y: startY };
+      setForcePierceProgress(0);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state.forcePierceMode]);
+
   // Belly strike drag state
   const bellyStrikeDragRef = useRef<{
     active: boolean;
@@ -374,6 +387,10 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
   const shakeAnim = useRef(new Animated.Value(0)).current;
   // Flash color (varies with strike power)
   const [flashColor, setFlashColor] = useState('rgba(255,100,30,0.15)');
+
+  // Force pierce mode state
+  const fpRef = useRef({ handle: { x: NAVEL_X, y: NAVEL_Y_EXTERNAL - 80 }, progress: 0, triggered: false });
+  const [forcePierceProgress, setForcePierceProgress] = useState(0);
 
   const toPhysicsCoords = useCallback((localX: number, localY: number) => {
     if (!canvasLayout) return { x: localX, y: localY };
@@ -416,6 +433,8 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
     placeCapsuleBombInCavity,
     setCapsuleBombSwallowTarget,
     moveCavityBomb,
+    setForcePierceMode,
+    triggerForcePierce,
   });
   hrRef.current.state = state;
   hrRef.current.toPhysicsCoords = toPhysicsCoords;
@@ -442,6 +461,8 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
   hrRef.current.retractHook = retractHook;
   hrRef.current.activateHookGrab = activateHookGrab;
   hrRef.current.clearExposedNodes = clearExposedNodes;
+  hrRef.current.setForcePierceMode = setForcePierceMode;
+  hrRef.current.triggerForcePierce = triggerForcePierce;
 
   // Returns true if (px, py) is inside the belly hit zone (ellipse or upper rect)
   const inBellyHitZone = (px: number, py: number): boolean => {
@@ -659,6 +680,16 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
           return;
         }
       }
+      // Internal view: tap near navel with metal rod/vibrator to insert when navel already pierced
+      if (isInternal && distToNavel < NAVEL_RADIUS * 1.5) {
+        if (s.navelPierced && (s.activeTool === TOOLS.METAL_ROD || s.activeTool === TOOLS.VIBRATOR)) {
+          ivn();
+          physicsRef.current.toolPos = { x: NAVEL_X, y: NAVEL_Y_INTERNAL - 40 };
+          td('stirring');
+          return;
+        }
+      }
+
       // Activate hook grab when tapping near hook head
       if (s.hookInserted && !s.hookGrabActive && s.hookTool) {
         const hp = physicsRef.current;
@@ -844,6 +875,37 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
       const { locationX, locationY } = evt.nativeEvent;
       const touchOfsY = s.touchOffsetY ?? 0;
       const pos = tpc(locationX, locationY - touchOfsY);
+
+      // Force pierce drag: handle moves with damping toward navel
+      if (s.forcePierceMode) {
+        const DAMPING = 0.32;
+        const FORCE_PIERCE_THRESHOLD = 40;
+        const rodLen = 80 + s.toolParam1 * 1.0;
+        const fp = fpRef.current;
+        const targetY = Math.min(pos.y, NAVEL_Y_EXTERNAL - 2);
+        fp.handle.y = fp.handle.y + (targetY - fp.handle.y) * DAMPING;
+        fp.handle.x = NAVEL_X;
+        physicsRef.current.toolPos = { x: NAVEL_X, y: fp.handle.y };
+        const startY = NAVEL_Y_EXTERNAL - rodLen * 0.85;
+        const depth = Math.max(0, fp.handle.y - startY);
+        fp.progress = Math.min(1, depth / FORCE_PIERCE_THRESHOLD);
+        setForcePierceProgress(fp.progress);
+        if (fp.progress >= 1 && !fp.triggered) {
+          fp.triggered = true;
+          hrRef.current.triggerForcePierce?.();
+          setFlashColor('rgba(220,30,30,0.55)');
+          strikeFlashAnim.setValue(1);
+          Animated.timing(strikeFlashAnim, { toValue: 0, duration: 350, useNativeDriver: false }).start();
+          shakeAnim.setValue(0);
+          Animated.sequence([
+            Animated.timing(shakeAnim, { toValue: 8, duration: 30, useNativeDriver: true }),
+            Animated.timing(shakeAnim, { toValue: -7, duration: 40, useNativeDriver: true }),
+            Animated.timing(shakeAnim, { toValue: 4, duration: 30, useNativeDriver: true }),
+            Animated.timing(shakeAnim, { toValue: 0, duration: 25, useNativeDriver: true }),
+          ]).start();
+        }
+        return;
+      }
 
       // Capsule bomb cavity bomb drag
       if (capsuleBombDragRef.current.active) {
@@ -2521,7 +2583,9 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
           const rodColor = isVib ? '#b078ff' : '#aaaacc';
           const rodWidth = isVib ? 6 : 5;
           const splitAtNavel = !isInternal && toolInserted;
+          const splitAtNavelInternal = isInternal && toolInserted;
           const nx = NAVEL_X, ny = navelYBreath;
+          const inNx = NAVEL_X, inNy = NAVEL_Y_INTERNAL;
           return (
             <G key="rod">
               {isVib && toolActive && (
@@ -2530,16 +2594,58 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
                   fill="rgba(180,120,255,0.10)"
                   stroke="rgba(180,120,255,0.5)" strokeWidth={1} strokeDasharray="4 4" />
               )}
+              {/* External view: shadow of rod inside body */}
               {splitAtNavel && (
                 <Line x1={nx} y1={ny} x2={g.headX} y2={g.headY}
                   stroke={rodColor} strokeWidth={rodWidth} strokeLinecap="round" opacity={0.12} />
               )}
-              <Line x1={g.tailX} y1={g.tailY} x2={splitAtNavel ? nx : g.headX} y2={splitAtNavel ? ny : g.headY}
+              {/* Internal view: outside (handle-to-navel) portion is semi-transparent */}
+              {splitAtNavelInternal && (
+                <Line x1={g.tailX} y1={g.tailY} x2={inNx} y2={inNy}
+                  stroke={rodColor} strokeWidth={rodWidth} strokeLinecap="round" opacity={0.18} />
+              )}
+              {/* Main rod body */}
+              <Line
+                x1={splitAtNavelInternal ? inNx : g.tailX}
+                y1={splitAtNavelInternal ? inNy : g.tailY}
+                x2={splitAtNavel ? nx : g.headX}
+                y2={splitAtNavel ? ny : g.headY}
                 stroke={rodColor} strokeWidth={rodWidth} strokeLinecap="round" />
-              <Circle cx={g.tailX} cy={g.tailY} r={isVib ? 9 : 7} fill="#666688" stroke="#222" strokeWidth={1} />
-              {!splitAtNavel && (
+              <Circle cx={g.tailX} cy={g.tailY} r={isVib ? 9 : 7}
+                fill="#666688" stroke="#222" strokeWidth={1}
+                opacity={splitAtNavelInternal ? 0.3 : 1} />
+              {(!splitAtNavel) && (
                 <Circle cx={g.headX} cy={g.headY} r={isVib ? 8 : 6} fill={rodColor} stroke="#222" strokeWidth={0.5} />
               )}
+            </G>
+          );
+        })()}
+
+        {/* Force pierce rod — custom lever geometry, external view only */}
+        {state.forcePierceMode && !isInternal && activeTool === TOOLS.METAL_ROD && (() => {
+          const fp = fpRef.current;
+          const PIERCE_MAX = 40;
+          const insideLen = fp.progress * PIERCE_MAX;
+          const rodColor = '#aaaacc';
+          const progressFrac = fp.progress;
+          const r = Math.round(80 + progressFrac * 140);
+          const g2 = Math.round(80 - progressFrac * 50);
+          const glowCol = `rgba(${r},${g2},80,${0.3 + progressFrac * 0.55})`;
+          return (
+            <G key="fp-rod">
+              {/* Handle to navel — outside portion */}
+              <Line x1={fp.handle.x} y1={fp.handle.y} x2={NAVEL_X} y2={navelYBreath}
+                stroke={rodColor} strokeWidth={5} strokeLinecap="round" />
+              {/* Inside (past navel) — fades in as rod penetrates */}
+              {insideLen > 1 && (
+                <Line x1={NAVEL_X} y1={navelYBreath} x2={NAVEL_X} y2={navelYBreath + insideLen}
+                  stroke={rodColor} strokeWidth={5} strokeLinecap="round" opacity={0.28} />
+              )}
+              {/* Handle grip */}
+              <Circle cx={fp.handle.x} cy={fp.handle.y} r={7} fill="#666688" stroke="#222" strokeWidth={1} />
+              {/* Navel entry glow ring */}
+              <Circle cx={NAVEL_X} cy={navelYBreath} r={NAVEL_RADIUS * 0.45 + progressFrac * 9}
+                fill="none" stroke={glowCol} strokeWidth={2} />
             </G>
           );
         })()}
@@ -3463,6 +3569,40 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
           opacity: strikeFlashAnim,
         }}
       />
+
+      {/* Force pierce button — shown in external view when navel not yet pierced + metal rod selected */}
+      {!state.navelPierced && state.activeTool === TOOLS.METAL_ROD && !isInternal && !state.forcePierceMode && (
+        <TouchableOpacity
+          style={{
+            position: 'absolute', bottom: 20, alignSelf: 'center',
+            backgroundColor: 'rgba(160,18,18,0.88)',
+            paddingHorizontal: 18, paddingVertical: 9,
+            borderRadius: 8, borderWidth: 1,
+            borderColor: 'rgba(255,70,70,0.55)',
+          }}
+          onPress={() => setForcePierceMode(true)}
+        >
+          <Text style={{ color: '#ffdddd', fontSize: 13, fontWeight: 'bold', letterSpacing: 1 }}>强行穿脐</Text>
+        </TouchableOpacity>
+      )}
+
+      {/* Force pierce active: progress bar + cancel */}
+      {state.forcePierceMode && !isInternal && (
+        <View style={{ position: 'absolute', bottom: 14, alignSelf: 'center', alignItems: 'center' }}>
+          <Text style={{ color: '#ffaaaa', fontSize: 11, marginBottom: 5 }}>向下拖拽强制刺穿</Text>
+          <View style={{ width: 130, height: 7, backgroundColor: '#330000', borderRadius: 4, overflow: 'hidden' }}>
+            <View style={{ width: forcePierceProgress * 130, height: 7,
+              backgroundColor: `rgb(${Math.round(180 + forcePierceProgress * 75)},${Math.round(30 - forcePierceProgress * 20)},30)`,
+              borderRadius: 4 }} />
+          </View>
+          <TouchableOpacity
+            style={{ marginTop: 6 }}
+            onPress={() => { setForcePierceMode(false); setForcePierceProgress(0); }}
+          >
+            <Text style={{ color: '#777', fontSize: 11 }}>取消</Text>
+          </TouchableOpacity>
+        </View>
+      )}
     </Animated.View>
   );
 }
