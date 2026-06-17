@@ -834,9 +834,10 @@ export function stepPhysics(state: PhysicsState) {
       }
 
       if (state.toolActive) {
-        const zone = 30 + state.toolParam2 * 0.4;        // range controlled by param2
-        const vibAmp = 0.5 + state.toolParam1 * 0.04;    // physical trembling amplitude (param1)
-        const sensRate = 0.05 + state.toolParam1 * 0.003; // sensitivity/pleasure rate (param1)
+        // Rewritten: spasm + jitter pattern, weaker version of electric shock (~35% strength).
+        // param1 = intensity (vibration power), param2 = range
+        const zone = 25 + state.toolParam2 * 0.35;
+        const vib = 0.002 + state.toolParam1 * 0.007;  // 0.002–0.702, analogous to voltage
         const t = state.time;
 
         if (state.toolInserted) {
@@ -847,14 +848,16 @@ export function stepPhysics(state: PhysicsState) {
             const d = dist(n.x, n.y, head.x, head.y);
             if (d < zone) {
               const f = 1 - d / zone;
+              const spasmX = vib * 16 * fastSin(t * 9 + i * 0.8);
+              const spasmY = vib * 16 * fastCos(t * 11 + i * 1.1);
               if (!n.pinned) {
-                n.x += fastSin(t * 3.5 + i * 1.2) * vibAmp * f;
-                n.y += fastCos(t * 2.9 + i * 0.9) * vibAmp * f;
+                n.x += spasmX * f + (Math.random() - 0.5) * vib * 6 * f;
+                n.y += spasmY * f + (Math.random() - 0.5) * vib * 6 * f;
               }
               const seg = state.smallSegs[i];
               if (seg && !seg.broken) {
-                seg.sensitivity = clamp(seg.sensitivity + sensRate * f, 0, 100);
-                seg.pain = clamp(seg.pain + sensRate * 0.08 * f, 0, 100);
+                seg.sensitivity = clamp(seg.sensitivity + vib * 2.8 * f, 0, 100);
+                seg.pain = clamp(seg.pain + vib * 0.5 * f, 0, 100);
               }
             }
           }
@@ -863,37 +866,42 @@ export function stepPhysics(state: PhysicsState) {
             const d = dist(n.x, n.y, head.x, head.y);
             if (d < zone) {
               const f = 1 - d / zone;
+              const spasmX = vib * 12 * fastSin(t * 9 + i * 0.7);
+              const spasmY = vib * 12 * fastCos(t * 11 + i * 0.9);
               if (!n.pinned) {
-                n.x += fastSin(t * 3.5 + i * 1.4) * vibAmp * f;
-                n.y += fastCos(t * 2.9 + i * 1.1) * vibAmp * f;
+                n.x += spasmX * f + (Math.random() - 0.5) * vib * 5 * f;
+                n.y += spasmY * f + (Math.random() - 0.5) * vib * 5 * f;
               }
               const seg = state.largeSegs[i];
               if (seg && !seg.broken) {
-                seg.sensitivity = clamp(seg.sensitivity + sensRate * f, 0, 100);
-                seg.pain = clamp(seg.pain + sensRate * 0.08 * f, 0, 100);
+                seg.sensitivity = clamp(seg.sensitivity + vib * 2.0 * f, 0, 100);
+                seg.pain = clamp(seg.pain + vib * 0.35 * f, 0, 100);
               }
             }
           }
         } else if (state.exposedSmallIndices.length > 0) {
+          // Not inserted — only shake exposed nodes
           for (const idx of state.exposedSmallIndices) {
             const n = state.smallNodes[idx];
             const d = dist(n.x, n.y, head.x, head.y);
             if (d < zone) {
               const f = 1 - d / zone;
+              const spasmX = vib * 16 * fastSin(t * 9 + idx * 0.8);
+              const spasmY = vib * 16 * fastCos(t * 11 + idx * 1.1);
               if (!n.pinned) {
-                n.x += fastSin(t * 3.5 + idx * 1.2) * vibAmp * f;
-                n.y += fastCos(t * 2.9 + idx * 0.9) * vibAmp * f;
+                n.x += spasmX * f + (Math.random() - 0.5) * vib * 6 * f;
+                n.y += spasmY * f + (Math.random() - 0.5) * vib * 6 * f;
               }
               const seg = state.smallSegs[idx];
               if (seg && !seg.broken) {
-                seg.sensitivity = clamp(seg.sensitivity + sensRate * f, 0, 100);
-                seg.pain = clamp(seg.pain + sensRate * 0.08 * f, 0, 100);
+                seg.sensitivity = clamp(seg.sensitivity + vib * 2.8 * f, 0, 100);
+                seg.pain = clamp(seg.pain + vib * 0.5 * f, 0, 100);
               }
             }
           }
         }
-        // Vibration also gently accelerates peristalsis
-        state.peristalsisSpeed = Math.max(state.peristalsisSpeed, 1 + state.toolParam1 * 0.01);
+        // Vibration accelerates peristalsis proportional to intensity
+        state.peristalsisSpeed = Math.max(state.peristalsisSpeed, 1 + state.toolParam1 * 0.018);
       }
     }
 
