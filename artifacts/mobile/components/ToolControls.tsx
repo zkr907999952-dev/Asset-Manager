@@ -26,7 +26,7 @@ const TOOL_PARAMS: Record<string, {
 
 function ToolSection({ toolId, isActive }: { toolId: string; isActive: boolean }) {
   const colors = useColors();
-  const { state, setToolState, setActiveTool, clearElectrodes, setForcePierceMode, setViewMode } = useGame();
+  const { state, setToolState, setActiveTool, clearElectrodes, setForcePierceMode, setViewMode, addClampPoint, clearClampPoints } = useGame();
 
   const focusTool = () => {
     if (!isActive) setActiveTool(toolId as any);
@@ -82,6 +82,24 @@ function ToolSection({ toolId, isActive }: { toolId: string; isActive: boolean }
               <Text style={[styles.extraBtnText, { color: colors.mutedForeground }]}>清除电极</Text>
             </TouchableOpacity>
           )}
+          {toolId === TOOLS.GRAB && (
+            <>
+              <TouchableOpacity
+                style={[styles.extraBtn, { borderColor: 'rgba(255,180,40,0.6)', backgroundColor: 'rgba(255,160,20,0.08)' }]}
+                onPress={() => { focusTool(); addClampPoint(); }}
+              >
+                <Feather name="anchor" size={10} color="#e8a820" />
+                <Text style={[styles.extraBtnText, { color: '#e8a820' }]}>钳制点</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.extraBtn, { borderColor: `${colors.border}66` }]}
+                onPress={() => { focusTool(); clearClampPoints(); }}
+              >
+                <Feather name="trash-2" size={10} color={colors.mutedForeground} />
+                <Text style={[styles.extraBtnText, { color: colors.mutedForeground }]}>清除钳制</Text>
+              </TouchableOpacity>
+            </>
+          )}
           {toolId === TOOLS.METAL_ROD && !state.navelPierced && !state.forcePierceMode && (
             <TouchableOpacity
               style={[styles.extraBtn, { borderColor: 'rgba(200,60,60,0.55)' }]}
@@ -117,28 +135,30 @@ function ToolSection({ toolId, isActive }: { toolId: string; isActive: boolean }
               </TouchableOpacity>
             );
           })()}
-          <TouchableOpacity
-            style={[
-              styles.toggleBtn,
-              {
-                backgroundColor: active ? `${colors.primary}cc` : `${colors.secondary}cc`,
-                borderColor: active ? `${colors.primary}88` : `${colors.border}55`,
-              },
-            ]}
-            onPress={() => { focusTool(); setToolState(toolId, { active: !active }); }}
-            activeOpacity={0.8}
-          >
-            <Feather
-              name={active ? 'pause' : 'play'}
-              size={11}
-              color={active ? colors.primaryForeground : colors.foreground}
-            />
-            <Text style={[styles.toggleText, {
-              color: active ? colors.primaryForeground : colors.foreground,
-            }]}>
-              {startStopLabel()}
-            </Text>
-          </TouchableOpacity>
+          {toolId !== TOOLS.GRAB && (
+            <TouchableOpacity
+              style={[
+                styles.toggleBtn,
+                {
+                  backgroundColor: active ? `${colors.primary}cc` : `${colors.secondary}cc`,
+                  borderColor: active ? `${colors.primary}88` : `${colors.border}55`,
+                },
+              ]}
+              onPress={() => { focusTool(); setToolState(toolId, { active: !active }); }}
+              activeOpacity={0.8}
+            >
+              <Feather
+                name={active ? 'pause' : 'play'}
+                size={11}
+                color={active ? colors.primaryForeground : colors.foreground}
+              />
+              <Text style={[styles.toggleText, {
+                color: active ? colors.primaryForeground : colors.foreground,
+              }]}>
+                {startStopLabel()}
+              </Text>
+            </TouchableOpacity>
+          )}
         </View>
       </View>
 

@@ -317,6 +317,8 @@ interface GameContextType {
   triggerDialogue: (trigger: DialogueTrigger) => void;
   addElectrode: (x: number, y: number) => void;
   clearElectrodes: () => void;
+  addClampPoint: () => void;
+  clearClampPoints: () => void;
   insertViaNavel: () => void;
   retractTool: () => void;
   setNavelPierced: (v: boolean) => void;
@@ -1714,6 +1716,16 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     setState(prev => ({ ...prev, electrodes: [] }));
   }, []);
 
+  const addClampPoint = useCallback(() => {
+    physicsRef.current.pendingClampCount += 1;
+  }, []);
+
+  const clearClampPoints = useCallback(() => {
+    physicsRef.current.clampPoints = [];
+    physicsRef.current.activeClampIdx = -1;
+    physicsRef.current.pendingClampCount = 0;
+  }, []);
+
   const insertViaNavel = useCallback(() => {
     physicsRef.current.toolAnchor = { x: CAVITY_CX, y: CAVITY_CY };
     physicsRef.current.toolInserted = true;
@@ -2966,6 +2978,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       setBreathAmplitude, setExpansionScale, setPressureDiffusionRate,
       setDebugMode, setShowCollisionBoxes, setPhysicsFps,
       syncFromPhysics, triggerDialogue, addElectrode, clearElectrodes,
+      addClampPoint, clearClampPoints,
       insertViaNavel, retractTool, setNavelPierced, setEnemaHeadIdx,
       setEnemaInSmall, setEnemaSmallHeadIdx, setEnemaTarget,
       setSiliconeTarget, setBeadsTarget, setEggTarget,

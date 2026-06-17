@@ -718,8 +718,59 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
         const grabRange = 20 + s.toolParam1 * 0.25;
         const isExternal = s.viewMode === 'external';
         const expSet = new Set(physicsRef.current.exposedSmallIndices);
-        let closest = -1, closestDist = grabRange, closestType: 'small' | 'large' = 'small';
 
+        // 1. Check if touching near an existing clamp point marker (so user can re-drag it)
+        const clampHitRange = Math.max(grabRange, 28);
+        let hitClamp = -1, hitClampDist = clampHitRange;
+        physicsRef.current.clampPoints.forEach((cp, ci) => {
+          const nodes = cp.type === 'small' ? physicsRef.current.smallNodes : physicsRef.current.largeNodes;
+          const n = nodes[cp.idx];
+          if (!n) return;
+          const d = Math.hypot(n.x - pos.x, n.y - pos.y);
+          if (d < hitClampDist) { hitClampDist = d; hitClamp = ci; }
+        });
+        if (hitClamp >= 0) {
+          physicsRef.current.activeClampIdx = hitClamp;
+          // Update target to current touch
+          physicsRef.current.clampPoints[hitClamp].tx = pos.x;
+          physicsRef.current.clampPoints[hitClamp].ty = pos.y;
+          return;
+        }
+
+        // 2. If there are pending clamp slots, next touch creates a new clamp point
+        if (physicsRef.current.pendingClampCount > 0) {
+          let closest = -1, closestDist = grabRange * 1.5, closestType: 'small' | 'large' = 'small';
+          if (isExternal) {
+            for (const i of physicsRef.current.exposedSmallIndices) {
+              const n = physicsRef.current.smallNodes[i];
+              if (!n) continue;
+              const d = Math.hypot(n.x - pos.x, n.y - pos.y);
+              if (d < closestDist) { closestDist = d; closest = i; closestType = 'small'; }
+            }
+          } else {
+            physicsRef.current.smallNodes.forEach((n, i) => {
+              if (expSet.has(i)) return;
+              const d = Math.hypot(n.x - pos.x, n.y - pos.y);
+              if (d < closestDist) { closestDist = d; closest = i; closestType = 'small'; }
+            });
+            physicsRef.current.largeNodes.forEach((n, i) => {
+              const d = Math.hypot(n.x - pos.x, n.y - pos.y);
+              if (d < closestDist) { closestDist = d; closest = i; closestType = 'large'; }
+            });
+          }
+          if (closest >= 0) {
+            const nodes = closestType === 'small' ? physicsRef.current.smallNodes : physicsRef.current.largeNodes;
+            const n = nodes[closest];
+            physicsRef.current.clampPoints.push({ type: closestType, idx: closest, tx: n.x, ty: n.y });
+            physicsRef.current.activeClampIdx = physicsRef.current.clampPoints.length - 1;
+            physicsRef.current.pendingClampCount = Math.max(0, physicsRef.current.pendingClampCount - 1);
+            td('grab');
+          }
+          return;
+        }
+
+        // 3. Normal grab
+        let closest = -1, closestDist = grabRange, closestType: 'small' | 'large' = 'small';
         if (isExternal) {
           // External view: only grab exposed small nodes (skip anchors for grab detection, include all for physics)
           for (const i of physicsRef.current.exposedSmallIndices) {
@@ -1169,6 +1220,17 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
         return;
       }
 
+      // Clamp point dragging: update target position while finger moves
+      if (s.activeTool === TOOLS.GRAB && physicsRef.current.activeClampIdx >= 0) {
+        const ci = physicsRef.current.activeClampIdx;
+        const cp = physicsRef.current.clampPoints[ci];
+        if (cp) {
+          cp.tx = pos.x;
+          cp.ty = pos.y;
+        }
+        return;
+      }
+
       // Grab tool on exposed intestine: pulling far from navel exposes more nodes
       if (s.activeTool === TOOLS.GRAB && s.viewMode === 'external') {
         const gn = physicsRef.current.grabbedNode;
@@ -1388,6 +1450,7 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
         physicsRef.current.toolPos = null;
       }
       physicsRef.current.grabbedNode = null;
+      physicsRef.current.activeClampIdx = -1; // stop dragging clamp, but leave it in place
     },
   })).current;
 
@@ -2694,6 +2757,27 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
             fill={toolActive ? 'rgba(96,192,96,0.30)' : 'rgba(96,192,96,0.18)'}
             stroke="#60c060" strokeWidth={1.5} />
         )}
+
+        {/* Clamp point markers — amber outline, distinct from grab green */}
+        {activeTool === TOOLS.GRAB && physicsRef.current.clampPoints.map((cp, ci) => {
+          const nodes = cp.type === 'small' ? physicsRef.current.smallNodes : physicsRef.current.largeNodes;
+          const n = nodes[cp.idx];
+          if (!n) return null;
+          const isActive = physicsRef.current.activeClampIdx === ci;
+          return (
+            <G key={`clamp-${ci}`}>
+              <Line x1={n.x} y1={n.y} x2={cp.tx} y2={cp.ty}
+                stroke="rgba(255,180,40,0.45)" strokeWidth={1} strokeDasharray="3,3" />
+              <Circle cx={n.x} cy={n.y} r={9}
+                fill={isActive ? 'rgba(255,180,40,0.30)' : 'rgba(255,160,20,0.18)'}
+                stroke={isActive ? '#ffcc44' : '#e0a020'}
+                strokeWidth={isActive ? 2 : 1.5}
+                strokeDasharray={isActive ? undefined : '4,2'} />
+              <Circle cx={cp.tx} cy={cp.ty} r={4}
+                fill="rgba(255,180,40,0.55)" stroke="#ffcc44" strokeWidth={1} />
+            </G>
+          );
+        })}
 
         {/* Syringe */}
         {handlePos && activeTool === TOOLS.SYRINGE && (

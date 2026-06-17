@@ -87,6 +87,9 @@ export interface PhysicsState {
   navelPierced: boolean;
   // Grab tool
   grabbedNode: { type: 'small' | 'large'; idx: number } | null;
+  clampPoints: { type: 'small' | 'large'; idx: number; tx: number; ty: number }[];
+  activeClampIdx: number;   // index into clampPoints being dragged (-1 = none)
+  pendingClampCount: number; // clamp slots waiting to be placed
   // Electric
   electrodes: { x: number; y: number }[];
   // Enema tube head
@@ -826,6 +829,18 @@ export function stepPhysics(state: PhysicsState) {
           }
         }
       }
+    }
+
+    // Clamp points: persistent grab forces applied every tick regardless of active tool
+    for (let ci = 0; ci < state.clampPoints.length; ci++) {
+      const cp = state.clampPoints[ci];
+      const nodes = cp.type === 'small' ? state.smallNodes : state.largeNodes;
+      const n = nodes[cp.idx];
+      if (!n) continue;
+      const dx = cp.tx - n.x, dy = cp.ty - n.y;
+      const clampForce = 0.25 + state.toolParam2 * 0.004;
+      n.x += dx * clampForce;
+      n.y += dy * clampForce;
     }
 
     if (state.toolType === '注射器' && state.toolActive) {
