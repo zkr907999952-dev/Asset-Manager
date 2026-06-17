@@ -831,18 +831,6 @@ export function stepPhysics(state: PhysicsState) {
       }
     }
 
-    // Clamp points: persistent grab forces applied every tick regardless of active tool
-    for (let ci = 0; ci < state.clampPoints.length; ci++) {
-      const cp = state.clampPoints[ci];
-      const nodes = cp.type === 'small' ? state.smallNodes : state.largeNodes;
-      const n = nodes[cp.idx];
-      if (!n) continue;
-      const dx = cp.tx - n.x, dy = cp.ty - n.y;
-      const clampForce = 0.25 + state.toolParam2 * 0.004;
-      n.x += dx * clampForce;
-      n.y += dy * clampForce;
-    }
-
     if (state.toolType === '注射器' && state.toolActive) {
       const SYRINGE_RANGE = 55;
       const rate = state.toolParam1 * 0.012;
@@ -1366,6 +1354,17 @@ export function stepPhysics(state: PhysicsState) {
         }
       }
     }
+
+  // Clamp points: persistent grab forces — always active every tick, regardless of touch or active tool
+  for (let ci = 0; ci < state.clampPoints.length; ci++) {
+    const cp = state.clampPoints[ci];
+    const nodes = cp.type === 'small' ? state.smallNodes : state.largeNodes;
+    const n = nodes[cp.idx];
+    if (!n) continue;
+    const dx = cp.tx - n.x, dy = cp.ty - n.y;
+    n.x += dx * 0.30;
+    n.y += dy * 0.30;
+  }
 
   // === CAVITY BOMBS — push intestine nodes away; bombs float freely with reaction force ===
   if (state.capsuleBombs && state.capsuleBombs.length > 0) {
