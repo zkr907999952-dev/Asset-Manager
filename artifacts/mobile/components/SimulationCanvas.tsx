@@ -1202,7 +1202,7 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
       const now = Date.now();
       if (now - lastDialogueTime.current > 4000 && s.activeTool) {
         lastDialogueTime.current = now;
-        if (s.activeTool === TOOLS.METAL_ROD || s.activeTool === TOOLS.VIBRATOR) {
+        if ((s.activeTool === TOOLS.METAL_ROD || s.activeTool === TOOLS.VIBRATOR) && physicsRef.current.toolInserted) {
           td('stirring');
         }
       }
