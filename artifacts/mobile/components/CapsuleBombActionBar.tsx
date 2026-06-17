@@ -91,10 +91,6 @@ export function CapsuleBombActionBar() {
               maximumTrackTintColor="#442200"
               thumbTintColor="#ff6600"
             />
-            <View style={styles.sliderHints}>
-              <Text style={[styles.sliderHint, { color: colors.mutedForeground }]}>7.62mm</Text>
-              <Text style={[styles.sliderHint, { color: '#ff6600' }]}>2×12.7mm</Text>
-            </View>
           </View>
 
           <View style={styles.detonateRow}>
