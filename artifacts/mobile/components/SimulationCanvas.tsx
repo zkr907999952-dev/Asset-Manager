@@ -3315,18 +3315,21 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
                 }
                 // Internal electrode wires
                 if (isInternal) {
-                  // Inside cavity: electrode→navel normal, navel→controller dim (exits body).
+                  // electrode→navel: same rule as electrode body (inside cavity = normal).
+                  // navel→controller: body-exterior segment = dim (exits cavity).
                   return (
                     <G key={`wire-${i}`}>
                       <Line x1={el.x} y1={el.y} x2={NAVEL_X} y2={NAVEL_Y_INTERNAL}
-                        stroke={wc} strokeWidth={1} strokeOpacity={0.75} />
+                        stroke={wc} strokeWidth={1} strokeOpacity={0.88} />
                       <Line x1={NAVEL_X} y1={NAVEL_Y_INTERNAL}
                         x2={ELEC_CTRL_X} y2={ELEC_CTRL_Y}
-                        stroke={wc} strokeWidth={1} strokeOpacity={0.25} />
+                        stroke={wc} strokeWidth={1} strokeOpacity={0.18} />
                     </G>
                   );
                 }
-                // External view: electrode→navel dim (inside belly), navel→controller normal (outside).
+                // External view:
+                // electrode→navel: same rule as electrode body (inside belly = dim).
+                // navel→controller: body-exterior segment = normal (only once, shared entry point).
                 return (
                   <G key={`wire-${i}`}>
                     <Line x1={el.x} y1={el.y} x2={NAVEL_X} y2={NAVEL_Y_EXTERNAL}
@@ -3334,7 +3337,7 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
                     {i === 0 && (
                       <Line x1={NAVEL_X} y1={NAVEL_Y_EXTERNAL}
                         x2={ELEC_CTRL_X} y2={ELEC_CTRL_Y}
-                        stroke={wc} strokeWidth={1.2} strokeOpacity={0.75} />
+                        stroke={wc} strokeWidth={1.2} strokeOpacity={0.88} />
                     )}
                   </G>
                 );
