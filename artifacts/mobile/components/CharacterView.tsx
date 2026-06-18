@@ -152,6 +152,27 @@ export function CharacterView({ width, height }: Props) {
               xS: belly fills ~full view width   (width / CANVAS_W ≈ 0.53)
               yS: physics is belly-zoomed in; full-body character compresses Y by ~0.55
               Tune CV_HOLE_Y_SCALE if vertical placement drifts after screen size changes. */}
+          {/* Stab wounds — needle/bayonet non-navel insertion marks */}
+          {state.stabWounds && state.stabWounds.map((wound) => {
+            const xS = width / CANVAS_W;
+            const yS = xS * 0.55;
+            const cvX = width / 2 + (wound.physX - CAVITY_CX) * xS;
+            const cvY = height * BELLY_Y_FRAC + (wound.physY - CAVITY_CY) * yS;
+            const r = 4.5 * xS;
+            return (
+              <G key={`stab-cv-${wound.id}`}>
+                <Circle cx={cvX} cy={cvY} r={r * 2.8}
+                  fill="rgba(90,0,0,0.35)" />
+                <Circle cx={cvX} cy={cvY} r={r}
+                  fill="rgba(15,0,0,0.92)" stroke="rgba(150,20,20,0.8)" strokeWidth={0.8} />
+                <Line x1={cvX - r * 1.3} y1={cvY} x2={cvX + r * 1.3} y2={cvY}
+                  stroke="rgba(10,0,0,0.95)" strokeWidth={1.2} />
+                <Line x1={cvX} y1={cvY - r * 1.3} x2={cvX} y2={cvY + r * 1.3}
+                  stroke="rgba(10,0,0,0.95)" strokeWidth={1.2} />
+              </G>
+            );
+          })}
+
           {state.bulletHoles && state.bulletHoles.map((hole) => {
             const isLarge = hole.weaponId && LARGE_CALIBER_SET.has(hole.weaponId);
             const holeImg = isLarge ? BULLET_HOLE_LARGE : BULLET_HOLE_SMALL;

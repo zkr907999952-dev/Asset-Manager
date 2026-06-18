@@ -254,6 +254,7 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
     placeCapsuleBombInCavity, setCapsuleBombSwallowTarget, moveCavityBomb,
     clearExplosionPositions,
     setForcePierceMode, triggerForcePierce,
+    insertViaPoint, cancelPickInsertionPoint,
   } = useGame();
   const lastDialogueTime = useRef(0);
   const isDragging = useRef(false);
@@ -440,6 +441,8 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
     moveCavityBomb,
     setForcePierceMode,
     triggerForcePierce,
+    insertViaPoint,
+    cancelPickInsertionPoint,
   });
   hrRef.current.state = state;
   hrRef.current.toPhysicsCoords = toPhysicsCoords;
@@ -468,6 +471,8 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
   hrRef.current.clearExposedNodes = clearExposedNodes;
   hrRef.current.setForcePierceMode = setForcePierceMode;
   hrRef.current.triggerForcePierce = triggerForcePierce;
+  hrRef.current.insertViaPoint = insertViaPoint;
+  hrRef.current.cancelPickInsertionPoint = cancelPickInsertionPoint;
 
   // Returns true if (px, py) is inside the belly hit zone (ellipse or upper rect)
   const inBellyHitZone = (px: number, py: number): boolean => {
@@ -652,15 +657,24 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
       }
 
       const isInternal = s.viewMode === 'internal';
+
+      // === Picking insertion point for needle/bayonet ===
+      if (s.pickingInsertionPoint && (s.activeTool === TOOLS.NEEDLE || s.activeTool === TOOLS.BAYONET)) {
+        const ex = (pos.x - BELLY_HIT_CX) / BELLY_HIT_RX;
+        const ey = (pos.y - BELLY_HIT_CY) / BELLY_HIT_RY;
+        const inLower = ex * ex + ey * ey <= 1.05;
+        const inUpper = pos.x >= BELLY_UPPER_LEFT && pos.x <= BELLY_UPPER_RIGHT
+          && pos.y >= BELLY_UPPER_TOP && pos.y <= BELLY_UPPER_BOT;
+        if (inLower || inUpper) {
+          hrRef.current.insertViaPoint(pos.x, pos.y);
+        }
+        return;
+      }
+
       const navelY = isInternal ? NAVEL_Y_INTERNAL : NAVEL_Y_EXTERNAL;
       const distToNavel = Math.hypot(pos.x - NAVEL_X, pos.y - navelY);
 
       if (!isInternal && distToNavel < NAVEL_RADIUS) {
-        if ((s.activeTool === TOOLS.NEEDLE || s.activeTool === TOOLS.BAYONET) && !s.navelPierced) {
-          snp(true);
-          td('pain_high');
-          return;
-        }
         if (
           s.navelPierced &&
           (s.activeTool === TOOLS.METAL_ROD ||
@@ -1879,8 +1893,7 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
                 rx={CANVAS_W * 0.28 * breathOverlayScale} ry={CANVAS_H * 0.11 * breathOverlayScale}
                 fill={`rgba(255,80,80,${Math.min(0.28, avgPain * 0.003)})`} />
             )}
-            {(activeTool === TOOLS.NEEDLE ||
-              ((activeTool === TOOLS.METAL_ROD || activeTool === TOOLS.VIBRATOR) && navelPierced)) && (
+            {((activeTool === TOOLS.METAL_ROD || activeTool === TOOLS.VIBRATOR) && navelPierced) && (
               <Circle cx={NAVEL_X} cy={navelYBreath} r={NAVEL_RADIUS}
                 fill="none" stroke="rgba(255,180,80,0.5)" strokeWidth={1.5} strokeDasharray="3 3" />
             )}
@@ -1893,6 +1906,38 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
                 <Circle cx={NAVEL_X} cy={navelYBreath + 14} r={3} fill="#f0f0f0" />
               </G>
             )}
+
+            {/* Picking insertion point mode — highlight belly area */}
+            {state.pickingInsertionPoint && (activeTool === TOOLS.NEEDLE || activeTool === TOOLS.BAYONET) && (
+              <G>
+                <Ellipse
+                  cx={BELLY_HIT_CX} cy={BELLY_HIT_CY}
+                  rx={BELLY_HIT_RX} ry={BELLY_HIT_RY}
+                  fill="rgba(220,60,60,0.07)"
+                  stroke="rgba(255,140,80,0.75)"
+                  strokeWidth={1.8}
+                  strokeDasharray="6 3"
+                />
+                <Circle cx={BELLY_HIT_CX} cy={BELLY_HIT_CY} r={4}
+                  fill="rgba(255,140,80,0.4)" stroke="rgba(255,140,80,0.7)" strokeWidth={1} />
+              </G>
+            )}
+
+            {/* Stab wounds — needle/bayonet non-navel insertion marks */}
+            {state.stabWounds && state.stabWounds.map(wound => (
+              <G key={`stab-ext-${wound.id}`}>
+                <Circle cx={wound.physX} cy={wound.physY} r={7}
+                  fill="rgba(100,0,0,0.50)" />
+                <Circle cx={wound.physX} cy={wound.physY} r={3.5}
+                  fill="rgba(15,0,0,0.90)" stroke="rgba(160,20,20,0.75)" strokeWidth={1} />
+                <Line x1={wound.physX - 4} y1={wound.physY}
+                  x2={wound.physX + 4} y2={wound.physY}
+                  stroke="rgba(10,0,0,0.95)" strokeWidth={1.5} />
+                <Line x1={wound.physX} y1={wound.physY - 4}
+                  x2={wound.physX} y2={wound.physY + 4}
+                  stroke="rgba(10,0,0,0.95)" strokeWidth={1.5} />
+              </G>
+            ))}
             {state.renderSmallSegs.filter(s => s.ruptured).slice(0, 3).map((_, i) => (
               <Ellipse key={`rup-${i}`}
                 cx={CANVAS_W * (0.35 + i * 0.15)} cy={navelYBreath * (0.95 + i * 0.05)}
@@ -2800,18 +2845,29 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
         {handlePos && activeTool === TOOLS.NEEDLE && (() => {
           if (!rodGeo) return null;
           const { g } = rodGeo;
-          const splitAtNavel = !isInternal && toolInserted;
-          const nx = NAVEL_X, ny = navelYBreath;
+          const splitAtAnchor = !isInternal && toolInserted && toolAnchor != null;
+          const splitAtAnchorInternal = isInternal && toolInserted && toolAnchor != null;
+          const ax = toolAnchor ? toolAnchor.x : NAVEL_X;
+          const ay = toolAnchor ? toolAnchor.y : navelYBreath;
           return (
             <G key="needle">
-              {splitAtNavel && (
-                <Line x1={nx} y1={ny} x2={g.headX} y2={g.headY}
+              {splitAtAnchor && (
+                <Line x1={ax} y1={ay} x2={g.headX} y2={g.headY}
                   stroke="#cccccc" strokeWidth={2.2} strokeLinecap="round" opacity={0.12} />
               )}
-              <Line x1={g.tailX} y1={g.tailY} x2={splitAtNavel ? nx : g.headX} y2={splitAtNavel ? ny : g.headY}
+              {splitAtAnchorInternal && (
+                <Line x1={g.tailX} y1={g.tailY} x2={ax} y2={ay}
+                  stroke="#cccccc" strokeWidth={2.2} strokeLinecap="round" opacity={0.14} />
+              )}
+              <Line
+                x1={splitAtAnchorInternal ? ax : g.tailX}
+                y1={splitAtAnchorInternal ? ay : g.tailY}
+                x2={splitAtAnchor ? ax : g.headX}
+                y2={splitAtAnchor ? ay : g.headY}
                 stroke="#cccccc" strokeWidth={2.2} strokeLinecap="round" />
-              <Circle cx={g.tailX} cy={g.tailY} r={5} fill="#888899" stroke="#222" strokeWidth={1} />
-              {!splitAtNavel && <Circle cx={g.headX} cy={g.headY} r={2} fill="#ff4040" />}
+              <Circle cx={g.tailX} cy={g.tailY} r={5} fill="#888899" stroke="#222" strokeWidth={1}
+                opacity={splitAtAnchorInternal ? 0.25 : 1} />
+              {!splitAtAnchor && <Circle cx={g.headX} cy={g.headY} r={2} fill="#ff4040" />}
             </G>
           );
         })()}
@@ -2867,24 +2923,43 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
           if (!rodGeo) return null;
           const { g } = rodGeo;
           const bladeWidth = 2 + toolParam2 * 0.06;
-          const splitAtNavel = !isInternal && toolInserted;
-          const nx = NAVEL_X, ny = navelYBreath;
+          const splitAtAnchor = !isInternal && toolInserted && toolAnchor != null;
+          const splitAtAnchorInternal = isInternal && toolInserted && toolAnchor != null;
+          const ax = toolAnchor ? toolAnchor.x : NAVEL_X;
+          const ay = toolAnchor ? toolAnchor.y : navelYBreath;
           return (
             <G key="bayonet">
-              {splitAtNavel && (
+              {splitAtAnchor && (
                 <G opacity={0.12}>
-                  <Line x1={nx} y1={ny} x2={g.headX} y2={g.headY}
+                  <Line x1={ax} y1={ay} x2={g.headX} y2={g.headY}
                     stroke="#d8d8e8" strokeWidth={bladeWidth + 1.5} strokeLinecap="round" />
-                  <Line x1={nx} y1={ny} x2={g.headX} y2={g.headY}
+                  <Line x1={ax} y1={ay} x2={g.headX} y2={g.headY}
                     stroke="#f0f0ff" strokeWidth={bladeWidth * 0.5} strokeLinecap="round" />
                 </G>
               )}
-              <Line x1={g.tailX} y1={g.tailY} x2={splitAtNavel ? nx : g.headX} y2={splitAtNavel ? ny : g.headY}
+              {splitAtAnchorInternal && (
+                <G opacity={0.15}>
+                  <Line x1={g.tailX} y1={g.tailY} x2={ax} y2={ay}
+                    stroke="#d8d8e8" strokeWidth={bladeWidth + 1.5} strokeLinecap="round" />
+                  <Line x1={g.tailX} y1={g.tailY} x2={ax} y2={ay}
+                    stroke="#f0f0ff" strokeWidth={bladeWidth * 0.5} strokeLinecap="round" />
+                </G>
+              )}
+              <Line
+                x1={splitAtAnchorInternal ? ax : g.tailX}
+                y1={splitAtAnchorInternal ? ay : g.tailY}
+                x2={splitAtAnchor ? ax : g.headX}
+                y2={splitAtAnchor ? ay : g.headY}
                 stroke="#d8d8e8" strokeWidth={bladeWidth + 1.5} strokeLinecap="round" />
-              <Line x1={g.tailX} y1={g.tailY} x2={splitAtNavel ? nx : g.headX} y2={splitAtNavel ? ny : g.headY}
+              <Line
+                x1={splitAtAnchorInternal ? ax : g.tailX}
+                y1={splitAtAnchorInternal ? ay : g.tailY}
+                x2={splitAtAnchor ? ax : g.headX}
+                y2={splitAtAnchor ? ay : g.headY}
                 stroke="#f0f0ff" strokeWidth={bladeWidth * 0.5} strokeLinecap="round" />
-              <Circle cx={g.tailX} cy={g.tailY} r={7} fill="#555566" stroke="#222" strokeWidth={1} />
-              {!splitAtNavel && (
+              <Circle cx={g.tailX} cy={g.tailY} r={7} fill="#555566" stroke="#222" strokeWidth={1}
+                opacity={splitAtAnchorInternal ? 0.25 : 1} />
+              {!splitAtAnchor && (
                 <>
                   <Circle cx={g.headX} cy={g.headY} r={3} fill="#ff3030" stroke="#cc0000" strokeWidth={0.8} />
                   {toolActive && (
@@ -3794,6 +3869,22 @@ export function SimulationCanvas({ canvasLayout, onLayout }: CanvasProps) {
           opacity: strikeFlashAnim,
         }}
       />
+
+      {/* Picking insertion point instruction — shown when needle/bayonet selected, before insertion */}
+      {state.pickingInsertionPoint && !isInternal &&
+        (state.activeTool === TOOLS.NEEDLE || state.activeTool === TOOLS.BAYONET) && (
+        <View style={{
+          position: 'absolute', bottom: 20, alignSelf: 'center',
+          backgroundColor: 'rgba(40,10,10,0.88)',
+          paddingHorizontal: 16, paddingVertical: 9,
+          borderRadius: 8, borderWidth: 1,
+          borderColor: 'rgba(200,80,80,0.55)',
+        }}>
+          <Text style={{ color: '#ffcccc', fontSize: 13, fontWeight: 'bold', letterSpacing: 0.5, textAlign: 'center' }}>
+            点击腹部选择刺入位置
+          </Text>
+        </View>
+      )}
 
       {/* Force pierce button — shown in external view when navel not yet pierced + metal rod selected */}
       {!state.navelPierced && state.activeTool === TOOLS.METAL_ROD && !isInternal && !state.forcePierceMode && (

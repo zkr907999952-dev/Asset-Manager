@@ -272,6 +272,9 @@ export interface GameUIState {
   selectedWeapon: LethalWeaponId | null;
   bulletHoles: { id: number; physX: number; physY: number; radius: number; weaponId: LethalWeaponId }[];
   slashScars: { id: number; physX1: number; physY1: number; physX2: number; physY2: number }[];
+  // Needle / bayonet stab wounds (non-navel insertions)
+  stabWounds: { id: number; physX: number; physY: number }[];
+  pickingInsertionPoint: boolean;
   katanaSlashWidth: number;
   // === Intestine exposure hook tool (小肠露出) ===
   hookTool: string | null;         // selected hook tool id
@@ -393,6 +396,8 @@ interface GameContextType {
   setDisplayOption: <K extends keyof DisplayOptions>(key: K, value: DisplayOptions[K]) => void;
   setForcePierceMode: (v: boolean) => void;
   triggerForcePierce: () => void;
+  insertViaPoint: (x: number, y: number) => void;
+  cancelPickInsertionPoint: () => void;
 }
 
 const DEFAULT_TOOL_POS = { x: CAVITY_CX, y: CAVITY_CY - 40 };
@@ -586,6 +591,8 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     selectedWeapon: null,
     bulletHoles: [],
     slashScars: [],
+    stabWounds: [],
+    pickingInsertionPoint: false,
     katanaSlashWidth: KATANA_SLASH_WIDTH_DEFAULT,
     resectedSmallRanges: [],
     resectedLargeRanges: [],
@@ -1455,6 +1462,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       } else if (ts.active && !p.toolPos) {
         p.toolPos = { ...DEFAULT_TOOL_POS };
       }
+      const isStabTool = tool === TOOLS.NEEDLE || tool === TOOLS.BAYONET;
       setState(prev => ({
         ...prev,
         activeTool: tool,
@@ -1466,7 +1474,10 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         toolInserted: false,
         toolPos: p.toolPos ? { ...p.toolPos } : null,
         enemaHeadIdx: p.enemaHeadIdx,
-        viewMode: (tool === TOOLS.METAL_ROD && !p.navelPierced) ? 'external' : prev.viewMode,
+        viewMode: (tool === TOOLS.METAL_ROD && !p.navelPierced) ? 'external'
+                : isStabTool ? 'external'
+                : prev.viewMode,
+        pickingInsertionPoint: isStabTool,
       }));
     } else {
       enabledToolsRef.current = [];
@@ -1478,6 +1489,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         toolActive: false,
         toolAnchor: null,
         toolInserted: false,
+        pickingInsertionPoint: false,
       }));
     }
   }, []);
@@ -1550,6 +1562,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       } else if (!p.toolPos) {
         p.toolPos = { ...DEFAULT_TOOL_POS };
       }
+      const isStabTool2 = tool === TOOLS.NEEDLE || tool === TOOLS.BAYONET;
       setState(prev => ({
         ...prev,
         enabledTools: [...enabledToolsRef.current],
@@ -1561,7 +1574,10 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         toolAnchor: null,
         toolInserted: false,
         enemaHeadIdx: p.enemaHeadIdx,
-        viewMode: (tool === TOOLS.METAL_ROD && !p.navelPierced) ? 'external' : prev.viewMode,
+        viewMode: (tool === TOOLS.METAL_ROD && !p.navelPierced) ? 'external'
+                : isStabTool2 ? 'external'
+                : prev.viewMode,
+        pickingInsertionPoint: isStabTool2,
       }));
     }
   }, []);
@@ -1789,6 +1805,53 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
   const setNavelPierced = useCallback((v: boolean) => {
     physicsRef.current.navelPierced = v;
     setState(prev => ({ ...prev, navelPierced: v }));
+  }, []);
+
+  const stabWoundIdRef = useRef(0);
+
+  const insertViaPoint = useCallback((x: number, y: number) => {
+    const p = physicsRef.current;
+    const NAVEL_PROXIMITY = 42;
+    const distToNavel = Math.hypot(x - CAVITY_CX, y - CAVITY_CY);
+    const isNavel = distToNavel < NAVEL_PROXIMITY;
+
+    // Compute handle position outside the body along the insertion axis
+    const dx = x - CAVITY_CX;
+    const dy = y - CAVITY_CY;
+    const dLen = Math.max(1, Math.hypot(dx, dy));
+    const handleX = x + (dx / dLen) * 65;
+    const handleY = y + (dy / dLen) * 65;
+
+    p.toolAnchor = { x, y };
+    p.toolInserted = true;
+    p.toolPos = { x: handleX, y: handleY };
+
+    if (isNavel) {
+      p.navelPierced = true;
+      setState(prev => ({
+        ...prev,
+        toolAnchor: { x, y },
+        toolInserted: true,
+        navelPierced: true,
+        viewMode: 'internal',
+        pickingInsertionPoint: false,
+      }));
+    } else {
+      const woundId = ++stabWoundIdRef.current;
+      setState(prev => ({
+        ...prev,
+        toolAnchor: { x, y },
+        toolInserted: true,
+        viewMode: 'internal',
+        pickingInsertionPoint: false,
+        stabWounds: [...prev.stabWounds, { id: woundId, physX: x, physY: y }],
+      }));
+    }
+    triggerDialogueRef.current('pain_high');
+  }, []);
+
+  const cancelPickInsertionPoint = useCallback(() => {
+    setState(prev => ({ ...prev, pickingInsertionPoint: false }));
   }, []);
 
   const setEnemaHeadIdx = useCallback((idx: number) => {
@@ -2047,6 +2110,8 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       parasites: [],
       bulletHoles: [],
       slashScars: [],
+      stabWounds: [],
+      pickingInsertionPoint: false,
     }));
   }, []);
 
@@ -3025,6 +3090,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       setCapsuleBombPlacementMode, moveCavityBomb, clearExplosionPositions,
       setDisplayOption,
       setForcePierceMode, triggerForcePierce,
+      insertViaPoint, cancelPickInsertionPoint,
     }}>
       {children}
     </GameContext.Provider>
