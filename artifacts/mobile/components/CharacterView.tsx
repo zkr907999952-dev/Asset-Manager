@@ -3,7 +3,7 @@ import { View, Image, StyleSheet } from 'react-native';
 import Svg, { Ellipse, Circle, Line, Path, G, Image as SvgImage } from 'react-native-svg';
 import { useGame } from '@/contexts/GameContext';
 import { useBreathAnimation } from '@/hooks/useBreathAnimation';
-import { LETHAL_WEAPONS, CANVAS_W, CAVITY_CX, CAVITY_CY } from '@/constants/gameConfig';
+import { LETHAL_WEAPONS, CANVAS_W, CAVITY_CX, CAVITY_CY, CAVITY_RX, CAVITY_RY } from '@/constants/gameConfig';
 
 const CHARACTER_IMG = require('@/assets/images/character.png');
 const BULLET_HOLE_SMALL = require('@/assets/images/bullet_hole_small.png');
@@ -15,7 +15,22 @@ interface Props {
   height: number;
 }
 
-const BELLY_Y_FRAC = 0.56;
+// ── Character image calibration ──────────────────────────────────────────
+// Source image: character.png, 768 × 1408 px, displayed with resizeMode="cover".
+// CharacterView is always height-limited (tall narrow column), so:
+//   imgScale = charHeight / 1408  (fills full height, crops X from both sides symmetrically)
+//
+// Calibration points measured in the source image (px from top-left):
+//   Navel Y  : 787 px  (55.9 % from top)
+//   Belly half-width (waist): ±93 px from horizontal center
+//   Belly half-height       : ±110 px from navel Y
+//
+// These replace the old rough "xS = width/CANVAS_W, yS = xS*0.55" estimates
+// which were wrong because they used the view width instead of the image scale.
+const CHAR_IMG_H       = 1408;
+const NAVEL_IMG_Y      = 787;   // navel Y in source image (px)
+const BELLY_HALF_W_IMG = 93;    // belly half-width in source image (px)
+const BELLY_HALF_H_IMG = 110;   // belly half-height in source image (px)
 
 export function CharacterView({ width, height }: Props) {
   const { state } = useGame();
@@ -34,9 +49,22 @@ export function CharacterView({ width, height }: Props) {
   const ruptures = state.intestinalRuptures;
 
   const cx = width / 2;
-  const bellyCy = height * BELLY_Y_FRAC;
-  const bellyRx = width * 0.18 * bellyBulge;
-  const bellyRy = height * 0.07 * bellyBulge;
+
+  // Calibrated coordinate mapping: physics → CharacterView
+  // imgScale is the cover scale factor (height-limited for this tall narrow view)
+  const imgScale = height / CHAR_IMG_H;
+  const bellyCy  = NAVEL_IMG_Y * imgScale;                    // navel Y in view pixels
+  const xS       = (BELLY_HALF_W_IMG * imgScale) / CAVITY_RX; // physics px → view px (X)
+  const yS       = (BELLY_HALF_H_IMG * imgScale) / CAVITY_RY; // physics px → view px (Y)
+
+  // Helper: physics coords → CharacterView coords
+  const physToCV = (physX: number, physY: number) => ({
+    x: cx + (physX - CAVITY_CX) * xS,
+    y: bellyCy + (physY - CAVITY_CY) * yS,
+  });
+
+  const bellyRx = BELLY_HALF_W_IMG * imgScale * bellyBulge;
+  const bellyRy = BELLY_HALF_H_IMG * imgScale * bellyBulge;
 
   const bellyR = Math.round(220 + painFlush * 35);
   const bellyG = Math.round(80 - painFlush * 50);
@@ -131,33 +159,21 @@ export function CharacterView({ width, height }: Props) {
 
           {/* Katana slash scars — red diagonal wounds synced from simulation */}
           {state.slashScars && state.slashScars.map((scar) => {
-            const xS = width / CANVAS_W;
-            const yS = xS * 0.55;
-            const sx1 = cx + (scar.physX1 - CAVITY_CX) * xS;
-            const sy1 = height * BELLY_Y_FRAC + (scar.physY1 - CAVITY_CY) * yS;
-            const sx2 = cx + (scar.physX2 - CAVITY_CX) * xS;
-            const sy2 = height * BELLY_Y_FRAC + (scar.physY2 - CAVITY_CY) * yS;
+            const p1 = physToCV(scar.physX1, scar.physY1);
+            const p2 = physToCV(scar.physX2, scar.physY2);
             return (
               <G key={`ks-${scar.id}`}>
-                <Line x1={sx1} y1={sy1} x2={sx2} y2={sy2}
+                <Line x1={p1.x} y1={p1.y} x2={p2.x} y2={p2.y}
                   stroke="rgba(180,0,0,0.55)" strokeWidth={3.5} strokeLinecap="round" />
-                <Line x1={sx1} y1={sy1} x2={sx2} y2={sy2}
+                <Line x1={p1.x} y1={p1.y} x2={p2.x} y2={p2.y}
                   stroke="rgba(240,30,30,0.80)" strokeWidth={1.5} strokeLinecap="round" />
               </G>
             );
           })}
 
-          {/* Bullet holes — synced from simulation (physics → CharacterView coords)
-              Navel anchor: physics (CAVITY_CX, CAVITY_CY) → CV (width/2, height*BELLY_Y_FRAC)
-              xS: belly fills ~full view width   (width / CANVAS_W ≈ 0.53)
-              yS: physics is belly-zoomed in; full-body character compresses Y by ~0.55
-              Tune CV_HOLE_Y_SCALE if vertical placement drifts after screen size changes. */}
           {/* Stab wounds — needle/bayonet non-navel insertion marks */}
           {state.stabWounds && state.stabWounds.map((wound) => {
-            const xS = width / CANVAS_W;
-            const yS = xS * 0.55;
-            const cvX = width / 2 + (wound.physX - CAVITY_CX) * xS;
-            const cvY = height * BELLY_Y_FRAC + (wound.physY - CAVITY_CY) * yS;
+            const { x: cvX, y: cvY } = physToCV(wound.physX, wound.physY);
             const r = 4.5 * xS;
             return (
               <G key={`stab-cv-${wound.id}`}>
@@ -173,13 +189,11 @@ export function CharacterView({ width, height }: Props) {
             );
           })}
 
+          {/* Bullet holes — synced from simulation (physics → CharacterView coords) */}
           {state.bulletHoles && state.bulletHoles.map((hole) => {
             const isLarge = hole.weaponId && LARGE_CALIBER_SET.has(hole.weaponId);
             const holeImg = isLarge ? BULLET_HOLE_LARGE : BULLET_HOLE_SMALL;
-            const xS = width / CANVAS_W;
-            const yS = xS * 0.55; // Y compressed: physics zoomed-belly vs full-body character
-            const cvX = width / 2 + (hole.physX - CAVITY_CX) * xS;
-            const cvY = height * BELLY_Y_FRAC + (hole.physY - CAVITY_CY) * yS;
+            const { x: cvX, y: cvY } = physToCV(hole.physX, hole.physY);
             const size = hole.radius * (isLarge ? 11 : 9) * xS;
             const half = size / 2;
             return (
